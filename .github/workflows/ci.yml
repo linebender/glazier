@@ -193,7 +193,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path=Cargo.toml --doc --no-default-features --features=svg,image,im
+          args: --manifest-path=Cargo.toml --doc --no-default-features --features=image,im
 
   # This tests the future rust compiler to catch errors ahead of time without
   # breaking CI
@@ -253,7 +253,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path=Cargo.toml --doc --features=svg,image,im
+          args: --manifest-path=Cargo.toml --doc --features=image,im
 
   check-docs:
     name: Docs
