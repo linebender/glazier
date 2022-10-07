@@ -143,7 +143,7 @@ macro_rules! log_x11 {
         if let Err(e) = $val {
             // We probably don't want to include file/line numbers. This logging is done in
             // a context where X11 errors probably just mean that the connection to the X server
-            // was lost. In particular, it doesn't represent a druid-shell bug for which we want
+            // was lost. In particular, it doesn't represent a glazier bug for which we want
             // more context.
             tracing::error!("X11 error: {}", e);
         }

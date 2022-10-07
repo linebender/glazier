@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! This example shows a how a single-line text field might be implemented for druid-shell.
+//! This example shows a how a single-line text field might be implemented for glazier.
 //! Beyond the omission of multiple lines and text wrapping, it also is missing many motions
 //! (like "move to previous word") and bidirectional text support.
 
@@ -24,19 +24,19 @@ use std::rc::Rc;
 
 use unicode_segmentation::GraphemeCursor;
 
-use druid_shell::kurbo::Size;
-use druid_shell::piet::{
+use glazier::kurbo::Size;
+use glazier::piet::{
     Color, FontFamily, HitTestPoint, PietText, PietTextLayout, RenderContext, Text, TextLayout,
     TextLayoutBuilder,
 };
 
-use druid_shell::{
+use glazier::{
     keyboard_types::Key, text, text::Action, text::Event, text::InputHandler, text::Selection,
     text::VerticalMovement, Application, KeyEvent, Region, TextFieldToken, WinHandler,
     WindowBuilder, WindowHandle,
 };
 
-use druid_shell::kurbo::{Point, Rect};
+use glazier::kurbo::{Point, Rect};
 
 const BG_COLOR: Color = Color::rgb8(0xff, 0xff, 0xff);
 const COMPOSITION_BG_COLOR: Color = Color::rgb8(0xff, 0xd8, 0x6e);

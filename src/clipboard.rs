@@ -68,7 +68,7 @@ pub use crate::backend::clipboard as backend;
 /// ## Getting and setting text:
 ///
 /// ```no_run
-/// use druid_shell::{Application, Clipboard};
+/// use glazier::{Application, Clipboard};
 ///
 /// let mut clipboard = Application::global().clipboard();
 /// clipboard.put_string("watch it there pal");
@@ -81,7 +81,7 @@ pub use crate::backend::clipboard as backend;
 ///  ## Copying multi-format data
 ///
 ///  ```no_run
-/// use druid_shell::{Application, Clipboard, ClipboardFormat};
+/// use glazier::{Application, Clipboard, ClipboardFormat};
 ///
 /// let mut clipboard = Application::global().clipboard();
 ///
@@ -102,7 +102,7 @@ pub use crate::backend::clipboard as backend;
 /// ## Supporting multi-format paste
 ///
 /// ```no_run
-/// use druid_shell::{Application, Clipboard, ClipboardFormat};
+/// use glazier::{Application, Clipboard, ClipboardFormat};
 ///
 /// let clipboard = Application::global().clipboard();
 ///

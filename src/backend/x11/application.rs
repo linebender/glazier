@@ -125,7 +125,7 @@ pub(crate) struct Application {
     /// An `XCBConnection` is *technically* safe to use from other threads, but there are
     /// subtleties; see [x11rb event loop integration notes][1] for more details.
     /// Let's just avoid the issue altogether. As far as public API is concerned, this causes
-    /// `druid_shell::WindowHandle` to be `!Send` and `!Sync`.
+    /// `glazier::WindowHandle` to be `!Send` and `!Sync`.
     ///
     /// [1]: https://github.com/psychon/x11rb/blob/41ab6610f44f5041e112569684fc58cd6d690e57/src/event_loop_integration.rs.
     marker: std::marker::PhantomData<*mut XCBConnection>,
@@ -238,7 +238,7 @@ impl Application {
 
         let (idle_read, idle_write) = nix::unistd::pipe2(nix::fcntl::OFlag::O_NONBLOCK)?;
 
-        let present_opcode = if std::env::var_os("DRUID_SHELL_DISABLE_X11_PRESENT").is_some() {
+        let present_opcode = if std::env::var_os("glazier_DISABLE_X11_PRESENT").is_some() {
             // Allow disabling Present with an environment variable.
             None
         } else {

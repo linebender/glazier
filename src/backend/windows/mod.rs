@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Windows implementation of druid-shell.
+//! Windows implementation of glazier.
 
 mod accels;
 pub mod application;
