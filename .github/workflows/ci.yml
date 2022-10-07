@@ -56,14 +56,14 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=glazier/Cargo.toml --all-targets --features=x11,raw-win-handle --no-default-features -- -D warnings
+          args: --manifest-path=Cargo.toml --all-targets --features=x11,raw-win-handle --no-default-features -- -D warnings
 
       # Test packages in deeper-to-higher dependency order
       - name: cargo test glazier
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path=glazier/Cargo.toml --no-default-features --features=x11
+          args: --manifest-path=Cargo.toml --no-default-features --features=x11
 
   # we test the wayland backend as a separate job 
   test-stable-wayland:
@@ -92,13 +92,13 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=glazier/Cargo.toml --all-targets --features=wayland,raw-win-handle --no-default-features -- -D warnings
+          args: --manifest-path=Cargo.toml --all-targets --features=wayland,raw-win-handle --no-default-features -- -D warnings
 
       - name: cargo test glazier
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path=glazier/Cargo.toml --features wayland --no-default-features
+          args: --manifest-path=Cargo.toml --features wayland --no-default-features
 
   # we test the gtk backend as a separate job because gtk install takes
   # a long time.
@@ -128,13 +128,13 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=glazier/Cargo.toml --all-targets --features=raw-win-handle -- -D warnings
+          args: --manifest-path=Cargo.toml --all-targets --features=raw-win-handle -- -D warnings
 
       - name: cargo test glazier
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path=glazier/Cargo.toml
+          args: --manifest-path=Cargo.toml
 
   test-stable-wasm:
     runs-on: macOS-latest
@@ -163,7 +163,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=glazier/Cargo.toml --all-targets --target wasm32-unknown-unknown -- -D warnings
+          args: --manifest-path=Cargo.toml --all-targets --target wasm32-unknown-unknown -- -D warnings
 
       # Test wasm32 relevant packages in deeper-to-higher dependency order
       # TODO: Find a way to make tests work. Until then the tests are merely compiled.
@@ -171,7 +171,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path=glazier/Cargo.toml --no-run --target wasm32-unknown-unknown
+          args: --manifest-path=Cargo.toml --no-run --target wasm32-unknown-unknown
 
   doctest-stable:
     runs-on: macOS-latest
@@ -193,7 +193,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path=glazier/Cargo.toml --doc --no-default-features --features=svg,image,im
+          args: --manifest-path=Cargo.toml --doc --no-default-features --features=svg,image,im
 
   # This tests the future rust compiler to catch errors ahead of time without
   # breaking CI
@@ -222,7 +222,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=glazier/Cargo.toml --all-targets --features=raw-win-handle -- -D warnings
+          args: --manifest-path=Cargo.toml --all-targets --features=raw-win-handle -- -D warnings
         continue-on-error: true
 
       # Test packages in deeper-to-higher dependency order
@@ -230,7 +230,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path=glazier/Cargo.toml --no-default-features --features=x11
+          args: --manifest-path=Cargo.toml --no-default-features --features=x11
         continue-on-error: true
 
   doctest-beta:
@@ -253,7 +253,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --manifest-path=glazier/Cargo.toml --doc --features=svg,image,im
+          args: --manifest-path=Cargo.toml --doc --features=svg,image,im
 
   check-docs:
     name: Docs
@@ -285,12 +285,12 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --manifest-path=glazier/Cargo.toml --no-deps --document-private-items
+          args: --manifest-path=Cargo.toml --no-deps --document-private-items
 
       # On Linux also attempt docs for X11.
       - name: cargo doc glazier (X11)
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --manifest-path=glazier/Cargo.toml --features=x11 --no-deps --document-private-items
+          args: --manifest-path=Cargo.toml --features=x11 --no-deps --document-private-items
         if: contains(matrix.os, 'ubuntu')
