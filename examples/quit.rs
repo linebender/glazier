@@ -14,10 +14,10 @@
 
 use std::any::Any;
 
-use druid_shell::kurbo::{Line, Size};
-use druid_shell::piet::{Color, RenderContext};
+use glazier::kurbo::{Line, Size};
+use glazier::piet::{Color, RenderContext};
 
-use druid_shell::{
+use glazier::{
     Application, HotKey, Menu, Region, SysMods, WinHandler, WindowBuilder, WindowHandle,
 };
 

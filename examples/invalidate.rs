@@ -16,10 +16,10 @@ use std::any::Any;
 
 use std::time::Instant;
 
-use druid_shell::kurbo::{Point, Rect, Size};
-use druid_shell::piet::{Color, Piet, RenderContext};
+use glazier::kurbo::{Point, Rect, Size};
+use glazier::piet::{Color, Piet, RenderContext};
 
-use druid_shell::{Application, Region, WinHandler, WindowBuilder, WindowHandle};
+use glazier::{Application, Region, WinHandler, WindowBuilder, WindowHandle};
 
 struct InvalidateTest {
     handle: WindowHandle,

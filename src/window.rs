@@ -375,7 +375,7 @@ impl WindowHandle {
     /// Prompt the user to choose a file to open.
     ///
     /// This won't block immediately; the file dialog will be shown whenever control returns to
-    /// `druid-shell`, and the [`WinHandler::open_file`] method will be called when the dialog is
+    /// `glazier`, and the [`WinHandler::open_file`] method will be called when the dialog is
     /// closed.
     pub fn open_file(&mut self, options: FileDialogOptions) -> Option<FileDialogToken> {
         self.0.open_file(options)
@@ -384,7 +384,7 @@ impl WindowHandle {
     /// Prompt the user to choose a path for saving.
     ///
     /// This won't block immediately; the file dialog will be shown whenever control returns to
-    /// `druid-shell`, and the [`WinHandler::save_as`] method will be called when the dialog is
+    /// `glazier`, and the [`WinHandler::save_as`] method will be called when the dialog is
     /// closed.
     pub fn save_as(&mut self, options: FileDialogOptions) -> Option<FileDialogToken> {
         self.0.save_as(options)

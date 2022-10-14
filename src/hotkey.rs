@@ -32,7 +32,7 @@ use crate::{IntoKey, KbKey, KeyEvent, Modifiers};
 /// [`SysMods`] matches the Command key on macOS and Ctrl elsewhere:
 ///
 /// ```
-/// use druid_shell::{HotKey, KbKey, KeyEvent, RawMods, SysMods};
+/// use glazier::{HotKey, KbKey, KeyEvent, RawMods, SysMods};
 ///
 /// let hotkey = HotKey::new(SysMods::Cmd, "a");
 ///
@@ -46,7 +46,7 @@ use crate::{IntoKey, KbKey, KeyEvent, Modifiers};
 /// `None` matches only the key without modifiers:
 ///
 /// ```
-/// use druid_shell::{HotKey, KbKey, KeyEvent, RawMods, SysMods};
+/// use glazier::{HotKey, KbKey, KeyEvent, RawMods, SysMods};
 ///
 /// let hotkey = HotKey::new(None, KbKey::ArrowLeft);
 ///
@@ -74,7 +74,7 @@ impl HotKey {
     ///
     /// # Examples
     /// ```
-    /// use druid_shell::{HotKey, KbKey, RawMods, SysMods};
+    /// use glazier::{HotKey, KbKey, RawMods, SysMods};
     ///
     /// let select_all = HotKey::new(SysMods::Cmd, "a");
     /// let esc = HotKey::new(None, KbKey::Escape);

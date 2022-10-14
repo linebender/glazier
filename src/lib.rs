@@ -14,16 +14,16 @@
 
 //! Platform abstraction for druid toolkit.
 //!
-//! `druid-shell` is an abstraction around a given platform UI & application
+//! `glazier` is an abstraction around a given platform UI & application
 //! framework. It provides common types, which then defer to a platform-defined
 //! implementation.
 //!
 //! # Env
 //!
-//! For testing and debugging, `druid-shell` can change its behavior based on environment
-//! variables. Here is a list of environment variables that `druid-shell` supports:
+//! For testing and debugging, `glazier` can change its behavior based on environment
+//! variables. Here is a list of environment variables that `glazier` supports:
 //!
-//! - `DRUID_SHELL_DISABLE_X11_PRESENT`: if this is set and `druid-shell` is using the `x11`
+//! - `glazier_DISABLE_X11_PRESENT`: if this is set and `glazier` is using the `x11`
 //! backend, it will avoid using the Present extension.
 
 #![warn(rustdoc::broken_intra_doc_links)]

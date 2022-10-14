@@ -49,7 +49,7 @@ impl WaylandSource {
                 .borrow_mut()
                 .dispatch_pending(appdata, |event, object, _| {
                     tracing::error!(
-                        "[druid-shell] Encountered an orphan event: {}@{} : {}",
+                        "[glazier] Encountered an orphan event: {}@{} : {}",
                         event.interface,
                         object.as_ref().id(),
                         event.name
