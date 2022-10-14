@@ -41,7 +41,6 @@ use x11rb::protocol::xproto::{
 use x11rb::wrapper::ConnectionExt as _;
 use x11rb::xcb_ffi::XCBConnection;
 
-#[cfg(feature = "raw-win-handle")]
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, XcbWindowHandle};
 
 use crate::backend::shared::Timer;
@@ -1849,7 +1848,6 @@ impl WindowHandle {
     }
 }
 
-#[cfg(feature = "raw-win-handle")]
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
         let mut handle = XcbWindowHandle::empty();

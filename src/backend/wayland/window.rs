@@ -18,7 +18,6 @@ use wayland_protocols::xdg_shell::client::xdg_popup;
 use wayland_protocols::xdg_shell::client::xdg_positioner;
 use wayland_protocols::xdg_shell::client::xdg_surface;
 
-#[cfg(feature = "raw-win-handle")]
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, WaylandWindowHandle};
 
 use super::application::{self, Timer};
@@ -310,7 +309,6 @@ impl std::default::Default for WindowHandle {
     }
 }
 
-#[cfg(feature = "raw-win-handle")]
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
         tracing::error!("HasRawWindowHandle trait not implemented for wasm.");
