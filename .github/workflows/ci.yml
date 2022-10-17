@@ -56,7 +56,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=Cargo.toml --all-targets --features=x11,raw-win-handle --no-default-features -- -D warnings
+          args: --manifest-path=Cargo.toml --all-targets --features=x11 --no-default-features -- -D warnings
 
       # Test packages in deeper-to-higher dependency order
       - name: cargo test glazier
@@ -92,7 +92,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=Cargo.toml --all-targets --features=wayland,raw-win-handle --no-default-features -- -D warnings
+          args: --manifest-path=Cargo.toml --all-targets --features=wayland --no-default-features -- -D warnings
 
       - name: cargo test glazier
         uses: actions-rs/cargo@v1
@@ -128,7 +128,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=Cargo.toml --all-targets --features=raw-win-handle -- -D warnings
+          args: --manifest-path=Cargo.toml --all-targets -- -D warnings
 
       - name: cargo test glazier
         uses: actions-rs/cargo@v1
@@ -222,7 +222,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=Cargo.toml --all-targets --features=raw-win-handle -- -D warnings
+          args: --manifest-path=Cargo.toml --all-targets -- -D warnings
         continue-on-error: true
 
       # Test packages in deeper-to-higher dependency order
