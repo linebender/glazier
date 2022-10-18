@@ -313,7 +313,6 @@ fn main() {
 
 struct GpuState {
     current_frame: usize,
-    instance: Instance,
     session: Session,
     swapchain: Swapchain,
     present_semaphores: Vec<Semaphore>,
@@ -356,7 +355,6 @@ impl GpuState {
         let current_frame = 0;
         Ok(GpuState {
             current_frame,
-            instance,
             session,
             swapchain,
             present_semaphores,

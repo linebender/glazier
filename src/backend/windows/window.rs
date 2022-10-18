@@ -25,23 +25,18 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use scopeguard::defer;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 use winapi::ctypes::{c_int, c_void};
-use winapi::shared::dxgi::*;
-use winapi::shared::dxgi1_2::*;
 use winapi::shared::minwindef::*;
 use winapi::shared::windef::*;
 use winapi::shared::winerror::*;
-use winapi::um::dcomp::{IDCompositionDevice, IDCompositionTarget, IDCompositionVisual};
 use winapi::um::dwmapi::{DwmExtendFrameIntoClientArea, DwmSetWindowAttribute};
 use winapi::um::errhandlingapi::GetLastError;
 use winapi::um::shellscalingapi::MDT_EFFECTIVE_DPI;
 use winapi::um::uxtheme::*;
 use winapi::um::wingdi::*;
 use winapi::um::winnt::*;
-use winapi::um::winreg::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 use winapi::um::winuser::*;
-use wio::com::ComPtr;
 
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, Win32Handle};
 
@@ -55,7 +50,7 @@ use super::keyboard::{self, KeyboardState};
 use super::menu::Menu;
 // use super::paint;
 use super::timers::TimerSlots;
-use super::util::{self, FromWide, ToWide, OPTIONAL_FUNCTIONS};
+use super::util::{self, ToWide, OPTIONAL_FUNCTIONS};
 
 use crate::common_util::IdleCallback;
 use crate::dialog::{FileDialogOptions, FileDialogType, FileInfo};
@@ -154,7 +149,7 @@ enum DeferredOp {
     ReleaseMouseCapture,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct WindowHandle {
     state: Weak<WindowState>,
 }
@@ -248,7 +243,6 @@ struct MyWndProc {
     app: Application,
     handle: RefCell<WindowHandle>,
     state: RefCell<Option<WndState>>,
-    present_strategy: PresentStrategy,
 }
 
 /// The mutable state of the window.
@@ -260,26 +254,12 @@ struct WndState {
     // capture. When the first mouse button is down on our window we enter
     // capture, and we hold it until the last mouse button is up.
     captured_mouse_buttons: MouseButtons,
-    transparent: bool,
     // Is this window the topmost window under the mouse cursor
     has_mouse_focus: bool,
     //TODO: track surrogate orphan
     last_click_time: Instant,
     last_click_pos: (i32, i32),
     click_count: u8,
-}
-
-/// State for DXGI swapchains.
-struct DxgiState {
-    swap_chain: *mut IDXGISwapChain1,
-
-    // These ComPtrs must live as long as the window
-    #[allow(dead_code)]
-    composition_device: Option<ComPtr<IDCompositionDevice>>,
-    #[allow(dead_code)]
-    composition_target: Option<ComPtr<IDCompositionTarget>>,
-    #[allow(dead_code)]
-    composition_visual: Option<ComPtr<IDCompositionVisual>>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -859,7 +839,7 @@ impl WndProc for MyWndProc {
                 }
                 Some(hit)
             },
-            WM_SIZE => unsafe {
+            WM_SIZE => {
                 let width = LOWORD(lparam as u32) as u32;
                 let height = HIWORD(lparam as u32) as u32;
                 if width == 0 || height == 0 {
@@ -874,7 +854,7 @@ impl WndProc for MyWndProc {
                     s.render(&size_dp.to_rect().into());
                 })
                 .map(|_| 0)
-            },
+            }
             WM_COMMAND => {
                 self.with_wnd_state(|s| s.handler.command(LOWORD(wparam as u32) as u32));
                 Some(0)
@@ -1250,7 +1230,6 @@ impl WindowBuilder {
                 app: self.app.clone(),
                 handle: Default::default(),
                 state: RefCell::new(None),
-                present_strategy: self.present_strategy,
             };
 
             // TODO: pos_x and pos_y are only scaled for windows with parents. But they need to be
@@ -1343,7 +1322,6 @@ impl WindowBuilder {
                 keyboard_state: KeyboardState::new(),
                 captured_mouse_buttons: MouseButtons::new(),
                 has_mouse_focus: false,
-                transparent: self.transparent,
                 last_click_time: Instant::now(),
                 last_click_pos: (0, 0),
                 click_count: 0,
@@ -1441,69 +1419,6 @@ impl WindowBuilder {
             }
         }
     }
-}
-
-/// Attempt to read the registry and see if the system is set to a dark or
-/// light theme.
-pub fn should_use_light_theme() -> bool {
-    let mut data: [u8; 4] = [0; 4];
-    let mut cb_data: u32 = data.len() as u32;
-    let res = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            r#"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"#
-                .to_wide()
-                .as_ptr(),
-            "AppsUseLightTheme".to_wide().as_ptr(),
-            RRF_RT_REG_DWORD,
-            null_mut(),
-            data.as_mut_ptr() as _,
-            &mut cb_data as *mut _,
-        )
-    };
-
-    // ERROR_SUCCESS
-    if res == 0 {
-        i32::from_le_bytes(data) == 1
-    } else {
-        true // Default to light theme.
-    }
-}
-
-/// Choose an adapter. Here the heuristic is to choose the adapter with the
-/// largest video memory, which will generally be the discrete adapter. It's
-/// possible that on some systems the integrated adapter might be a better
-/// choice, but that probably depends on usage.
-unsafe fn choose_adapter(factory: *mut IDXGIFactory2) -> *mut IDXGIAdapter {
-    let mut i = 0;
-    let mut best_adapter = null_mut();
-    let mut best_vram = 0;
-    loop {
-        let mut adapter: *mut IDXGIAdapter = null_mut();
-        if !SUCCEEDED((*factory).EnumAdapters(i, &mut adapter)) {
-            break;
-        }
-        let mut desc = mem::MaybeUninit::uninit();
-        let hr = (*adapter).GetDesc(desc.as_mut_ptr());
-        if !SUCCEEDED(hr) {
-            error!("Failed to get adapter description: {:?}", Error::Hr(hr));
-            break;
-        }
-        let mut desc: DXGI_ADAPTER_DESC = desc.assume_init();
-        let vram = desc.DedicatedVideoMemory;
-        if i == 0 || vram > best_vram {
-            best_vram = vram;
-            best_adapter = adapter;
-        }
-        debug!(
-            "{:?}: desc = {:?}, vram = {}",
-            adapter,
-            (&mut desc.Description[0] as LPWSTR).to_string(),
-            desc.DedicatedVideoMemory
-        );
-        i += 1;
-    }
-    best_adapter
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -2073,13 +1988,5 @@ impl IdleHandle {
             }
         }
         queue.push(IdleKind::Token(token));
-    }
-}
-
-impl Default for WindowHandle {
-    fn default() -> Self {
-        WindowHandle {
-            state: Default::default(),
-        }
     }
 }

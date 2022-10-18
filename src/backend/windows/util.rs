@@ -40,11 +40,8 @@ use winapi::um::winbase::{FILE_TYPE_UNKNOWN, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE
 use winapi::um::wincon::{AttachConsole, ATTACH_PARENT_PROCESS};
 use winapi::um::winnt::{FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE};
 
-use crate::kurbo::Rect;
-use crate::region::Region;
-use crate::scale::{Scalable, Scale};
-
 use super::error::Error;
+use crate::kurbo::Rect;
 
 pub fn as_result(hr: HRESULT) -> Result<(), Error> {
     if SUCCEEDED(hr) {
@@ -107,17 +104,6 @@ impl FromWide for [u16] {
     }
 }
 
-/// Converts a `Rect` to a winapi `RECT`.
-#[inline]
-pub(crate) fn rect_to_recti(rect: Rect) -> RECT {
-    RECT {
-        left: rect.x0 as i32,
-        top: rect.y0 as i32,
-        right: rect.x1 as i32,
-        bottom: rect.y1 as i32,
-    }
-}
-
 /// Converts a winapi `RECT` to a `Rect`.
 #[inline]
 pub(crate) fn recti_to_rect(rect: RECT) -> Rect {
@@ -127,16 +113,6 @@ pub(crate) fn recti_to_rect(rect: RECT) -> Rect {
         rect.right as f64,
         rect.bottom as f64,
     )
-}
-
-/// Converts a `Region` into a vec of winapi `RECT`, with a scaling applied.
-/// If necessary, the rectangles are rounded to the nearest pixel border.
-pub(crate) fn region_to_rectis(region: &Region, scale: Scale) -> Vec<RECT> {
-    region
-        .rects()
-        .iter()
-        .map(|r| rect_to_recti(r.to_px(scale).round()))
-        .collect()
 }
 
 // Types for functions we want to load, which are only supported on newer windows versions

@@ -48,8 +48,6 @@ pub mod window;
 
 use std::fmt::{Debug, Display, Formatter};
 use winapi::shared::winerror::HRESULT;
-use winapi::um::d2d1::ID2D1RenderTarget;
-use wio::com::ComPtr;
 
 // error handling
 pub enum Error {
