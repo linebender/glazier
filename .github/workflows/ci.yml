@@ -136,42 +136,42 @@ jobs:
 #          command: test
 #          args: --manifest-path=Cargo.toml
 
-  test-stable-wasm:
-    runs-on: macOS-latest
-    name: cargo test (wasm32)
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: install wasm-pack
-        uses: jetli/wasm-pack-action@v0.3.0
-        with:
-          version: latest
-
-      - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: wasm32-unknown-unknown
-          components: clippy
-          profile: minimal
-          override: true
-
-      - name: restore cache
-        uses: Swatinem/rust-cache@v1
-
-      - name: cargo clippy glazier (wasm)
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --manifest-path=Cargo.toml --all-targets --target wasm32-unknown-unknown -- -D warnings
-
-      # Test wasm32 relevant packages in deeper-to-higher dependency order
-      # TODO: Find a way to make tests work. Until then the tests are merely compiled.
-      - name: cargo test compile glazier
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path=Cargo.toml --no-run --target wasm32-unknown-unknown
+#  test-stable-wasm:
+#    runs-on: macOS-latest
+#    name: cargo test (wasm32)
+#    steps:
+#      - uses: actions/checkout@v2
+#
+#      - name: install wasm-pack
+#        uses: jetli/wasm-pack-action@v0.3.0
+#        with:
+#          version: latest
+#
+#      - name: install stable toolchain
+#        uses: actions-rs/toolchain@v1
+#        with:
+#          toolchain: stable
+#          target: wasm32-unknown-unknown
+#          components: clippy
+#          profile: minimal
+#          override: true
+#
+#      - name: restore cache
+#        uses: Swatinem/rust-cache@v1
+#
+#      - name: cargo clippy glazier (wasm)
+#        uses: actions-rs/cargo@v1
+#        with:
+#          command: clippy
+#          args: --manifest-path=Cargo.toml --all-targets --target wasm32-unknown-unknown -- -D warnings
+#
+#      # Test wasm32 relevant packages in deeper-to-higher dependency order
+#      # TODO: Find a way to make tests work. Until then the tests are merely compiled.
+#      - name: cargo test compile glazier
+#        uses: actions-rs/cargo@v1
+#        with:
+#          command: test
+#          args: --manifest-path=Cargo.toml --no-run --target wasm32-unknown-unknown
 
   doctest-stable:
     runs-on: macOS-latest
