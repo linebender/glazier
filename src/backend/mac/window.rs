@@ -30,16 +30,14 @@ use cocoa::base::{id, nil, BOOL, NO, YES};
 use cocoa::foundation::{
     NSArray, NSAutoreleasePool, NSInteger, NSPoint, NSRect, NSSize, NSString, NSUInteger,
 };
-use core_graphics::context::CGContextRef;
-use foreign_types::ForeignTypeRef;
 use lazy_static::lazy_static;
 use objc::declare::ClassDecl;
 use objc::rc::WeakPtr;
 use objc::runtime::{Class, Object, Protocol, Sel};
 use objc::{class, msg_send, sel, sel_impl};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
-use raw_window_handle::{AppKitWindowHandle, HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{AppKitHandle, HasRawWindowHandle, RawWindowHandle};
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 
@@ -1389,7 +1387,7 @@ impl WindowHandle {
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
         let nsv = self.nsview.load();
-        let mut handle = AppKitWindowHandle::empty();
+        let mut handle = AppKitHandle::empty();
         handle.ns_view = *nsv as *mut _;
         RawWindowHandle::AppKit(handle)
     }

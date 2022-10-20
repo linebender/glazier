@@ -26,7 +26,6 @@ use std::ops::Range;
 use std::os::raw::c_uchar;
 
 use super::window::with_edit_lock_from_window;
-use crate::kurbo::Point;
 use crate::text::{
     Action, Affinity, Direction, InputHandler, Movement, Selection, VerticalMovement,
     WritingDirection,
@@ -217,6 +216,7 @@ pub extern "C" fn character_index_for_point(
     _: Sel,
     point: NSPoint,
 ) -> NSUInteger {
+    todo!()
     // TODO: figure out how to do text hit testing without piet
     // with_edit_lock_from_window(this, true, |edit_lock| {
     //     let hit_test = edit_lock.hit_test_point(Point::new(point.x, point.y));
