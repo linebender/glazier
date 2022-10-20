@@ -141,17 +141,17 @@ impl Compositor for CompositorHandle {
         }
     }
 
-    fn get_xdg_positioner(&self) -> wlc::Main<xdg_positioner::XdgPositioner> {
-        match self.inner.upgrade() {
-            None => panic!("unable to acquire underlying compositor to create an xdg positioner"),
-            Some(c) => c.get_xdg_positioner(),
-        }
-    }
-
     fn get_xdg_surface(&self, s: &wlc::Main<WlSurface>) -> wlc::Main<xdg_surface::XdgSurface> {
         match self.inner.upgrade() {
             None => panic!("unable to acquire underlying compositor to create an xdg surface"),
             Some(c) => c.get_xdg_surface(s),
+        }
+    }
+
+    fn get_xdg_positioner(&self) -> wlc::Main<xdg_positioner::XdgPositioner> {
+        match self.inner.upgrade() {
+            None => panic!("unable to acquire underlying compositor to create an xdg positioner"),
+            Some(c) => c.get_xdg_positioner(),
         }
     }
 
