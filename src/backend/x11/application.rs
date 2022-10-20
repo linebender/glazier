@@ -295,7 +295,7 @@ impl Application {
             .ok_or_else(|| anyhow!("Invalid screen num: {}", screen_num))?;
         let root_visual_type = util::get_visual_from_screen(screen)
             .ok_or_else(|| anyhow!("Couldn't get visual from screen"))?;
-        let argb_visual_type = util::get_argb_visual_type(&*connection, screen)?;
+        let argb_visual_type = util::get_argb_visual_type(&connection, screen)?;
 
         let timestamp = Rc::new(Cell::new(x11rb::CURRENT_TIME));
         let pending_events = Default::default();
@@ -441,7 +441,7 @@ impl Application {
 
     #[inline]
     pub(crate) fn atoms(&self) -> &AppAtoms {
-        &*self.atoms
+        &self.atoms
     }
 
     /// Returns `Ok(true)` if we want to exit the main loop.
@@ -836,7 +836,7 @@ fn poll_with_timeout(
                 break;
             } else {
                 let millis = c_int::try_from(deadline.duration_since(now).as_millis())
-                    .unwrap_or(c_int::max_value() - 1);
+                    .unwrap_or(c_int::MAX - 1);
                 // The above .as_millis() rounds down. This means we would wake up before the
                 // deadline is reached. Add one to 'simulate' rounding up instead.
                 millis + 1

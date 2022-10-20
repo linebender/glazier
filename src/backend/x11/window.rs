@@ -168,7 +168,7 @@ impl WindowBuilder {
         self.position = Some(position);
     }
 
-    pub fn set_level(&mut self, level: window::WindowLevel) {
+    pub fn set_level(&mut self, level: WindowLevel) {
         self.level = level;
     }
 
@@ -309,7 +309,7 @@ impl WindowBuilder {
         let pid = nix::unistd::Pid::this().as_raw();
         if let Ok(pid) = u32::try_from(pid) {
             conn.change_property32(
-                xproto::PropMode::REPLACE,
+                PropMode::REPLACE,
                 id,
                 atoms._NET_WM_PID,
                 AtomEnum::CARDINAL,
@@ -1267,7 +1267,7 @@ impl WindowHandle {
                     let conn = w.app.connection();
                     let setup = &conn.setup();
                     let screen = &setup.roots[w.app.screen_num()];
-                    match make_cursor(&**conn, setup.image_byte_order, screen.root, format, desc) {
+                    match make_cursor(conn, setup.image_byte_order, screen.root, format, desc) {
                         // TODO: We 'leak' the cursor - nothing ever calls render_free_cursor
                         Ok(cursor) => Some(cursor),
                         Err(err) => {
