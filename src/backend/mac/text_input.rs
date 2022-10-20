@@ -212,9 +212,9 @@ pub extern "C" fn insert_text(this: &mut Object, _: Sel, text: id, replacement_r
 }
 
 pub extern "C" fn character_index_for_point(
-    this: &mut Object,
+    _this: &mut Object,
     _: Sel,
-    point: NSPoint,
+    _point: NSPoint,
 ) -> NSUInteger {
     todo!()
     // TODO: figure out how to do text hit testing without piet
