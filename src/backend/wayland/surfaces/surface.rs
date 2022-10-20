@@ -8,7 +8,7 @@ use wayland_protocols::xdg_shell::client::xdg_surface;
 
 use crate::kurbo;
 use crate::window;
-use crate::{piet::Piet, region::Region, scale::Scale, TextFieldToken};
+use crate::{region::Region, scale::Scale, TextFieldToken};
 
 use super::super::Changed;
 
@@ -398,50 +398,6 @@ impl Data {
                 // Nothing to draw, so we can finish here!
                 return;
             }
-        }
-
-        // create cairo context (safety: we must drop the buffer before we commit the frame)
-        // TODO: Cairo is native-endian while wayland is little-endian, which is a pain. Currently
-        // will give incorrect results on big-endian architectures.
-        // TODO cairo might use a different stride than the width of the format. Since we always
-        // use argb32 which is 32-bit aligned we should be ok, but strictly speaking cairo might
-        // choose a wider stride and read past the end of our buffer (UB). Fixing this would
-        // require a fair bit of effort.
-        unsafe {
-            // We're going to lie about the lifetime of our buffer here. This is (I think) ok,
-            // because the Rust wrapper for cairo is overly pessimistic: the buffer only has to
-            // last as long as the `ImageSurface` (which we know this buffer will).
-            let buf: &'static mut [u8] = &mut *(buf as *mut _);
-            let cairo_surface = match cairo::ImageSurface::create_for_data(
-                buf,
-                cairo::Format::ARgb32,
-                physical_size.width,
-                physical_size.height,
-                physical_size.width * buffers::PIXEL_WIDTH,
-            ) {
-                Ok(s) => s,
-                Err(cause) => {
-                    tracing::error!("unable to create cairo surface: {:?}", cause);
-                    return;
-                }
-            };
-            let ctx = match cairo::Context::new(&cairo_surface) {
-                Ok(ctx) => ctx,
-                Err(cause) => {
-                    tracing::error!("unable to create cairo context: {:?}", cause);
-                    return;
-                }
-            };
-            // Apply scaling
-            let scale = self.scale.get() as f64;
-            ctx.scale(scale, scale);
-
-            let mut piet = Piet::new(&ctx);
-            // Actually paint the new frame
-            let region = self.damaged_region.borrow();
-
-            // The handler must not be already borrowed. This may mean deferring this call.
-            self.handler.borrow_mut().paint(&mut piet, &*region);
         }
 
         // reset damage ready for next frame.
