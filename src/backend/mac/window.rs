@@ -37,7 +37,10 @@ use objc::runtime::{Class, Object, Protocol, Sel};
 use objc::{class, msg_send, sel, sel_impl};
 use tracing::{debug, info};
 
-use raw_window_handle::{AppKitHandle, HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{
+    AppKitDisplayHandle, AppKitWindowHandle, HasRawDisplayHandle, HasRawWindowHandle,
+    RawDisplayHandle, RawWindowHandle,
+};
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 
@@ -99,15 +102,17 @@ pub(crate) struct WindowHandle {
     nsview: WeakPtr,
     idle_queue: Weak<Mutex<Vec<IdleKind>>>,
 }
+
 impl PartialEq for WindowHandle {
     fn eq(&self, other: &Self) -> bool {
         match (self.idle_queue.upgrade(), other.idle_queue.upgrade()) {
             (None, None) => true,
-            (Some(s), Some(o)) => std::sync::Arc::ptr_eq(&s, &o),
+            (Some(s), Some(o)) => Arc::ptr_eq(&s, &o),
             (_, _) => false,
         }
     }
 }
+
 impl Eq for WindowHandle {}
 
 impl std::fmt::Debug for WindowHandle {
@@ -1076,7 +1081,7 @@ impl WindowHandle {
         None
     }
 
-    pub fn request_timer(&self, deadline: std::time::Instant) -> TimerToken {
+    pub fn request_timer(&self, deadline: Instant) -> TimerToken {
         let ti = time_interval_from_deadline(deadline);
         let token = TimerToken::next();
         unsafe {
@@ -1387,9 +1392,15 @@ impl WindowHandle {
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
         let nsv = self.nsview.load();
-        let mut handle = AppKitHandle::empty();
+        let mut handle = AppKitWindowHandle::empty();
         handle.ns_view = *nsv as *mut _;
         RawWindowHandle::AppKit(handle)
+    }
+}
+
+unsafe impl HasRawDisplayHandle for WindowHandle {
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        RawDisplayHandle::AppKit(AppKitDisplayHandle::empty())
     }
 }
 
@@ -1434,7 +1445,7 @@ impl IdleHandle {
 /// of seconds from now.
 ///
 /// This may lose some precision for multi-month durations.
-fn time_interval_from_deadline(deadline: std::time::Instant) -> f64 {
+fn time_interval_from_deadline(deadline: Instant) -> f64 {
     let now = Instant::now();
     if now >= deadline {
         0.0

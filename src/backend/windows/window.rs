@@ -38,7 +38,10 @@ use winapi::um::wingdi::*;
 use winapi::um::winnt::*;
 use winapi::um::winuser::*;
 
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, Win32Handle};
+use raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle, Win32WindowHandle,
+    WindowsDisplayHandle,
+};
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 
@@ -167,7 +170,7 @@ impl Eq for WindowHandle {}
 
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
-        let mut handle = Win32Handle::empty();
+        let mut handle = Win32WindowHandle::empty();
         if let Some(hwnd) = self.get_hwnd() {
             handle.hwnd = hwnd as *mut core::ffi::c_void;
             handle.hinstance = unsafe {
@@ -175,6 +178,15 @@ unsafe impl HasRawWindowHandle for WindowHandle {
             };
         }
         RawWindowHandle::Win32(handle)
+    }
+}
+
+unsafe impl HasRawDisplayHandle for WindowHandle {
+    /// See:
+    ///  *  https://github.com/rust-windowing/raw-window-handle/issues/92
+    ///  * https://github.com/rust-windowing/winit/blob/92fdf5ba85f920262a61cee4590f4a11ad5738d1/src/platform_impl/windows/window.rs#L285
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        RawDisplayHandle::Windows(WindowsDisplayHandle::empty())
     }
 }
 
@@ -675,7 +687,7 @@ impl WndProc for MyWndProc {
                 if LOWORD(wparam as u32) as u32 != 0 {
                     unsafe {
                         if !self.has_titlebar() && !self.is_transparent() {
-                            // This makes windows paint the dropshadow around the window
+                            // This makes windows paint the drop-shadow around the window
                             // since we give it a "1 pixel frame" that we paint over anyway.
                             // From my testing top seems to be the best option when it comes to avoiding resize artifacts.
                             let margins = MARGINS {
