@@ -25,6 +25,7 @@ use piet_gpu_hal::{
     include_shader, BindType, Buffer, BufferUsage, ComputePassDescriptor, DescriptorSet, Image,
     ImageFormat, ImageLayout, Instance, InstanceFlags, Pipeline, Semaphore, Session, Swapchain,
 };
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 
 #[derive(Default)]
 struct HelloState {
@@ -330,7 +331,7 @@ impl GpuState {
         height: usize,
     ) -> Result<GpuState, Box<dyn std::error::Error>> {
         let instance = Instance::new(InstanceFlags::empty())?;
-        let surface = instance.surface(&window)?;
+        let surface = instance.surface(window.raw_display_handle(), window.raw_window_handle())?;
         let device = instance.device()?;
         let swapchain = instance.swapchain(width, height, &device, &surface)?;
         let session = Session::new(device);
