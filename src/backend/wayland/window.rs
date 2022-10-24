@@ -18,7 +18,10 @@ use wayland_protocols::xdg_shell::client::xdg_popup;
 use wayland_protocols::xdg_shell::client::xdg_positioner;
 use wayland_protocols::xdg_shell::client::xdg_surface;
 
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, WaylandHandle};
+use raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
+    WaylandDisplayHandle, WaylandWindowHandle,
+};
 
 use super::application::{self, Timer};
 use super::{error::Error, menu::Menu, outputs, surfaces};
@@ -307,7 +310,14 @@ impl Default for WindowHandle {
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
         tracing::error!("HasRawWindowHandle trait not implemented for wasm.");
-        RawWindowHandle::Wayland(WaylandHandle::empty())
+        RawWindowHandle::Wayland(WaylandWindowHandle::empty())
+    }
+}
+
+unsafe impl HasRawDisplayHandle for WindowHandle {
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        tracing::error!("HasDisplayHandle trait not implemented for wayland.");
+        RawDisplayHandle::Wayland(WaylandDisplayHandle::empty())
     }
 }
 

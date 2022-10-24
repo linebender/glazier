@@ -38,7 +38,10 @@ use x11rb::protocol::xproto::{
 use x11rb::wrapper::ConnectionExt as _;
 use x11rb::xcb_ffi::XCBConnection;
 
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, XcbHandle};
+use raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle, XcbDisplayHandle,
+    XcbWindowHandle,
+};
 
 use crate::backend::shared::Timer;
 use crate::common_util::IdleCallback;
@@ -1332,10 +1335,17 @@ impl WindowHandle {
 
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
-        let mut handle = XcbHandle::empty();
+        let mut handle = XcbWindowHandle::empty();
         handle.window = self.id;
         handle.visual_id = self.visual_id;
 
+        RawWindowHandle::Xcb(handle)
+    }
+}
+
+unsafe impl HasRawDisplayHandle for WindowHandle {
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        let mut handle = XcbDisplayHandle::empty();
         if let Some(window) = self.window.upgrade() {
             handle.connection = window.app.connection().get_raw_xcb_connection();
         } else {
@@ -1343,11 +1353,9 @@ unsafe impl HasRawWindowHandle for WindowHandle {
             // leaving those empty that cannot be derived.
             error!("Failed to get XCBConnection, returning incomplete handle");
         }
-
-        RawWindowHandle::Xcb(handle)
+        RawDisplayHandle::Xcb(handle)
     }
 }
-
 fn make_cursor(
     _conn: &XCBConnection,
     _byte_order: X11ImageOrder,
