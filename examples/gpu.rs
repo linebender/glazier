@@ -26,6 +26,7 @@ use piet_gpu_hal::{
     ImageFormat, ImageLayout, Instance, InstanceFlags, Pipeline, Semaphore, Session, Swapchain,
 };
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
+use tracing::info;
 
 #[derive(Default)]
 struct HelloState {
@@ -40,7 +41,7 @@ impl WinHandler for HelloState {
     }
 
     fn size(&mut self, size: Size) {
-        println!("size: {:?}", size);
+        info!("size: {:?}", size);
         self.size = size;
     }
 
@@ -107,7 +108,7 @@ impl WinHandler for HelloState {
                 .unwrap();
             let start = std::time::Instant::now();
             submitted.wait().unwrap();
-            println!("wait elapsed: {:?}", start.elapsed());
+            info!("wait elapsed: {:?}", start.elapsed());
             state.current_frame += 1;
         }
     }
@@ -134,55 +135,55 @@ impl WinHandler for HelloState {
                 ]);
                 self.handle.save_as(options);
             }
-            _ => println!("unexpected id {}", id),
+            _ => info!("unexpected id {}", id),
         }
     }
 
     fn save_as(&mut self, _token: FileDialogToken, file: Option<FileInfo>) {
-        println!("save file result: {:?}", file);
+        info!("save file result: {:?}", file);
     }
 
     fn open_file(&mut self, _token: FileDialogToken, file_info: Option<FileInfo>) {
-        println!("open file result: {:?}", file_info);
+        info!("open file result: {:?}", file_info);
     }
 
     fn key_down(&mut self, event: KeyEvent) -> bool {
-        println!("keydown: {:?}", event);
+        info!("keydown: {:?}", event);
         false
     }
 
     fn key_up(&mut self, event: KeyEvent) {
-        println!("keyup: {:?}", event);
+        info!("keyup: {:?}", event);
     }
 
     fn wheel(&mut self, event: &MouseEvent) {
-        println!("mouse_wheel {:?}", event);
+        info!("mouse_wheel {:?}", event);
     }
 
     fn mouse_move(&mut self, event: &MouseEvent) {
         self.handle.set_cursor(&Cursor::Arrow);
-        println!("mouse_move {:?}", event);
+        info!("mouse_move {:?}", event);
     }
 
     fn mouse_down(&mut self, event: &MouseEvent) {
-        println!("mouse_down {:?}", event);
+        info!("mouse_down {:?}", event);
         self.render();
     }
 
     fn mouse_up(&mut self, event: &MouseEvent) {
-        println!("mouse_up {:?}", event);
+        info!("mouse_up {:?}", event);
     }
 
     fn timer(&mut self, id: TimerToken) {
-        println!("timer fired: {:?}", id);
+        info!("timer fired: {:?}", id);
     }
 
     fn got_focus(&mut self) {
-        println!("Got focus");
+        info!("Got focus");
     }
 
     fn lost_focus(&mut self) {
-        println!("Lost focus");
+        info!("Lost focus");
     }
 
     fn request_close(&mut self) {
@@ -258,7 +259,7 @@ impl HelloState {
                 .unwrap();
             let start = std::time::Instant::now();
             submitted.wait().unwrap();
-            println!("wait elapsed: {:?}", start.elapsed());
+            info!("wait elapsed: {:?}", start.elapsed());
             state.current_frame += 1;
         }
     }
@@ -313,6 +314,7 @@ fn main() {
 }
 
 struct GpuState {
+    _instance: Instance,
     current_frame: usize,
     session: Session,
     swapchain: Swapchain,
@@ -355,6 +357,7 @@ impl GpuState {
             .build(&session, &pipeline)?;
         let current_frame = 0;
         Ok(GpuState {
+            _instance: instance,
             current_frame,
             session,
             swapchain,
