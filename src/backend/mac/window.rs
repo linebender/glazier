@@ -30,20 +30,19 @@ use cocoa::base::{id, nil, BOOL, NO, YES};
 use cocoa::foundation::{
     NSArray, NSAutoreleasePool, NSInteger, NSPoint, NSRect, NSSize, NSString, NSUInteger,
 };
-use core_graphics::context::CGContextRef;
-use foreign_types::ForeignTypeRef;
 use lazy_static::lazy_static;
 use objc::declare::ClassDecl;
 use objc::rc::WeakPtr;
 use objc::runtime::{Class, Object, Protocol, Sel};
 use objc::{class, msg_send, sel, sel_impl};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
-#[cfg(feature = "raw-win-handle")]
-use raw_window_handle::{AppKitWindowHandle, HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{
+    AppKitDisplayHandle, AppKitWindowHandle, HasRawDisplayHandle, HasRawWindowHandle,
+    RawDisplayHandle, RawWindowHandle,
+};
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
-use crate::piet::{Piet, PietText, RenderContext};
 
 use super::appkit::{
     NSRunLoopCommonModes, NSTrackingArea, NSTrackingAreaOptions, NSView as NSViewExt,
@@ -103,15 +102,17 @@ pub(crate) struct WindowHandle {
     nsview: WeakPtr,
     idle_queue: Weak<Mutex<Vec<IdleKind>>>,
 }
+
 impl PartialEq for WindowHandle {
     fn eq(&self, other: &Self) -> bool {
         match (self.idle_queue.upgrade(), other.idle_queue.upgrade()) {
             (None, None) => true,
-            (Some(s), Some(o)) => std::sync::Arc::ptr_eq(&s, &o),
+            (Some(s), Some(o)) => Arc::ptr_eq(&s, &o),
             (_, _) => false,
         }
     }
 }
+
 impl Eq for WindowHandle {}
 
 impl std::fmt::Debug for WindowHandle {
@@ -175,7 +176,6 @@ struct ViewState {
     // Tracks whether we have already received the mouseExited event
     mouse_left: bool,
     keyboard_state: KeyboardState,
-    text: PietText,
     active_text_input: Option<TextFieldToken>,
     parent: Option<crate::WindowHandle>,
 }
@@ -374,7 +374,7 @@ lazy_static! {
             info!("view is dealloc'ed");
             unsafe {
                 let view_state: *mut c_void = *this.get_ivar("viewState");
-                Box::from_raw(view_state as *mut ViewState);
+                drop(Box::from_raw(view_state as *mut ViewState));
             }
         }
 
@@ -557,7 +557,7 @@ fn make_view(handler: Box<dyn WinHandler>) -> (id, Weak<Mutex<Vec<IdleKind>>>) {
             focus_click: false,
             mouse_left: true,
             keyboard_state,
-            text: PietText::new_with_unique_state(),
+            //text: PietText::new_with_unique_state(),
             active_text_input: None,
             parent: None,
         };
@@ -850,13 +850,6 @@ extern "C" fn view_will_draw(this: &mut Object, _: Sel) {
 
 extern "C" fn draw_rect(this: &mut Object, _: Sel, dirtyRect: NSRect) {
     unsafe {
-        let context: id = msg_send![class![NSGraphicsContext], currentContext];
-        //FIXME: when core_graphics is at 0.20, we should be able to use
-        //core_graphics::sys::CGContextRef as our pointer type.
-        let cgcontext_ptr: *mut <CGContextRef as ForeignTypeRef>::CType =
-            msg_send![context, CGContext];
-        let cgcontext_ref = CGContextRef::from_ptr_mut(cgcontext_ptr);
-
         // FIXME: use the actual invalid region instead of just this bounding box.
         // https://developer.apple.com/documentation/appkit/nsview/1483772-getrectsbeingdrawn?language=objc
         let rect = Rect::from_origin_size(
@@ -867,12 +860,8 @@ extern "C" fn draw_rect(this: &mut Object, _: Sel, dirtyRect: NSRect) {
 
         let view_state: *mut c_void = *this.get_ivar("viewState");
         let view_state = &mut *(view_state as *mut ViewState);
-        let mut piet_ctx = Piet::new_y_down(cgcontext_ref, Some(view_state.text.clone()));
 
-        (*view_state).handler.paint(&mut piet_ctx, &invalid);
-        if let Err(e) = piet_ctx.finish() {
-            error!("{}", e)
-        }
+        (*view_state).handler.paint(&invalid);
 
         let superclass = msg_send![this, superclass];
         let () = msg_send![super(this, superclass), drawRect: dirtyRect];
@@ -1092,7 +1081,7 @@ impl WindowHandle {
         None
     }
 
-    pub fn request_timer(&self, deadline: std::time::Instant) -> TimerToken {
+    pub fn request_timer(&self, deadline: Instant) -> TimerToken {
         let ti = time_interval_from_deadline(deadline);
         let token = TimerToken::next();
         unsafe {
@@ -1106,19 +1095,6 @@ impl WindowHandle {
             let () = msg_send![runloop, addTimer: timer forMode: NSRunLoopCommonModes];
         }
         token
-    }
-
-    pub fn text(&self) -> PietText {
-        let view = self.nsview.load();
-        unsafe {
-            if let Some(view) = (*view).as_ref() {
-                let state: *mut c_void = *view.get_ivar("viewState");
-                (*(state as *mut ViewState)).text.clone()
-            } else {
-                // this codepath should only happen during tests in druid, when view is nil
-                PietText::new_with_unique_state()
-            }
-        }
     }
 
     pub fn add_text_field(&self) -> TextFieldToken {
@@ -1413,13 +1389,18 @@ impl WindowHandle {
     }
 }
 
-#[cfg(feature = "raw-win-handle")]
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
         let nsv = self.nsview.load();
         let mut handle = AppKitWindowHandle::empty();
         handle.ns_view = *nsv as *mut _;
         RawWindowHandle::AppKit(handle)
+    }
+}
+
+unsafe impl HasRawDisplayHandle for WindowHandle {
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        RawDisplayHandle::AppKit(AppKitDisplayHandle::empty())
     }
 }
 
@@ -1464,7 +1445,7 @@ impl IdleHandle {
 /// of seconds from now.
 ///
 /// This may lose some precision for multi-month durations.
-fn time_interval_from_deadline(deadline: std::time::Instant) -> f64 {
+fn time_interval_from_deadline(deadline: Instant) -> f64 {
     let now = Instant::now();
     if now >= deadline {
         0.0

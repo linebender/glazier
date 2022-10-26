@@ -18,8 +18,7 @@ use wayland_protocols::xdg_shell::client::xdg_popup;
 use wayland_protocols::xdg_shell::client::xdg_positioner;
 use wayland_protocols::xdg_shell::client::xdg_surface;
 
-#[cfg(feature = "raw-win-handle")]
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, WaylandWindowHandle};
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, WaylandHandle};
 
 use super::application::{self, Timer};
 use super::{error::Error, menu::Menu, outputs, surfaces};
@@ -29,7 +28,6 @@ use crate::{
     error::Error as ShellError,
     kurbo::{Insets, Point, Rect, Size},
     mouse::{Cursor, CursorDesc},
-    piet::PietText,
     scale::Scale,
     text::Event,
     window::{self, FileDialogToken, TimerToken, WinHandler, WindowLevel},
@@ -181,10 +179,6 @@ impl WindowHandle {
         self.inner.surface.invalidate_rect(rect);
     }
 
-    pub fn text(&self) -> PietText {
-        PietText::new()
-    }
-
     pub fn add_text_field(&self) -> TextFieldToken {
         TextFieldToken::next()
     }
@@ -287,7 +281,7 @@ impl WindowHandle {
     }
 }
 
-impl std::cmp::PartialEq for WindowHandle {
+impl PartialEq for WindowHandle {
     fn eq(&self, rhs: &Self) -> bool {
         self.id() == rhs.id()
     }
@@ -295,7 +289,7 @@ impl std::cmp::PartialEq for WindowHandle {
 
 impl Eq for WindowHandle {}
 
-impl std::default::Default for WindowHandle {
+impl Default for WindowHandle {
     fn default() -> WindowHandle {
         WindowHandle {
             inner: std::sync::Arc::new(Inner {
@@ -310,11 +304,10 @@ impl std::default::Default for WindowHandle {
     }
 }
 
-#[cfg(feature = "raw-win-handle")]
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
         tracing::error!("HasRawWindowHandle trait not implemented for wasm.");
-        RawWindowHandle::Wayland(WaylandWindowHandle::empty())
+        RawWindowHandle::Wayland(WaylandHandle::empty())
     }
 }
 

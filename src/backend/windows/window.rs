@@ -25,47 +25,35 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use scopeguard::defer;
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 use winapi::ctypes::{c_int, c_void};
-use winapi::shared::dxgi::*;
-use winapi::shared::dxgi1_2::*;
-use winapi::shared::dxgiformat::*;
-use winapi::shared::dxgitype::*;
 use winapi::shared::minwindef::*;
 use winapi::shared::windef::*;
 use winapi::shared::winerror::*;
-use winapi::um::dcomp::{IDCompositionDevice, IDCompositionTarget, IDCompositionVisual};
 use winapi::um::dwmapi::{DwmExtendFrameIntoClientArea, DwmSetWindowAttribute};
 use winapi::um::errhandlingapi::GetLastError;
 use winapi::um::shellscalingapi::MDT_EFFECTIVE_DPI;
-use winapi::um::unknwnbase::*;
 use winapi::um::uxtheme::*;
 use winapi::um::wingdi::*;
 use winapi::um::winnt::*;
-use winapi::um::winreg::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
 use winapi::um::winuser::*;
-use winapi::Interface;
-use wio::com::ComPtr;
 
-#[cfg(feature = "raw-win-handle")]
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, Win32WindowHandle};
-
-use piet_common::d2d::{D2DFactory, DeviceContext};
-use piet_common::dwrite::DwriteFactory;
+use raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle, Win32WindowHandle,
+    WindowsDisplayHandle,
+};
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
-use crate::piet::{Piet, PietText, RenderContext};
 
 use super::accels::register_accel;
 use super::application::Application;
-use super::dcomp::D3D11Device;
 use super::dialog::get_file_dialog_path;
 use super::error::Error;
 use super::keyboard::{self, KeyboardState};
 use super::menu::Menu;
-use super::paint;
+// use super::paint;
 use super::timers::TimerSlots;
-use super::util::{self, as_result, FromWide, ToWide, OPTIONAL_FUNCTIONS};
+use super::util::{self, ToWide, OPTIONAL_FUNCTIONS};
 
 use crate::common_util::IdleCallback;
 use crate::dialog::{FileDialogOptions, FileDialogType, FileInfo};
@@ -164,9 +152,8 @@ enum DeferredOp {
     ReleaseMouseCapture,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct WindowHandle {
-    text: PietText,
     state: Weak<WindowState>,
 }
 
@@ -174,28 +161,32 @@ impl PartialEq for WindowHandle {
     fn eq(&self, other: &Self) -> bool {
         match (self.state.upgrade(), other.state.upgrade()) {
             (None, None) => true,
-            (Some(s), Some(o)) => std::rc::Rc::ptr_eq(&s, &o),
+            (Some(s), Some(o)) => Rc::ptr_eq(&s, &o),
             (_, _) => false,
         }
     }
 }
 impl Eq for WindowHandle {}
 
-#[cfg(feature = "raw-win-handle")]
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
+        let mut handle = Win32WindowHandle::empty();
         if let Some(hwnd) = self.get_hwnd() {
-            let mut handle = Win32WindowHandle::empty();
             handle.hwnd = hwnd as *mut core::ffi::c_void;
             handle.hinstance = unsafe {
-                winapi::um::libloaderapi::GetModuleHandleW(0 as winapi::um::winnt::LPCWSTR)
-                    as *mut core::ffi::c_void
+                winapi::um::libloaderapi::GetModuleHandleW(0 as LPCWSTR) as *mut core::ffi::c_void
             };
-            RawWindowHandle::Win32(handle)
-        } else {
-            error!("Cannot retrieved HWND for window.");
-            RawWindowHandle::Win32(Win32WindowHandle::empty())
         }
+        RawWindowHandle::Win32(handle)
+    }
+}
+
+unsafe impl HasRawDisplayHandle for WindowHandle {
+    /// See:
+    ///  *  https://github.com/rust-windowing/raw-window-handle/issues/92
+    ///  * https://github.com/rust-windowing/winit/blob/92fdf5ba85f920262a61cee4590f4a11ad5738d1/src/platform_impl/windows/window.rs#L285
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        RawDisplayHandle::Windows(WindowsDisplayHandle::empty())
     }
 }
 
@@ -263,43 +254,24 @@ trait WndProc {
 struct MyWndProc {
     app: Application,
     handle: RefCell<WindowHandle>,
-    d2d_factory: D2DFactory,
-    text: PietText,
     state: RefCell<Option<WndState>>,
-    present_strategy: PresentStrategy,
 }
 
 /// The mutable state of the window.
 struct WndState {
     handler: Box<dyn WinHandler>,
-    render_target: Option<DeviceContext>,
-    dxgi_state: Option<DxgiState>,
     min_size: Option<Size>,
     keyboard_state: KeyboardState,
     // Stores a set of all mouse buttons that are currently holding mouse
     // capture. When the first mouse button is down on our window we enter
     // capture, and we hold it until the last mouse button is up.
     captured_mouse_buttons: MouseButtons,
-    transparent: bool,
     // Is this window the topmost window under the mouse cursor
     has_mouse_focus: bool,
     //TODO: track surrogate orphan
     last_click_time: Instant,
     last_click_pos: (i32, i32),
     click_count: u8,
-}
-
-/// State for DXGI swapchains.
-struct DxgiState {
-    swap_chain: *mut IDXGISwapChain1,
-
-    // These ComPtrs must live as long as the window
-    #[allow(dead_code)]
-    composition_device: Option<ComPtr<IDCompositionDevice>>,
-    #[allow(dead_code)]
-    composition_target: Option<ComPtr<IDCompositionTarget>>,
-    #[allow(dead_code)]
-    composition_visual: Option<ComPtr<IDCompositionVisual>>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -426,41 +398,9 @@ fn set_style(hwnd: HWND, resizable: bool, titlebar: bool) {
 }
 
 impl WndState {
-    fn rebuild_render_target(&mut self, d2d: &D2DFactory, scale: Scale) -> Result<(), Error> {
-        unsafe {
-            let swap_chain = self.dxgi_state.as_ref().unwrap().swap_chain;
-            match paint::create_render_target_dxgi(d2d, swap_chain, scale, self.transparent) {
-                Ok(rt) => {
-                    self.render_target =
-                        Some(rt.as_device_context().expect("TODO remove this expect"));
-                    Ok(())
-                }
-                Err(e) => Err(e),
-            }
-        }
-    }
-
     // Renders but does not present.
-    fn render(&mut self, d2d: &D2DFactory, text: &PietText, invalid: &Region) {
-        let rt = self.render_target.as_mut().unwrap();
-
-        rt.begin_draw();
-        {
-            let mut piet_ctx = Piet::new(d2d, text.clone(), rt);
-
-            // The documentation on DXGI_PRESENT_PARAMETERS says we "must not update any
-            // pixel outside of the dirty rectangles."
-            piet_ctx.clip(invalid.to_bez_path());
-            self.handler.paint(&mut piet_ctx, invalid);
-            if let Err(e) = piet_ctx.finish() {
-                error!("piet error on render: {:?}", e);
-            }
-        }
-        // Maybe should deal with lost device here...
-        let res = rt.end_draw();
-        if let Err(e) = res {
-            error!("EndDraw error: {:?}", e);
-        }
+    fn render(&mut self, invalid: &Region) {
+        self.handler.paint(invalid);
     }
 
     fn enter_mouse_capture(&mut self, hwnd: HWND, button: MouseButton) {
@@ -521,7 +461,7 @@ impl MyWndProc {
     /// Takes the invalid region and returns it, replacing it with the empty region.
     fn take_invalid(&self) -> Region {
         self.with_window_state(|state| {
-            std::mem::replace(&mut *state.invalid.borrow_mut(), Region::EMPTY)
+            mem::replace(&mut *state.invalid.borrow_mut(), Region::EMPTY)
         })
     }
 
@@ -738,21 +678,8 @@ impl WndProc for MyWndProc {
                     state.hwnd.set(hwnd);
                 }
                 if let Some(state) = self.state.borrow_mut().as_mut() {
-                    let dxgi_state = unsafe {
-                        create_dxgi_state(self.present_strategy, hwnd, self.is_transparent())
-                            .unwrap_or_else(|e| {
-                                error!("Creating swapchain failed: {:?}", e);
-                                None
-                            })
-                    };
-                    state.dxgi_state = dxgi_state;
-
                     let handle = self.handle.borrow().to_owned();
                     state.handler.connect(&handle.into());
-
-                    if let Err(e) = state.rebuild_render_target(&self.d2d_factory, scale) {
-                        error!("error building render target: {}", e);
-                    }
                 }
                 Some(0)
             }
@@ -760,7 +687,7 @@ impl WndProc for MyWndProc {
                 if LOWORD(wparam as u32) as u32 != 0 {
                     unsafe {
                         if !self.has_titlebar() && !self.is_transparent() {
-                            // This makes windows paint the dropshadow around the window
+                            // This makes windows paint the drop-shadow around the window
                             // since we give it a "1 pixel frame" that we paint over anyway.
                             // From my testing top seems to be the best option when it comes to avoiding resize artifacts.
                             let margins = MARGINS {
@@ -822,17 +749,7 @@ impl WndProc for MyWndProc {
                     let invalid = self.take_invalid();
                     if !invalid.rects().is_empty() {
                         s.handler.rebuild_resources();
-                        s.render(&self.d2d_factory, &self.text, &invalid);
-                        if let Some(ref mut ds) = s.dxgi_state {
-                            let mut dirty_rects = util::region_to_rectis(&invalid, self.scale());
-                            let params = DXGI_PRESENT_PARAMETERS {
-                                DirtyRectsCount: dirty_rects.len() as u32,
-                                pDirtyRects: dirty_rects.as_mut_ptr(),
-                                pScrollRect: null_mut(),
-                                pScrollOffset: null_mut(),
-                            };
-                            (*ds.swap_chain).Present1(1, 0, &params);
-                        }
+                        s.render(&invalid);
                     }
                 });
                 Some(0)
@@ -934,7 +851,7 @@ impl WndProc for MyWndProc {
                 }
                 Some(hit)
             },
-            WM_SIZE => unsafe {
+            WM_SIZE => {
                 let width = LOWORD(lparam as u32) as u32;
                 let height = HIWORD(lparam as u32) as u32;
                 if width == 0 || height == 0 {
@@ -946,36 +863,10 @@ impl WndProc for MyWndProc {
                     let size_dp = area.size_dp();
                     self.set_area(area);
                     s.handler.size(size_dp);
-                    let res;
-                    {
-                        s.render_target = None;
-                        res = (*s.dxgi_state.as_mut().unwrap().swap_chain).ResizeBuffers(
-                            0,
-                            width,
-                            height,
-                            DXGI_FORMAT_UNKNOWN,
-                            0,
-                        );
-                    }
-                    if SUCCEEDED(res) {
-                        if let Err(e) = s.rebuild_render_target(&self.d2d_factory, scale) {
-                            error!("error building render target: {}", e);
-                        }
-                        s.render(&self.d2d_factory, &self.text, &size_dp.to_rect().into());
-                        let present_after = match self.present_strategy {
-                            PresentStrategy::Sequential => 1,
-                            _ => 0,
-                        };
-                        if let Some(ref mut dxgi_state) = s.dxgi_state {
-                            (*dxgi_state.swap_chain).Present(present_after, 0);
-                        }
-                        ValidateRect(hwnd, null_mut());
-                    } else {
-                        error!("ResizeBuffers failed: 0x{:x}", res);
-                    }
+                    s.render(&size_dp.to_rect().into());
                 })
                 .map(|_| 0)
-            },
+            }
             WM_COMMAND => {
                 self.with_wnd_state(|s| s.handler.command(LOWORD(wparam as u32) as u32));
                 Some(0)
@@ -1319,7 +1210,7 @@ impl WindowBuilder {
                 self.present_strategy = PresentStrategy::Flip;
                 self.transparent = true;
             } else {
-                tracing::warn!("Transparency requires Windows 8 or newer");
+                warn!("Transparency requires Windows 8 or newer");
             }
         }
     }
@@ -1346,17 +1237,11 @@ impl WindowBuilder {
 
     pub fn build(self) -> Result<WindowHandle, Error> {
         unsafe {
-            let class_name = super::util::CLASS_NAME.to_wide();
-            let dwrite_factory = DwriteFactory::new().unwrap();
-            let fonts = self.app.fonts.clone();
-            let text = PietText::new_with_shared_fonts(dwrite_factory, Some(fonts));
+            let class_name = util::CLASS_NAME.to_wide();
             let wndproc = MyWndProc {
                 app: self.app.clone(),
                 handle: Default::default(),
-                d2d_factory: D2DFactory::new().unwrap(),
-                text: text.clone(),
                 state: RefCell::new(None),
-                present_strategy: self.present_strategy,
             };
 
             // TODO: pos_x and pos_y are only scaled for windows with parents. But they need to be
@@ -1440,19 +1325,15 @@ impl WindowBuilder {
             };
             let win = Rc::new(window);
             let handle = WindowHandle {
-                text,
                 state: Rc::downgrade(&win),
             };
 
             let state = WndState {
                 handler: self.handler.unwrap(),
-                render_target: None,
-                dxgi_state: None,
                 min_size: self.min_size,
                 keyboard_state: KeyboardState::new(),
                 captured_mouse_buttons: MouseButtons::new(),
                 has_mouse_focus: false,
-                transparent: self.transparent,
                 last_click_time: Instant::now(),
                 last_click_pos: (0, 0),
                 click_count: 0,
@@ -1518,13 +1399,13 @@ impl WindowBuilder {
             // Dark mode support
             // https://docs.microsoft.com/en-us/windows/apps/desktop/modernize/apply-windows-themes
             const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
-            let value: BOOL = if should_use_light_theme() { 0 } else { 1 };
+            let value: BOOL = 1;
             let value_ptr = &value as *const _ as *const c_void;
             DwmSetWindowAttribute(
                 hwnd,
                 DWMWA_USE_IMMERSIVE_DARK_MODE,
                 value_ptr,
-                std::mem::size_of::<BOOL>() as u32,
+                mem::size_of::<BOOL>() as u32,
             );
 
             self.app.add_window(hwnd);
@@ -1550,184 +1431,6 @@ impl WindowBuilder {
             }
         }
     }
-}
-
-/// Attempt to read the registry and see if the system is set to a dark or
-/// light theme.
-pub fn should_use_light_theme() -> bool {
-    let mut data: [u8; 4] = [0; 4];
-    let mut cb_data: u32 = data.len() as u32;
-    let res = unsafe {
-        RegGetValueW(
-            HKEY_CURRENT_USER,
-            r#"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"#
-                .to_wide()
-                .as_ptr(),
-            "AppsUseLightTheme".to_wide().as_ptr(),
-            RRF_RT_REG_DWORD,
-            std::ptr::null_mut(),
-            data.as_mut_ptr() as _,
-            &mut cb_data as *mut _,
-        )
-    };
-
-    // ERROR_SUCCESS
-    if res == 0 {
-        i32::from_le_bytes(data) == 1
-    } else {
-        true // Default to light theme.
-    }
-}
-
-/// Choose an adapter. Here the heuristic is to choose the adapter with the
-/// largest video memory, which will generally be the discrete adapter. It's
-/// possible that on some systems the integrated adapter might be a better
-/// choice, but that probably depends on usage.
-unsafe fn choose_adapter(factory: *mut IDXGIFactory2) -> *mut IDXGIAdapter {
-    let mut i = 0;
-    let mut best_adapter = null_mut();
-    let mut best_vram = 0;
-    loop {
-        let mut adapter: *mut IDXGIAdapter = null_mut();
-        if !SUCCEEDED((*factory).EnumAdapters(i, &mut adapter)) {
-            break;
-        }
-        let mut desc = mem::MaybeUninit::uninit();
-        let hr = (*adapter).GetDesc(desc.as_mut_ptr());
-        if !SUCCEEDED(hr) {
-            error!("Failed to get adapter description: {:?}", Error::Hr(hr));
-            break;
-        }
-        let mut desc: DXGI_ADAPTER_DESC = desc.assume_init();
-        let vram = desc.DedicatedVideoMemory;
-        if i == 0 || vram > best_vram {
-            best_vram = vram;
-            best_adapter = adapter;
-        }
-        debug!(
-            "{:?}: desc = {:?}, vram = {}",
-            adapter,
-            (&mut desc.Description[0] as LPWSTR).to_string(),
-            desc.DedicatedVideoMemory
-        );
-        i += 1;
-    }
-    best_adapter
-}
-
-unsafe fn create_dxgi_state(
-    present_strategy: PresentStrategy,
-    hwnd: HWND,
-    transparent: bool,
-) -> Result<Option<DxgiState>, Error> {
-    let mut factory: *mut IDXGIFactory2 = null_mut();
-    as_result(CreateDXGIFactory1(
-        &IID_IDXGIFactory2,
-        &mut factory as *mut *mut IDXGIFactory2 as *mut *mut c_void,
-    ))?;
-    debug!("dxgi factory pointer = {:?}", factory);
-    let adapter = choose_adapter(factory);
-    debug!("adapter = {:?}", adapter);
-
-    let mut d3d11_device = D3D11Device::new_simple()?;
-
-    let (swap_effect, bufs) = match present_strategy {
-        PresentStrategy::Sequential => (DXGI_SWAP_EFFECT_SEQUENTIAL, 1),
-        PresentStrategy::Flip | PresentStrategy::FlipRedirect => {
-            (DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, 2)
-        }
-    };
-
-    let desc = DXGI_SWAP_CHAIN_DESC1 {
-        Width: 1024,
-        Height: 768,
-        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-        Stereo: FALSE,
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: 1,
-            Quality: 0,
-        },
-        BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
-        BufferCount: bufs,
-        Scaling: DXGI_SCALING_STRETCH,
-        SwapEffect: swap_effect,
-        AlphaMode: if transparent {
-            DXGI_ALPHA_MODE_PREMULTIPLIED
-        } else {
-            DXGI_ALPHA_MODE_IGNORE
-        },
-        Flags: 0,
-    };
-    let mut swap_chain: *mut IDXGISwapChain1 = null_mut();
-    let swap_chain_res = if transparent {
-        (*factory).CreateSwapChainForComposition(
-            d3d11_device.raw_ptr() as *mut IUnknown,
-            &desc,
-            null_mut(),
-            &mut swap_chain,
-        )
-    } else {
-        (*factory).CreateSwapChainForHwnd(
-            d3d11_device.raw_ptr() as *mut IUnknown,
-            hwnd,
-            &desc,
-            null_mut(),
-            null_mut(),
-            &mut swap_chain,
-        )
-    };
-    debug!(
-        "swap chain res = 0x{:x}, pointer = {:?}",
-        swap_chain_res, swap_chain
-    );
-
-    let (composition_device, composition_target, composition_visual) = if transparent {
-        // This behavior is only supported on windows 8 and newer where
-        // composition is available
-
-        // Following resources are created according to this tutorial:
-        // https://docs.microsoft.com/en-us/archive/msdn-magazine/2014/june/windows-with-c-high-performance-window-layering-using-the-windows-composition-engine
-        let DCompositionCreateDevice = OPTIONAL_FUNCTIONS.DCompositionCreateDevice.unwrap();
-
-        // Create IDCompositionDevice
-        let mut ptr: *mut c_void = null_mut();
-        DCompositionCreateDevice(
-            d3d11_device.raw_ptr() as *mut IDXGIDevice,
-            &IDCompositionDevice::uuidof(),
-            &mut ptr,
-        );
-        let composition_device = ComPtr::<IDCompositionDevice>::from_raw(ptr as _);
-
-        // Create IDCompositionTarget for the window
-        let mut ptr: *mut IDCompositionTarget = null_mut();
-        composition_device.CreateTargetForHwnd(hwnd as _, 1, &mut ptr);
-        let composition_target = ComPtr::from_raw(ptr);
-
-        // Create IDCompositionVisual and assign to swap chain
-        let mut ptr: *mut IDCompositionVisual = null_mut();
-        composition_device.CreateVisual(&mut ptr);
-        let composition_visual = ComPtr::from_raw(ptr);
-        composition_visual.SetContent(swap_chain as *mut IUnknown);
-
-        // Set the root as composition target and commit
-        composition_target.SetRoot(composition_visual.as_raw());
-        composition_device.Commit();
-
-        (
-            Some(composition_device),
-            Some(composition_target),
-            Some(composition_visual),
-        )
-    } else {
-        (None, None, None)
-    };
-
-    Ok(Some(DxgiState {
-        swap_chain,
-        composition_device,
-        composition_target,
-        composition_visual,
-    }))
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -1758,7 +1461,7 @@ pub(crate) unsafe extern "system" fn win_proc_dispatch(
     if msg == WM_NCDESTROY && !window_ptr.is_null() {
         (*window_ptr).wndproc.cleanup(hwnd);
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-        mem::drop(Rc::from_raw(window_ptr));
+        drop(Rc::from_raw(window_ptr));
     }
 
     match result {
@@ -2086,10 +1789,6 @@ impl WindowHandle {
         self.defer(DeferredOp::ContextMenu(menu, pos));
     }
 
-    pub fn text(&self) -> PietText {
-        self.text.clone()
-    }
-
     pub fn add_text_field(&self) -> TextFieldToken {
         TextFieldToken::next()
     }
@@ -2115,7 +1814,7 @@ impl WindowHandle {
     /// Request a timer event.
     ///
     /// The return value is an identifier.
-    pub fn request_timer(&self, deadline: std::time::Instant) -> TimerToken {
+    pub fn request_timer(&self, deadline: Instant) -> TimerToken {
         let (id, elapse) = self.get_timer_slot(deadline);
         let id = self
             .get_hwnd()
@@ -2153,8 +1852,8 @@ impl WindowHandle {
                 }
                 defer!(DeleteDC(bmp_dc););
 
-                let width = cursor_desc.image.width();
-                let height = cursor_desc.image.height();
+                let width = 1; //cursor_desc.image.width();
+                let height = 1; //cursor_desc.image.height();
                 let mask = CreateCompatibleBitmap(hdc, width as c_int, height as c_int);
                 if mask.is_null() {
                     return None;
@@ -2170,16 +1869,16 @@ impl WindowHandle {
                 let old_mask = SelectObject(mask_dc, mask as *mut c_void);
                 let old_bmp = SelectObject(bmp_dc, bmp as *mut c_void);
 
-                for (row_idx, row) in cursor_desc.image.pixel_colors().enumerate() {
-                    for (col_idx, p) in row.enumerate() {
-                        let (r, g, b, a) = p.as_rgba8();
-                        // TODO: what's the story on partial transparency? I couldn't find documentation.
-                        let mask_px = RGB(255 - a, 255 - a, 255 - a);
-                        let bmp_px = RGB(r, g, b);
-                        SetPixel(mask_dc, col_idx as i32, row_idx as i32, mask_px);
-                        SetPixel(bmp_dc, col_idx as i32, row_idx as i32, bmp_px);
-                    }
-                }
+                // for (row_idx, row) in cursor_desc.image.pixel_colors().enumerate() {
+                //     for (col_idx, p) in row.enumerate() {
+                //         let (r, g, b, a) = p.as_rgba8();
+                //         // TODO: what's the story on partial transparency? I couldn't find documentation.
+                //         let mask_px = RGB(255 - a, 255 - a, 255 - a);
+                //         let bmp_px = RGB(r, g, b);
+                //         SetPixel(mask_dc, col_idx as i32, row_idx as i32, mask_px);
+                //         SetPixel(bmp_dc, col_idx as i32, row_idx as i32, bmp_px);
+                //     }
+                // }
 
                 SelectObject(mask_dc, old_mask);
                 SelectObject(bmp_dc, old_bmp);
@@ -2254,7 +1953,7 @@ impl WindowHandle {
     /// Allocate a timer slot.
     ///
     /// Returns an id and an elapsed time in ms
-    fn get_timer_slot(&self, deadline: std::time::Instant) -> (TimerToken, u32) {
+    fn get_timer_slot(&self, deadline: Instant) -> (TimerToken, u32) {
         if let Some(w) = self.state.upgrade() {
             let mut timers = w.timers.lock().unwrap();
             let id = timers.alloc();
@@ -2301,14 +2000,5 @@ impl IdleHandle {
             }
         }
         queue.push(IdleKind::Token(token));
-    }
-}
-
-impl Default for WindowHandle {
-    fn default() -> Self {
-        WindowHandle {
-            state: Default::default(),
-            text: PietText::new_with_shared_fonts(DwriteFactory::new().unwrap(), None),
-        }
     }
 }
