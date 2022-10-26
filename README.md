@@ -1,8 +1,9 @@
 # glazier
 
 Glazier is a portable infrastructure layer intended for high quality GUI
-toolkits in Rust. It is based on druid-shell but with some changes, primarily
-around making it agnostic to the choice of drawing.
+toolkits in Rust. It is agnostic to the choice of drawing, so the client must provide
+that, but the goal is to abstract over most of the other integration points with the
+underlying operating system.
 
 Primary platforms are Windows, macOS, and Linux. Web is a secondary platform.
 Other ports may happen if they are contributed.
@@ -15,7 +16,7 @@ Contributions are welcome, see [CONTRIBUTING](./CONTRIBUTING.md) for more detail
 The following tasks are in scope. Mostly they are implemented, but as always
 there is more refinement to be done.
 
-* Window creation, including subwindows.
+* Window creation, including subwindows (useful for context menus and the like).
 
 * System menus. These are especially important on macOS.
 
@@ -24,10 +25,12 @@ there is more refinement to be done.
 * Input Method Editor. On macOS, correct handling of dead keys is through the
 IME, and an application built on Glazier is expected to handle IME.
 
-* Mouse and pointer events. Mouse events are currently supported, pointers
+* Mouse and pointer (touch and pen) events. Mouse events are currently supported, pointers
 are a hoped-for feature.
 
-* Providing DPI information to the application.
+* Cursors (mouse pointer indicator on the screen), including custom images.
+
+* Providing DPI scaling information to the application.
 
 * Clipboard.
 
@@ -82,12 +85,13 @@ corresponding methods on the concrete type for the current backend.
 ## Unsafe
 
 Interacting with system APIs is inherently unsafe. One of the goals of
-Glazier is to handle all interaction with these APIs, exposing
-a safe interface to [Druid] and other possible consumers.
+Glazier is to handle almost all interaction with these APIs, exposing
+a safe interface to the UI toolkit. The exception is drawing, which will
+generally require at least some additional unsafe code for integration.
 
 ## Similar libraries
 
-* [winit]. This is by far the most commonly used window creation library. As
+* [winit]. This is by far the most commonly used window creation crate. As
 discussed in the links below, the scope is defined quite differently. In general,
 winit is probably more suitable for games and game-like applications, while Glazier
 is intended to provide more of the full desktop GUI experience, including system
