@@ -1,9 +1,9 @@
 # glazier
 
-Glazier is a portable infrastructure layer intended for high quality GUI
-toolkits in Rust. It is agnostic to the choice of drawing, so the client must provide
-that, but the goal is to abstract over most of the other integration points with the
-underlying operating system.
+Glazier is an operating system integration layer infrastructure layer intended for
+high quality GUI toolkits in Rust. It is agnostic to the choice of drawing, so the
+client must provide that, but the goal is to abstract over most of the other
+integration points with the underlying operating system.
 
 Primary platforms are Windows, macOS, and Linux. Web is a secondary platform.
 Other ports may happen if they are contributed.
