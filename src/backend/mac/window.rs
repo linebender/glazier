@@ -310,9 +310,9 @@ impl WindowBuilder {
 
             if let Some(level) = self.level {
                 match &level {
-                    WindowLevel::Tooltip(parent) => (*view_state).parent = Some(parent.clone()),
-                    WindowLevel::DropDown(parent) => (*view_state).parent = Some(parent.clone()),
-                    WindowLevel::Modal(parent) => (*view_state).parent = Some(parent.clone()),
+                    WindowLevel::Tooltip(parent) => view_state.parent = Some(parent.clone()),
+                    WindowLevel::DropDown(parent) => view_state.parent = Some(parent.clone()),
+                    WindowLevel::Modal(parent) => view_state.parent = Some(parent.clone()),
                     _ => {}
                 }
                 handle.set_level(level);
