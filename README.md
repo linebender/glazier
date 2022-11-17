@@ -11,6 +11,8 @@ Other ports may happen if they are contributed.
 This library is currently work in progress and should be considered experimental.
 Contributions are welcome, see [CONTRIBUTING](./CONTRIBUTING.md) for more details.
 
+For discussion, please look at or join [the #glazier stream on our zulip instance](https://xi.zulipchat.com/#narrow/stream/351333-glazier).
+
 ## Scope
 
 The following tasks are in scope. Mostly they are implemented, but as always
