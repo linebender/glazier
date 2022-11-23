@@ -1698,7 +1698,7 @@ impl WindowHandle {
         self.defer(DeferredOp::SetSize(size));
     }
 
-    // Gets the size of the window in pixels
+    // Gets the size of the window in device points
     pub fn get_size(&self) -> Size {
         if let Some(w) = self.state.upgrade() {
             let hwnd = w.hwnd.get();
@@ -1717,7 +1717,7 @@ impl WindowHandle {
                 };
                 let width = rect.right - rect.left;
                 let height = rect.bottom - rect.top;
-                return Size::new(width as f64, height as f64);
+                return Size::new(width as f64, height as f64).to_dp(w.scale.get());
             }
         }
         Size::new(0.0, 0.0)
