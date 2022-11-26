@@ -1390,8 +1390,10 @@ impl WindowHandle {
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
         let nsv = self.nsview.load();
+        let window: id = unsafe { msg_send![*nsv, window] };
         let mut handle = AppKitWindowHandle::empty();
         handle.ns_view = *nsv as *mut _;
+        handle.ns_window = window as *mut _;
         RawWindowHandle::AppKit(handle)
     }
 }
