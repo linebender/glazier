@@ -1170,6 +1170,7 @@ impl WndProc for MyWndProc {
                     }
                 })
                 .map(|_| 0),
+            #[cfg(feature = "accesskit")]
             WM_GETOBJECT => self
                 .handle
                 .borrow()
@@ -2021,6 +2022,7 @@ impl WindowHandle {
         }
     }
 
+    #[cfg(feature = "accesskit")]
     pub fn update_accesskit_if_active(
         &self,
         update_factory: impl FnOnce() -> accesskit::TreeUpdate,
