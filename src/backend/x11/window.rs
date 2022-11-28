@@ -1331,6 +1331,14 @@ impl WindowHandle {
             Ok(Scale::new(1.0, 1.0))
         }
     }
+
+    #[cfg(feature = "accesskit")]
+    pub fn update_accesskit_if_active(
+        &self,
+        _update_factory: impl FnOnce() -> accesskit::TreeUpdate,
+    ) {
+        // AccessKit doesn't yet support this backend.
+    }
 }
 
 unsafe impl HasRawWindowHandle for WindowHandle {
