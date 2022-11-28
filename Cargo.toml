@@ -143,3 +143,7 @@ piet-gpu-hal = { git = "https://github.com/linebender/piet-gpu", branch = "dev" 
 [build-dependencies]
 bindgen = { version = "0.60.1", optional = true }
 pkg-config = { version = "0.3.25", optional = true }
+
+[[example]]
+name = "accesskit"
+required-features = ["accesskit"]
