@@ -24,6 +24,10 @@ use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "accesskit")]
+use accesskit_windows::{Adapter as AccessKitAdapter, UiaInitMarker};
+#[cfg(feature = "accesskit")]
+use once_cell::unsync::OnceCell;
 use scopeguard::defer;
 use tracing::{error, warn};
 use winapi::ctypes::{c_int, c_void};
@@ -206,6 +210,11 @@ enum IdleKind {
     Token(IdleToken),
 }
 
+#[cfg(feature = "accesskit")]
+struct AccessKitActionHandler {
+    idle_handle: IdleHandle,
+}
+
 /// This is the low level window state. All mutable contents are protected
 /// by interior mutability, so we can handle reentrant calls.
 struct WindowState {
@@ -228,6 +237,10 @@ struct WindowState {
     // False for tooltips, to prevent stealing focus from owner window.
     is_focusable: bool,
     window_level: WindowLevel,
+    #[cfg(feature = "accesskit")]
+    uia_init_marker: UiaInitMarker, // zero size
+    #[cfg(feature = "accesskit")]
+    accesskit_adapter: OnceCell<AccessKitAdapter>,
 }
 
 impl std::fmt::Debug for WindowState {
@@ -1157,6 +1170,40 @@ impl WndProc for MyWndProc {
                     }
                 })
                 .map(|_| 0),
+            WM_GETOBJECT => self
+                .handle
+                .borrow()
+                .state
+                .upgrade()
+                .and_then(|state| {
+                    self.with_wnd_state(|s| {
+                        let wparam = accesskit_windows::WPARAM(wparam);
+                        let lparam = accesskit_windows::LPARAM(lparam);
+                        let idle_queue = &state.idle_queue;
+                        let uia_init_marker = state.uia_init_marker; // zero size and Copy
+                        state
+                            .accesskit_adapter
+                            .get_or_init(move || {
+                                let initial_tree_state = s.handler.accesskit_tree();
+                                let idle_handle = IdleHandle {
+                                    hwnd,
+                                    queue: Arc::clone(idle_queue),
+                                };
+                                let action_handler =
+                                    Box::new(AccessKitActionHandler { idle_handle });
+                                let hwnd = accesskit_windows::HWND(hwnd as _);
+                                AccessKitAdapter::new(
+                                    hwnd,
+                                    initial_tree_state,
+                                    action_handler,
+                                    uia_init_marker,
+                                )
+                            })
+                            .handle_wm_getobject(wparam, lparam)
+                    })
+                    .flatten()
+                })
+                .map(|result| result.into().0),
             _ => None,
         }
     }
@@ -1322,6 +1369,10 @@ impl WindowBuilder {
                 active_text_input: Cell::new(None),
                 is_focusable: focusable,
                 window_level,
+                #[cfg(feature = "accesskit")]
+                uia_init_marker: UiaInitMarker::new(),
+                #[cfg(feature = "accesskit")]
+                accesskit_adapter: OnceCell::new(),
             };
             let win = Rc::new(window);
             let handle = WindowHandle {
@@ -1969,6 +2020,18 @@ impl WindowHandle {
             w.timers.lock().unwrap().free(token)
         }
     }
+
+    pub fn update_accesskit_if_active(
+        &self,
+        update_factory: impl FnOnce() -> accesskit::TreeUpdate,
+    ) {
+        if let Some(w) = self.state.upgrade() {
+            if let Some(adapter) = w.accesskit_adapter.get() {
+                let events = adapter.update(update_factory());
+                events.raise();
+            }
+        }
+    }
 }
 
 // There is a tiny risk of things going wrong when hwnd is sent across threads.
@@ -2000,5 +2063,14 @@ impl IdleHandle {
             }
         }
         queue.push(IdleKind::Token(token));
+    }
+}
+
+#[cfg(feature = "accesskit")]
+impl accesskit::ActionHandler for AccessKitActionHandler {
+    fn do_action(&self, request: accesskit::ActionRequest) {
+        self.idle_handle.add_idle_callback(move |handler| {
+            handler.accesskit_action(request);
+        });
     }
 }
