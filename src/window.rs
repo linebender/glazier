@@ -576,6 +576,13 @@ pub trait WinHandler {
     /// Request the handler to return an [`accesskit::TreeUpdate`]
     /// with a complete accessibility tree. Must always return
     /// a complete, up-to-date tree.
+    ///
+    // This method is called when the AccessKit platform adapter is initialized.
+    /// This is generally done as lazily as the platform allows, ideally
+    /// when an accessibility client (e.g. screen reader) makes its first
+    /// request. The [`WindowHandle::update_accesskit_if_active`] method
+    /// must also be called to provide incremental tree updates whenever
+    /// the UI is updated.
     #[cfg(feature = "accesskit")]
     fn accesskit_tree(&mut self) -> accesskit::TreeUpdate;
 
