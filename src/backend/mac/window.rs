@@ -1537,13 +1537,13 @@ impl ViewState {
         // SAFETY: The view pointer is based on a valid borrowed reference
         // to the view.
         let adapter = unsafe { AccessKitAdapter::new(view, initial_state, action_handler) };
-        // If hypothetically `OnceCell::try_insert` returns an error,
-        // it's easier to return the old value than to panic, because
-        // the adapter doesn't implement `Debug` as required by
-        // `Result::unwrap`.
         match self.accesskit_adapter.try_insert(adapter) {
             Ok(adapter) => adapter,
-            Err((old_adapter, _)) => old_adapter,
+            Err((old_adapter, _)) => {
+                // This would have to be caused by unexpected reentrancy.
+                tracing::warn!("AccessKit adapter unexpectedly set during initialization");
+                old_adapter
+            }
         }
     }
 }
