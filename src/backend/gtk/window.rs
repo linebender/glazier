@@ -1295,6 +1295,14 @@ impl WindowHandle {
             state.window.set_title(&(title.into()));
         }
     }
+
+    #[cfg(feature = "accesskit")]
+    pub fn update_accesskit_if_active(
+        &self,
+        _update_factory: impl FnOnce() -> accesskit::TreeUpdate,
+    ) {
+        // AccessKit doesn't yet support this backend.
+    }
 }
 
 // WindowState needs to be Send + Sync so it can be passed into glib closures.

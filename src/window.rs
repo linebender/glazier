@@ -412,6 +412,19 @@ impl WindowHandle {
     pub fn get_scale(&self) -> Result<Scale, Error> {
         self.0.get_scale().map_err(Into::into)
     }
+
+    /// If and only if the AccessKit adapter has been initialized, call
+    /// the provided function and apply the resulting update. The update must
+    /// reflect all changes since the last tree returned by the handler's
+    /// [`WinHandler::accesskit_tree`] implementation or the last update
+    /// applied through a call to this method, whichever was later.
+    #[cfg(feature = "accesskit")]
+    pub fn update_accesskit_if_active(
+        &self,
+        update_factory: impl FnOnce() -> accesskit::TreeUpdate,
+    ) {
+        self.0.update_accesskit_if_active(update_factory)
+    }
 }
 
 unsafe impl HasRawWindowHandle for WindowHandle {
@@ -560,6 +573,19 @@ pub trait WinHandler {
     /// have no effect.
     fn paint(&mut self, invalid: &Region);
 
+    /// Request the handler to return an [`accesskit::TreeUpdate`]
+    /// with a complete accessibility tree. Must always return
+    /// a complete, up-to-date tree.
+    ///
+    // This method is called when the AccessKit platform adapter is initialized.
+    /// This is generally done as lazily as the platform allows, ideally
+    /// when an accessibility client (e.g. screen reader) makes its first
+    /// request. The [`WindowHandle::update_accesskit_if_active`] method
+    /// must also be called to provide incremental tree updates whenever
+    /// the UI is updated.
+    #[cfg(feature = "accesskit")]
+    fn accesskit_tree(&mut self) -> accesskit::TreeUpdate;
+
     /// Called when the resources need to be rebuilt.
     ///
     /// Discussion: this function is mostly motivated by using
@@ -699,6 +725,12 @@ pub trait WinHandler {
     /// Called when a idle token is requested by [`IdleHandle::schedule_idle()`] call.
     #[allow(unused_variables)]
     fn idle(&mut self, token: IdleToken) {}
+
+    /// Called when the AccessKit adapter receives an action request from a client
+    /// (e.g. screen reader).
+    #[allow(unused_variables)]
+    #[cfg(feature = "accesskit")]
+    fn accesskit_action(&mut self, request: accesskit::ActionRequest) {}
 
     /// Get a reference to the handler state. Used mostly by idle handlers.
     fn as_any(&mut self) -> &mut dyn Any;

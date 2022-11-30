@@ -282,6 +282,14 @@ impl WindowHandle {
     pub(super) fn data(&self) -> Option<std::sync::Arc<surfaces::surface::Data>> {
         self.inner.surface.data()
     }
+
+    #[cfg(feature = "accesskit")]
+    pub fn update_accesskit_if_active(
+        &self,
+        _update_factory: impl FnOnce() -> accesskit::TreeUpdate,
+    ) {
+        // AccessKit doesn't yet support this backend.
+    }
 }
 
 impl PartialEq for WindowHandle {
