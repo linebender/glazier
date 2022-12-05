@@ -7,7 +7,7 @@ description = "Platform abstracting application shell used for druid toolkit."
 repository = "https://github.com/linebender/druid"
 readme = "README.md"
 categories = ["os::macos-apis", "os::windows-apis", "gui"]
-edition = "2018"
+edition = "2021"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
@@ -138,7 +138,10 @@ static_assertions = "1.1.0"
 test-log = { version = "0.2.5", features = ["trace"], default-features = false }
 tracing-subscriber = { version = "0.3.2", features = ["env-filter"] }
 unicode-segmentation = "1.7.0"
-piet-gpu-hal = { git = "https://github.com/linebender/piet-gpu", branch = "dev" }
+piet-wgsl = { git = "https://github.com/linebender/piet-gpu" }
+piet-scene = { git = "https://github.com/linebender/piet-gpu" }
+parley = { git = "https://github.com/dfrg/parley" }
+pollster = "0.2.5"
 
 [build-dependencies]
 bindgen = { version = "0.60.1", optional = true }
@@ -147,3 +150,7 @@ pkg-config = { version = "0.3.25", optional = true }
 [[example]]
 name = "accesskit"
 required-features = ["accesskit"]
+
+
+[patch."https://github.com/dfrg/fount"]
+fount = { git = "https://github.com/jneem/fount" }
