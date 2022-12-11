@@ -884,19 +884,6 @@ impl Window {
         _leave_notify: &xproto::LeaveNotifyEvent,
     ) -> Result<(), Error> {
         self.with_handler(|h| h.mouse_leave());
-        // Alternately, handle mouse leave by generating a move event
-        //         let scale = self.scale.get();
-        //         let button = mouse_button(u8::from(leave_notify.detail));
-        //         let mouse_event = MouseEvent {
-        //             pos: Point::new(leave_notify.event_x as f64, leave_notify.event_y as f64).to_dp(scale),
-        //             buttons: mouse_buttons(leave_notify.state),
-        //             mods: key_mods(leave_notify.state),
-        //             count: 0,
-        //             focus: false,
-        //             button,
-        //             wheel_delta: Vec2::ZERO,
-        //         };
-        //         self.with_handler(|h| h.mouse_move(&mouse_event));
         Ok(())
     }
 
