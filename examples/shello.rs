@@ -254,13 +254,14 @@ pub fn render_anim_frame(scene: &mut Scene, fcx: &mut FontContext, i: u64) {
     let scale = (i as f64 * 0.01).sin() * 0.5 + 1.5;
     let mut lcx = parley::LayoutContext::new();
     let mut layout_builder =
-        lcx.ranged_builder(fcx, "Hello piet-gpu! ഹലോ ਸਤ ਸ੍ਰੀ ਅਕਾਲ مرحبا!", scale as f32);
+        lcx.ranged_builder(fcx, "Hello vello! ഹലോ ਸਤ ਸ੍ਰੀ ਅਕਾਲ مرحبا!", scale as f32);
     layout_builder.push_default(&parley::style::StyleProperty::FontSize(34.0));
     layout_builder.push(
         &parley::style::StyleProperty::Brush(ParleyBrush(Brush::Solid(Color::rgb8(255, 255, 0)))),
         6..10,
     );
-    layout_builder.push(&parley::style::StyleProperty::FontSize(48.0), 6..10);
+    layout_builder.push(&parley::style::StyleProperty::FontSize(48.0), 6..12);
+    layout_builder.push(&parley::style::StyleProperty::Brush(ParleyBrush(Color::YELLOW.into())), 6..12);
     layout_builder.push_default(&parley::style::StyleProperty::Brush(ParleyBrush(
         Brush::Solid(Color::rgb8(255, 255, 255)),
     )));
