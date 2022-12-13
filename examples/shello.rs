@@ -261,7 +261,10 @@ pub fn render_anim_frame(scene: &mut Scene, fcx: &mut FontContext, i: u64) {
         6..10,
     );
     layout_builder.push(&parley::style::StyleProperty::FontSize(48.0), 6..12);
-    layout_builder.push(&parley::style::StyleProperty::Brush(ParleyBrush(Color::YELLOW.into())), 6..12);
+    layout_builder.push(
+        &parley::style::StyleProperty::Brush(ParleyBrush(Color::YELLOW.into())),
+        6..12,
+    );
     layout_builder.push_default(&parley::style::StyleProperty::Brush(ParleyBrush(
         Brush::Solid(Color::rgb8(255, 255, 255)),
     )));
