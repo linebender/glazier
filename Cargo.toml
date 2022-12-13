@@ -138,8 +138,7 @@ static_assertions = "1.1.0"
 test-log = { version = "0.2.5", features = ["trace"], default-features = false }
 tracing-subscriber = { version = "0.3.2", features = ["env-filter"] }
 unicode-segmentation = "1.7.0"
-piet-wgsl = { git = "https://github.com/linebender/piet-gpu" }
-piet-scene = { git = "https://github.com/linebender/piet-gpu" }
+vello = { git = "https://github.com/linebender/vello" }
 parley = { git = "https://github.com/dfrg/parley" }
 pollster = "0.2.5"
 

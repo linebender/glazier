@@ -1,20 +1,21 @@
 use glazier::kurbo::Size;
 use glazier::{
     Application, Cursor, FileDialogToken, FileInfo, IdleToken, KeyEvent, MouseEvent, Region,
-    TimerToken, WinHandler, WindowHandle,
+    Scalable, TimerToken, WinHandler, WindowHandle,
 };
 use parley::{FontContext, Layout};
-use piet_scene::{
+use std::any::Any;
+use vello::util::{RenderContext, RenderSurface};
+use vello::Renderer;
+use vello::{
     glyph::{
         pinot::{types::Tag, FontRef},
         GlyphContext,
     },
     kurbo::{Affine, PathEl, Point, Rect},
-    Brush, Color, Fill, Mix, Scene, SceneBuilder, Stroke,
+    peniko::{Brush, Color, Fill, Mix, Stroke},
+    Scene, SceneBuilder,
 };
-use piet_wgsl::util::{RenderContext, RenderSurface};
-use piet_wgsl::Renderer;
-use std::any::Any;
 
 const WIDTH: usize = 2048;
 const HEIGHT: usize = 1536;
@@ -33,6 +34,7 @@ fn main() {
 struct WindowState {
     handle: WindowHandle,
     render: RenderContext,
+    renderer: Renderer,
     surface: Option<RenderSurface>,
     scene: Scene,
     size: Size,
@@ -43,10 +45,12 @@ struct WindowState {
 impl WindowState {
     pub fn new() -> Self {
         let render = pollster::block_on(RenderContext::new()).unwrap();
+        let renderer = Renderer::new(&render.device).unwrap();
         Self {
             handle: Default::default(),
             surface: None,
             render,
+            renderer,
             scene: Default::default(),
             font_context: FontContext::new(),
             counter: 0,
@@ -67,43 +71,42 @@ impl WindowState {
         self.handle.invalidate();
     }
 
-    fn new_surface(&mut self) {
-        self.surface = Some(self.render.create_surface(
-            &self.handle,
-            self.size.width as u32,
-            self.size.height as u32,
-        ));
+    fn surface_size(&self) -> (u32, u32) {
+        let handle = &self.handle;
+        let scale = handle.get_scale().unwrap_or_default();
+        let insets = handle.content_insets().to_px(scale);
+        let mut size = handle.get_size().to_px(scale);
+        size.width -= insets.x_value();
+        size.height -= insets.y_value();
+        (size.width as u32, size.height as u32)
     }
 
     fn render(&mut self) {
-        let width = self.size.width as u32;
-        let height = self.size.height as u32;
+        let (width, height) = self.surface_size();
         if self.surface.is_none() {
-            self.new_surface();
+            self.surface = Some(self.render.create_surface(&self.handle, width, height));
         }
 
-        let mut renderer = Renderer::new(&self.render.device).unwrap();
         render_anim_frame(&mut self.scene, &mut self.font_context, self.counter);
         self.counter += 1;
 
-        let surface_texture = self
-            .surface
-            .as_ref()
-            .unwrap()
-            .surface
-            .get_current_texture()
-            .unwrap();
-        renderer
-            .render_to_surface(
-                &self.render.device,
-                &self.render.queue,
-                &self.scene,
-                &surface_texture,
-                width,
-                height,
-            )
-            .unwrap();
-        surface_texture.present();
+        if let Some(surface) = self.surface.as_mut() {
+            if surface.config.width != width || surface.config.height != height {
+                self.render.resize_surface(surface, width, height);
+            }
+            let surface_texture = surface.surface.get_current_texture().unwrap();
+            self.renderer
+                .render_to_surface(
+                    &self.render.device,
+                    &self.render.queue,
+                    &self.scene,
+                    &surface_texture,
+                    width,
+                    height,
+                )
+                .unwrap();
+            surface_texture.present();
+        }
     }
 }
 
@@ -167,7 +170,6 @@ impl WinHandler for WindowState {
 
     fn size(&mut self, size: Size) {
         self.size = size;
-        self.new_surface();
     }
 
     fn got_focus(&mut self) {
