@@ -113,6 +113,18 @@ x11rb::atom_manager! {
 
 #[derive(Clone)]
 pub(crate) struct Application {
+    inner: Rc<AppInner>,
+}
+
+impl std::ops::Deref for Application {
+    type Target = AppInner;
+
+    fn deref(&self) -> &AppInner {
+        &self.inner
+    }
+}
+
+pub(crate) struct AppInner {
     /// The connection to the X server.
     ///
     /// This connection is associated with a single display.
@@ -138,7 +150,7 @@ pub(crate) struct Application {
     atoms: Rc<AppAtoms>,
 
     /// The X11 resource database used to query dpi.
-    pub(crate) rdb: Rc<ResourceDb>,
+    pub(crate) rdb: ResourceDb,
     pub(crate) cursors: Cursors,
     /// The clipboard implementation
     clipboard: Clipboard,
@@ -164,7 +176,7 @@ pub(crate) struct Application {
     /// This is constant for the lifetime of the `Application`.
     window_id: u32,
     /// The mutable `Application` state.
-    state: Rc<RefCell<State>>,
+    state: RefCell<State>,
     /// The read end of the "idle pipe", a pipe that allows the event loop to be woken up from
     /// other threads.
     idle_read: RawFd,
@@ -199,6 +211,47 @@ pub(crate) struct Cursors {
 
 impl Application {
     pub fn new() -> Result<Application, Error> {
+        let inner = AppInner::new()?;
+        Ok(Application { inner })
+    }
+
+    pub fn run(self, _handler: Option<Box<dyn AppHandler>>) {
+        if let Err(e) = self.inner.run_inner() {
+            tracing::error!("{}", e);
+        }
+    }
+
+    pub fn quit(&self) {
+        if let Ok(mut state) = self.inner.state.try_borrow_mut() {
+            if !state.quitting {
+                state.quitting = true;
+                if state.windows.is_empty() {
+                    // There are no windows left, so we can immediately finalize the quit.
+                    self.inner.finalize_quit();
+                } else {
+                    // We need to queue up the destruction of all our windows.
+                    // Failure to do so will lead to resource leaks.
+                    for window in state.windows.values() {
+                        window.destroy();
+                    }
+                }
+            }
+        } else {
+            tracing::error!("Application state already borrowed");
+        }
+    }
+
+    pub fn clipboard(&self) -> Clipboard {
+        self.inner.clipboard.clone()
+    }
+
+    pub fn get_locale() -> String {
+        linux::env::locale()
+    }
+}
+
+impl AppInner {
+    fn new() -> Result<Rc<AppInner>, Error> {
         // If we want to support OpenGL, we will need to open a connection with Xlib support (see
         // https://xcb.freedesktop.org/opengl/ for background).  There is some sample code for this
         // in the `rust-xcb` crate (see `connect_with_xlib_display`), although it may be missing
@@ -208,7 +261,7 @@ impl Application {
         //
         // https://github.com/linebender/druid/pull/1025#discussion_r442777892
         let (conn, screen_num) = XCBConnection::connect(None)?;
-        let rdb = Rc::new(new_resource_db_from_default(&conn)?);
+        let rdb = new_resource_db_from_default(&conn)?;
         let xkb_context = xkb::Context::new();
         xkb_context.set_log_level(tracing::Level::DEBUG);
         use x11rb::protocol::xkb::ConnectionExt;
@@ -225,12 +278,12 @@ impl Application {
 
         let xkb_state = keymap.state();
         let connection = Rc::new(conn);
-        let window_id = Application::create_event_window(&connection, screen_num)?;
-        let state = Rc::new(RefCell::new(State {
+        let window_id = AppInner::create_event_window(&connection, screen_num)?;
+        let state = RefCell::new(State {
             quitting: false,
             windows: HashMap::new(),
             xkb_state,
-        }));
+        });
 
         let (idle_read, idle_write) = nix::unistd::pipe2(nix::fcntl::OFlag::O_NONBLOCK)?;
 
@@ -316,7 +369,7 @@ impl Application {
             Rc::clone(&timestamp),
         );
 
-        Ok(Application {
+        Ok(Rc::new(AppInner {
             connection,
             rdb,
             screen_num,
@@ -334,7 +387,7 @@ impl Application {
             marker: std::marker::PhantomData,
             render_argb32_pictformat_cursor,
             timestamp,
-        })
+        }))
     }
 
     /// Return the ARGB32 pictformat of the server, but only if RENDER's CreateCursor is supported
@@ -343,7 +396,7 @@ impl Application {
         self.render_argb32_pictformat_cursor
     }
 
-    fn create_event_window(conn: &Rc<XCBConnection>, screen_num: usize) -> Result<u32, Error> {
+    fn create_event_window(conn: &XCBConnection, screen_num: usize) -> Result<u32, Error> {
         let id = conn.generate_id()?;
         let setup = conn.setup();
         let screen = setup
@@ -616,7 +669,7 @@ impl Application {
         Ok(false)
     }
 
-    fn run_inner(self) -> Result<(), Error> {
+    fn run_inner(&self) -> Result<(), Error> {
         // Try to figure out the refresh rate of the current screen. We run the idle loop at that
         // rate. The rate-limiting of the idle loop has two purposes:
         //  - When the present extension is disabled, we paint in the idle loop. By limiting the
@@ -706,32 +759,6 @@ impl Application {
         }
     }
 
-    pub fn run(self, _handler: Option<Box<dyn AppHandler>>) {
-        if let Err(e) = self.run_inner() {
-            tracing::error!("{}", e);
-        }
-    }
-
-    pub fn quit(&self) {
-        if let Ok(mut state) = self.state.try_borrow_mut() {
-            if !state.quitting {
-                state.quitting = true;
-                if state.windows.is_empty() {
-                    // There are no windows left, so we can immediately finalize the quit.
-                    self.finalize_quit();
-                } else {
-                    // We need to queue up the destruction of all our windows.
-                    // Failure to do so will lead to resource leaks.
-                    for window in state.windows.values() {
-                        window.destroy();
-                    }
-                }
-            }
-        } else {
-            tracing::error!("Application state already borrowed");
-        }
-    }
-
     fn finalize_quit(&self) {
         log_x11!(self.connection.destroy_window(self.window_id));
         if let Err(e) = nix::unistd::close(self.idle_read) {
@@ -742,14 +769,6 @@ impl Application {
         }
     }
 
-    pub fn clipboard(&self) -> Clipboard {
-        self.clipboard.clone()
-    }
-
-    pub fn get_locale() -> String {
-        linux::env::locale()
-    }
-
     pub(crate) fn idle_pipe(&self) -> RawFd {
         self.idle_write
     }
@@ -757,7 +776,7 @@ impl Application {
 
 impl crate::platform::linux::ApplicationExt for crate::Application {
     fn primary_clipboard(&self) -> crate::Clipboard {
-        self.backend_app.primary.clone().into()
+        self.backend_app.inner.primary.clone().into()
     }
 }
 
