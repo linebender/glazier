@@ -124,38 +124,23 @@ impl std::ops::Deref for Application {
     }
 }
 
-pub(crate) struct AppInner {
+#[derive(Debug)]
+pub(crate) struct AppShared {
     /// The connection to the X server.
     ///
     /// This connection is associated with a single display.
     /// The X server might also host other displays.
     ///
     /// A display is a collection of screens.
-    connection: Rc<XCBConnection>,
+    pub(super) connection: XCBConnection,
     /// An `XCBConnection` is *technically* safe to use from other threads, but there are
     /// subtleties; see [x11rb event loop integration notes][1] for more details.
     /// Let's just avoid the issue altogether. As far as public API is concerned, this causes
     /// `glazier::WindowHandle` to be `!Send` and `!Sync`.
     ///
     /// [1]: https://github.com/psychon/x11rb/blob/41ab6610f44f5041e112569684fc58cd6d690e57/src/event_loop_integration.rs.
-    marker: std::marker::PhantomData<*mut XCBConnection>,
+    pub(super) marker: std::marker::PhantomData<*mut XCBConnection>,
 
-    /// The type of visual used by the root window
-    root_visual_type: Visualtype,
-    /// The visual for windows with transparent backgrounds, if supported
-    argb_visual_type: Option<Visualtype>,
-    /// Pending events that need to be handled later
-    pending_events: Rc<RefCell<VecDeque<Event>>>,
-    /// The atoms that we need
-    atoms: Rc<AppAtoms>,
-
-    /// The X11 resource database used to query dpi.
-    pub(crate) rdb: ResourceDb,
-    pub(crate) cursors: Cursors,
-    /// The clipboard implementation
-    clipboard: Clipboard,
-    /// The clipboard implementation for the primary selection
-    primary: Clipboard,
     /// The default screen of the connected display.
     ///
     /// The connected display may also have additional screens.
@@ -166,7 +151,32 @@ pub(crate) struct AppInner {
     /// In practice multiple physical monitor drawing areas are present on a single screen.
     /// This is achieved via various X server extensions (XRandR/Xinerama/TwinView),
     /// with XRandR seeming like the best choice.
-    screen_num: usize, // Needs a container when no longer const
+    pub(super) screen_num: usize, // Needs a container when no longer const
+
+    /// Pending events that need to be handled later
+    pub(super) pending_events: RefCell<VecDeque<Event>>,
+    /// The atoms that we need
+    pub(super) atoms: AppAtoms,
+    /// Newest timestamp that we received
+    pub(super) timestamp: Cell<Timestamp>,
+}
+
+pub(crate) struct AppInner {
+    /// Application state shared with the clipboards
+    shared: Rc<AppShared>,
+
+    /// The type of visual used by the root window
+    root_visual_type: Visualtype,
+    /// The visual for windows with transparent backgrounds, if supported
+    argb_visual_type: Option<Visualtype>,
+
+    /// The X11 resource database used to query dpi.
+    pub(crate) rdb: ResourceDb,
+    pub(crate) cursors: Cursors,
+    /// The clipboard implementation
+    clipboard: Clipboard,
+    /// The clipboard implementation for the primary selection
+    primary: Clipboard,
     /// The X11 window id of this `Application`.
     ///
     /// This is an input-only non-visual X11 window that is created first during initialization,
@@ -185,8 +195,6 @@ pub(crate) struct AppInner {
     idle_write: RawFd,
     /// Support for the render extension in at least version 0.5?
     render_argb32_pictformat_cursor: Option<Pictformat>,
-    /// Newest timestamp that we received
-    timestamp: Rc<Cell<Timestamp>>,
 }
 
 /// The mutable `Application` state.
@@ -260,24 +268,24 @@ impl AppInner {
         // might randomly eat your events / move them to its own event queue.
         //
         // https://github.com/linebender/druid/pull/1025#discussion_r442777892
-        let (conn, screen_num) = XCBConnection::connect(None)?;
-        let rdb = new_resource_db_from_default(&conn)?;
+        let (connection, screen_num) = XCBConnection::connect(None)?;
+        let rdb = new_resource_db_from_default(&connection)?;
         let xkb_context = xkb::Context::new();
         xkb_context.set_log_level(tracing::Level::DEBUG);
         use x11rb::protocol::xkb::ConnectionExt;
-        conn.xkb_use_extension(1, 0)?
+        connection
+            .xkb_use_extension(1, 0)?
             .reply()
             .context("init xkb extension")?;
         let device_id = xkb_context
-            .core_keyboard_device_id(&conn)
+            .core_keyboard_device_id(&connection)
             .context("get core keyboard device id")?;
 
         let keymap = xkb_context
-            .keymap_from_device(&conn, device_id)
+            .keymap_from_device(&connection, device_id)
             .context("key map from device")?;
 
         let xkb_state = keymap.state();
-        let connection = Rc::new(conn);
         let window_id = AppInner::create_event_window(&connection, screen_num)?;
         let state = RefCell::new(State {
             quitting: false,
@@ -317,10 +325,10 @@ impl AppInner {
             None
         };
 
-        let handle = x11rb::cursor::Handle::new(connection.as_ref(), screen_num, &rdb)?.reply()?;
+        let handle = x11rb::cursor::Handle::new(&connection, screen_num, &rdb)?.reply()?;
         let load_cursor = |cursor| {
             handle
-                .load_cursor(connection.as_ref(), cursor)
+                .load_cursor(&connection, cursor)
                 .map_err(|e| tracing::warn!("Unable to load cursor {}, error: {}", cursor, e))
                 .ok()
         };
@@ -335,11 +343,9 @@ impl AppInner {
             col_resize: load_cursor("col-resize"),
         };
 
-        let atoms = Rc::new(
-            AppAtoms::new(&*connection)?
-                .reply()
-                .context("get X11 atoms")?,
-        );
+        let atoms = AppAtoms::new(&connection)?
+            .reply()
+            .context("get X11 atoms")?;
 
         let screen = connection
             .setup()
@@ -350,29 +356,23 @@ impl AppInner {
             .ok_or_else(|| anyhow!("Couldn't get visual from screen"))?;
         let argb_visual_type = util::get_argb_visual_type(&connection, screen)?;
 
-        let timestamp = Rc::new(Cell::new(x11rb::CURRENT_TIME));
-        let pending_events = Default::default();
-        let clipboard = Clipboard::new(
-            Rc::clone(&connection),
+        let timestamp = Cell::new(x11rb::CURRENT_TIME);
+
+        let shared = Rc::new(AppShared {
+            connection,
+            marker: std::marker::PhantomData,
             screen_num,
-            Rc::clone(&atoms),
-            atoms.CLIPBOARD,
-            Rc::clone(&pending_events),
-            Rc::clone(&timestamp),
-        );
-        let primary = Clipboard::new(
-            Rc::clone(&connection),
-            screen_num,
-            Rc::clone(&atoms),
-            atoms.PRIMARY,
-            Rc::clone(&pending_events),
-            Rc::clone(&timestamp),
-        );
+            pending_events: Default::default(),
+            atoms,
+            timestamp,
+        });
+
+        let clipboard = Clipboard::new(Rc::clone(&shared), atoms.CLIPBOARD);
+        let primary = Clipboard::new(Rc::clone(&shared), atoms.PRIMARY);
 
         Ok(Rc::new(AppInner {
-            connection,
+            shared,
             rdb,
-            screen_num,
             window_id,
             state,
             idle_read,
@@ -382,11 +382,7 @@ impl AppInner {
             idle_write,
             root_visual_type,
             argb_visual_type,
-            atoms,
-            pending_events: Default::default(),
-            marker: std::marker::PhantomData,
             render_argb32_pictformat_cursor,
-            timestamp,
         }))
     }
 
@@ -457,25 +453,26 @@ impl AppInner {
 
     #[inline]
     pub(crate) fn connection(&self) -> &XCBConnection {
-        &self.connection
+        &self.shared.connection
     }
 
     #[inline]
     pub(crate) fn screen_num(&self) -> usize {
-        self.screen_num
+        self.shared.screen_num
     }
 
     #[inline]
     pub(crate) fn argb_visual_type(&self) -> Option<Visualtype> {
         // Check if a composite manager is running
-        let atom_name = format!("_NET_WM_CM_S{}", self.screen_num);
+        let atom_name = format!("_NET_WM_CM_S{}", self.shared.screen_num);
         let owner = self
+            .shared
             .connection
             .intern_atom(false, atom_name.as_bytes())
             .ok()
             .and_then(|cookie| cookie.reply().ok())
             .map(|reply| reply.atom)
-            .and_then(|atom| self.connection.get_selection_owner(atom).ok())
+            .and_then(|atom| self.shared.connection.get_selection_owner(atom).ok())
             .and_then(|cookie| cookie.reply().ok())
             .map(|reply| reply.owner);
 
@@ -494,7 +491,7 @@ impl AppInner {
 
     #[inline]
     pub(crate) fn atoms(&self) -> &AppAtoms {
-        &self.atoms
+        &self.shared.atoms
     }
 
     /// Returns `Ok(true)` if we want to exit the main loop.
@@ -510,9 +507,9 @@ impl AppInner {
                 Event::EnterNotify(ev) => ev.time,
                 Event::LeaveNotify(ev) => ev.time,
                 Event::PropertyNotify(ev) => ev.time,
-                _ => self.timestamp.get(),
+                _ => self.shared.timestamp.get(),
             };
-            self.timestamp.set(timestamp);
+            self.shared.timestamp.set(timestamp);
         }
         match ev {
             // NOTE: When adding handling for any of the following events,
@@ -694,21 +691,21 @@ impl AppInner {
             };
             let next_idle_time = last_idle_time + timeout;
 
-            self.connection.flush()?;
+            self.shared.connection.flush()?;
 
             // Deal with pending events
-            let mut event = self.pending_events.borrow_mut().pop_front();
+            let mut event = self.shared.pending_events.borrow_mut().pop_front();
 
             // Before we poll on the connection's file descriptor, check whether there are any
             // events ready. It could be that XCB has some events in its internal buffers because
             // of something that happened during the idle loop.
             if event.is_none() {
-                event = self.connection.poll_for_event()?;
+                event = self.shared.connection.poll_for_event()?;
             }
 
             if event.is_none() {
                 poll_with_timeout(
-                    &self.connection,
+                    &self.shared.connection,
                     self.idle_read,
                     next_timeout,
                     next_idle_time,
@@ -727,7 +724,7 @@ impl AppInner {
                         tracing::error!("Error handling event: {:#}", e);
                     }
                 }
-                event = self.connection.poll_for_event()?;
+                event = self.shared.connection.poll_for_event()?;
             }
 
             let now = Instant::now();
@@ -760,7 +757,7 @@ impl AppInner {
     }
 
     fn finalize_quit(&self) {
-        log_x11!(self.connection.destroy_window(self.window_id));
+        log_x11!(self.shared.connection.destroy_window(self.window_id));
         if let Err(e) = nix::unistd::close(self.idle_read) {
             tracing::error!("Error closing idle_read: {}", e);
         }
