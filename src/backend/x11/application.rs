@@ -456,7 +456,7 @@ impl AppInner {
     }
 
     #[inline]
-    pub(crate) fn connection(&self) -> &Rc<XCBConnection> {
+    pub(crate) fn connection(&self) -> &XCBConnection {
         &self.connection
     }
 
@@ -814,7 +814,7 @@ fn drain_idle_pipe(idle_read: RawFd) -> Result<(), Error> {
 // This was taken, with minor modifications, from the xclock_utc example in the x11rb crate.
 // https://github.com/psychon/x11rb/blob/a6bd1453fd8e931394b9b1f2185fad48b7cca5fe/examples/xclock_utc.rs
 fn poll_with_timeout(
-    conn: &Rc<XCBConnection>,
+    conn: &XCBConnection,
     idle: RawFd,
     timer_timeout: Option<Instant>,
     idle_timeout: Instant,

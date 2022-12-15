@@ -14,8 +14,6 @@
 
 //! Miscellaneous utility functions for working with X11.
 
-use std::rc::Rc;
-
 use anyhow::{anyhow, Error};
 use x11rb::connection::RequestConnection;
 use x11rb::errors::ReplyError;
@@ -25,7 +23,7 @@ use x11rb::protocol::xproto::{Screen, Visualid, Visualtype, Window};
 use x11rb::xcb_ffi::XCBConnection;
 
 // See: https://github.com/rtbo/rust-xcb/blob/master/examples/randr_screen_modes.rs
-pub fn refresh_rate(conn: &Rc<XCBConnection>, window_id: Window) -> Option<f64> {
+pub fn refresh_rate(conn: &XCBConnection, window_id: Window) -> Option<f64> {
     let try_refresh_rate = || -> Result<f64, Error> {
         let reply = conn.randr_get_screen_resources(window_id)?.reply()?;
 
