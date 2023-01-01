@@ -1485,7 +1485,7 @@ impl WindowBuilder {
     }
 }
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 type WindowLongPtr = winapi::shared::basetsd::LONG_PTR;
 #[cfg(target_arch = "x86")]
 type WindowLongPtr = LONG;
