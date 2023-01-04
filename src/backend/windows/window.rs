@@ -187,8 +187,8 @@ unsafe impl HasRawWindowHandle for WindowHandle {
 
 unsafe impl HasRawDisplayHandle for WindowHandle {
     /// See:
-    ///  *  https://github.com/rust-windowing/raw-window-handle/issues/92
-    ///  * https://github.com/rust-windowing/winit/blob/92fdf5ba85f920262a61cee4590f4a11ad5738d1/src/platform_impl/windows/window.rs#L285
+    ///  * <https://github.com/rust-windowing/raw-window-handle/issues/92>
+    ///  * <https://github.com/rust-windowing/winit/blob/92fdf5ba85f920262a61cee4590f4a11ad5738d1/src/platform_impl/windows/window.rs#L285>
     fn raw_display_handle(&self) -> RawDisplayHandle {
         RawDisplayHandle::Windows(WindowsDisplayHandle::empty())
     }
