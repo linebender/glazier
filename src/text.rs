@@ -102,7 +102,7 @@
 //! doesn't allow for IME input, dead keys, etc.
 
 use crate::keyboard::{KbKey, KeyEvent};
-use crate::kurbo::Rect;
+use crate::kurbo::{Point, Rect};
 use crate::window::{TextFieldToken, WinHandler};
 use std::borrow::Cow;
 use std::ops::Range;
@@ -417,8 +417,8 @@ pub trait InputHandler {
     /// boundary.
     fn replace_range(&mut self, range: Range<usize>, text: &str);
 
-    // /// Given a `Point`, determine the corresponding text position.
-    // fn hit_test_point(&self, point: Point) -> HitTestPoint;
+    /// Given a `Point`, determine the corresponding text position.
+    fn hit_test_point(&self, point: Point) -> HitTestPoint;
 
     /// Returns the range, in UTF-8 code units, of the line (soft- or hard-wrapped)
     /// containing the byte specified by `index`.
@@ -870,4 +870,21 @@ pub enum Action {
     ///
     /// Triggered on most operating systems with escape.
     Cancel,
+}
+
+/// Result of hit testing a point in a block of text.
+///
+/// This type is returned by [`InputHandler::hit_test_point`].
+#[derive(Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct HitTestPoint {
+    /// The index representing the grapheme boundary closest to the `Point`.
+    pub idx: usize,
+    /// Whether or not the point was inside the bounds of the layout object.
+    ///
+    /// A click outside the layout object will still resolve to a position in the
+    /// text; for instance a click to the right edge of a line will resolve to the
+    /// end of that line, and a click below the last line will resolve to a
+    /// position in that line.
+    pub is_inside: bool,
 }

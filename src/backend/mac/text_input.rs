@@ -26,6 +26,7 @@ use std::ops::Range;
 use std::os::raw::c_uchar;
 
 use super::window::with_edit_lock_from_window;
+use crate::kurbo::Point;
 use crate::text::{
     Action, Affinity, Direction, InputHandler, Movement, Selection, VerticalMovement,
     WritingDirection,
@@ -212,17 +213,15 @@ pub extern "C" fn insert_text(this: &mut Object, _: Sel, text: id, replacement_r
 }
 
 pub extern "C" fn character_index_for_point(
-    _this: &mut Object,
+    this: &mut Object,
     _: Sel,
-    _point: NSPoint,
+    point: NSPoint,
 ) -> NSUInteger {
-    todo!()
-    // TODO: figure out how to do text hit testing without piet
-    // with_edit_lock_from_window(this, true, |edit_lock| {
-    //     let hit_test = edit_lock.hit_test_point(Point::new(point.x, point.y));
-    //     hit_test.idx as NSUInteger
-    // })
-    // .unwrap_or(0)
+    with_edit_lock_from_window(this, true, |edit_lock| {
+        let hit_test = edit_lock.hit_test_point(Point::new(point.x, point.y));
+        hit_test.idx as NSUInteger
+    })
+    .unwrap_or(0)
 }
 
 pub extern "C" fn first_rect_for_character_range(
