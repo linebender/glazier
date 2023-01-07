@@ -240,7 +240,8 @@ impl WindowBuilder {
                 | EventMask::BUTTON_PRESS
                 | EventMask::BUTTON_RELEASE
                 | EventMask::POINTER_MOTION
-                | EventMask::FOCUS_CHANGE,
+                | EventMask::FOCUS_CHANGE
+                | EventMask::LEAVE_WINDOW,
         );
         if transparent {
             let colormap = conn.generate_id()?;
@@ -875,6 +876,14 @@ impl Window {
             wheel_delta: Vec2::ZERO,
         };
         self.with_handler(|h| h.mouse_move(&mouse_event));
+        Ok(())
+    }
+
+    pub fn handle_leave_notify(
+        &self,
+        _leave_notify: &xproto::LeaveNotifyEvent,
+    ) -> Result<(), Error> {
+        self.with_handler(|h| h.mouse_leave());
         Ok(())
     }
 

@@ -533,6 +533,12 @@ impl Application {
                     .context("MOTION_NOTIFY - failed to get window")?;
                 w.handle_motion_notify(ev)?;
             }
+            Event::LeaveNotify(ev) => {
+                let w = self
+                    .window(ev.event)
+                    .context("LEAVE_NOTIFY - failed to get window")?;
+                w.handle_leave_notify(ev)?;
+            }
             Event::ClientMessage(ev) => {
                 let w = self
                     .window(ev.window)
