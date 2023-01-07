@@ -14,8 +14,7 @@
 
 //! Interactions with the system pasteboard on X11.
 
-use std::cell::{Cell, RefCell};
-use std::collections::VecDeque;
+use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -25,14 +24,13 @@ use x11rb::errors::{ConnectionError, ReplyError, ReplyOrIdError};
 use x11rb::protocol::xproto::{
     Atom, AtomEnum, ChangeWindowAttributesAux, ConnectionExt, EventMask, GetPropertyReply,
     GetPropertyType, PropMode, Property, PropertyNotifyEvent, SelectionClearEvent,
-    SelectionNotifyEvent, SelectionRequestEvent, Timestamp, Window, WindowClass,
-    SELECTION_NOTIFY_EVENT,
+    SelectionNotifyEvent, SelectionRequestEvent, Window, WindowClass, SELECTION_NOTIFY_EVENT,
 };
 use x11rb::protocol::Event;
 use x11rb::wrapper::ConnectionExt as _;
 use x11rb::xcb_ffi::XCBConnection;
 
-use super::application::AppAtoms;
+use super::application::AppShared;
 use crate::clipboard::{ClipboardFormat, FormatId};
 use tracing::{debug, error, warn};
 
@@ -51,21 +49,10 @@ const STRING_TARGETS: [&str; 5] = [
 pub struct Clipboard(Rc<RefCell<ClipboardState>>);
 
 impl Clipboard {
-    pub(crate) fn new(
-        connection: Rc<XCBConnection>,
-        screen_num: usize,
-        atoms: Rc<AppAtoms>,
-        selection_name: Atom,
-        event_queue: Rc<RefCell<VecDeque<Event>>>,
-        timestamp: Rc<Cell<Timestamp>>,
-    ) -> Self {
+    pub(crate) fn new(app: Rc<AppShared>, selection_name: Atom) -> Self {
         Self(Rc::new(RefCell::new(ClipboardState::new(
-            connection,
-            screen_num,
-            atoms,
+            app,
             selection_name,
-            event_queue,
-            timestamp,
         ))))
     }
 
@@ -121,48 +108,33 @@ impl Clipboard {
 
 #[derive(Debug)]
 struct ClipboardState {
-    connection: Rc<XCBConnection>,
-    screen_num: usize,
-    atoms: Rc<AppAtoms>,
+    app: Rc<AppShared>,
     selection_name: Atom,
-    event_queue: Rc<RefCell<VecDeque<Event>>>,
-    timestamp: Rc<Cell<Timestamp>>,
     contents: Option<ClipboardContents>,
     incremental: Vec<IncrementalTransfer>,
 }
 
 impl ClipboardState {
-    fn new(
-        connection: Rc<XCBConnection>,
-        screen_num: usize,
-        atoms: Rc<AppAtoms>,
-        selection_name: Atom,
-        event_queue: Rc<RefCell<VecDeque<Event>>>,
-        timestamp: Rc<Cell<Timestamp>>,
-    ) -> Self {
+    fn new(app: Rc<AppShared>, selection_name: Atom) -> Self {
         Self {
-            connection,
-            screen_num,
-            atoms,
+            app,
             selection_name,
-            event_queue,
-            timestamp,
             contents: None,
             incremental: Vec::new(),
         }
     }
 
     fn put_formats(&mut self, formats: &[ClipboardFormat]) -> Result<(), ReplyOrIdError> {
-        let conn = &*self.connection;
+        let conn = &self.app.connection;
 
         // Create a window for selection ownership and save the necessary state
-        let contents = ClipboardContents::new(conn, self.screen_num, formats)?;
+        let contents = ClipboardContents::new(conn, self.app.screen_num, formats)?;
 
         // Become selection owner of our selection
         conn.set_selection_owner(
             contents.owner_window,
             self.selection_name,
-            self.timestamp.get(),
+            self.app.timestamp.get(),
         )?;
 
         // Check if we really are the selection owner; this might e.g. fail if our timestamp is too
@@ -228,7 +200,7 @@ impl ClipboardState {
             })
             .unwrap_or_default()
             .into_iter()
-            .filter_map(|atom| self.connection.get_atom_name(atom).ok())
+            .filter_map(|atom| self.app.connection.get_atom_name(atom).ok())
             .collect::<Vec<_>>();
         // We first send all requests above and then fetch the replies with only one round-trip to
         // the X11 server. Hence, the collect() above is not unnecessary!
@@ -266,18 +238,18 @@ impl ClipboardState {
 
         let deadline = Instant::now() + Duration::from_secs(5);
 
-        let conn = &*self.connection;
+        let conn = &self.app.connection;
         let format_atom = conn.intern_atom(false, format.as_bytes())?.reply()?.atom;
 
         // Create a window for the transfer
-        let window = WindowContainer::new(conn, self.screen_num)?;
+        let window = WindowContainer::new(conn, self.app.screen_num)?;
 
         conn.convert_selection(
             window.window,
             self.selection_name,
             format_atom,
             TRANSFER_ATOM,
-            self.timestamp.get(),
+            self.app.timestamp.get(),
         )?;
 
         // Now wait for the selection notify event
@@ -292,7 +264,7 @@ impl ClipboardState {
                     // do_transfer()
                     error!("BUG! We are doing a selection transfer while we are the selection owner. This will hang!");
                 }
-                event => self.event_queue.borrow_mut().push_back(event),
+                event => self.app.pending_events.borrow_mut().push_back(event),
             }
         };
 
@@ -318,7 +290,7 @@ impl ClipboardState {
             )?
             .reply()?;
 
-        if property.type_ != self.atoms.INCR {
+        if property.type_ != self.app.atoms.INCR {
             debug!("Got selection contents directly");
             return Ok(Some(converter(property)));
         }
@@ -350,7 +322,7 @@ impl ClipboardState {
                         value.extend_from_slice(&converter(property));
                     }
                 }
-                event => self.event_queue.borrow_mut().push_back(event),
+                event => self.app.pending_events.borrow_mut().push_back(event),
             }
         }
     }
@@ -365,7 +337,7 @@ impl ClipboardState {
         if Some(event.owner) == window {
             // We lost ownership of the selection, clean up
             if let Some(mut contents) = self.contents.take() {
-                contents.destroy(&self.connection)?;
+                contents.destroy(&self.app.connection)?;
             }
         }
         Ok(())
@@ -377,7 +349,7 @@ impl ClipboardState {
             return Ok(());
         }
 
-        let conn = &*self.connection;
+        let conn = &self.app.connection;
         let contents = match &self.contents {
             Some(contents) if contents.owner_window == event.owner => contents,
             _ => {
@@ -389,14 +361,14 @@ impl ClipboardState {
         };
 
         // TODO: ICCCM has TIMESTAMP as a required target (but no one uses it...?)
-        if event.target == self.atoms.TARGETS {
+        if event.target == self.app.atoms.TARGETS {
             // TARGETS is a special case: reply is list of u32
             let mut atoms = contents
                 .data
                 .iter()
                 .map(|(atom, _, _)| *atom)
                 .collect::<Vec<_>>();
-            atoms.push(self.atoms.TARGETS);
+            atoms.push(self.app.atoms.TARGETS);
             conn.change_property32(
                 PropMode::REPLACE,
                 event.requestor,
@@ -419,8 +391,12 @@ impl ClipboardState {
                     if data.len() > maximum_property_length(conn) {
                         // We need to do an INCR transfer.
                         debug!("Starting new INCR transfer");
-                        let transfer =
-                            IncrementalTransfer::new(conn, event, Rc::clone(data), self.atoms.INCR);
+                        let transfer = IncrementalTransfer::new(
+                            conn,
+                            event,
+                            Rc::clone(data),
+                            self.app.atoms.INCR,
+                        );
                         match transfer {
                             Ok(transfer) => self.incremental.push(transfer),
                             Err(err) => {
@@ -473,7 +449,7 @@ impl ClipboardState {
             .iter_mut()
             .find(|transfer| matches(transfer, event))
         {
-            let done = transfer.continue_incremental(&self.connection)?;
+            let done = transfer.continue_incremental(&self.app.connection)?;
             if done {
                 debug!("INCR transfer finished");
                 // Remove the transfer

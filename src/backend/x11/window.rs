@@ -373,7 +373,7 @@ impl WindowBuilder {
 
         let min_size = self.min_size.to_px(scale);
         log_x11!(size_hints(self.resizable, size_px, min_size)
-            .set_normal_hints(conn.as_ref(), id)
+            .set_normal_hints(conn, id)
             .context("set wm normal hints"));
 
         // TODO: set _NET_WM_STATE
@@ -385,7 +385,7 @@ impl WindowBuilder {
                 window::WindowState::Restored => WmHintsState::Normal,
             });
         }
-        log_x11!(hints.set(conn.as_ref(), id).context("set wm hints"));
+        log_x11!(hints.set(conn, id).context("set wm hints"));
 
         // set level
         {
@@ -584,7 +584,7 @@ impl Window {
 
     /// Set whether the window should be resizable
     fn resizable(&self, resizable: bool) {
-        let conn = self.app.connection().as_ref();
+        let conn = self.app.connection();
         log_x11!(size_hints(resizable, self.size().size_px(), self.min_size)
             .set_normal_hints(conn, self.id)
             .context("set normal hints"));

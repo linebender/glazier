@@ -113,37 +113,34 @@ x11rb::atom_manager! {
 
 #[derive(Clone)]
 pub(crate) struct Application {
+    inner: Rc<AppInner>,
+}
+
+impl std::ops::Deref for Application {
+    type Target = AppInner;
+
+    fn deref(&self) -> &AppInner {
+        &self.inner
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct AppShared {
     /// The connection to the X server.
     ///
     /// This connection is associated with a single display.
     /// The X server might also host other displays.
     ///
     /// A display is a collection of screens.
-    connection: Rc<XCBConnection>,
+    pub(super) connection: XCBConnection,
     /// An `XCBConnection` is *technically* safe to use from other threads, but there are
     /// subtleties; see [x11rb event loop integration notes][1] for more details.
     /// Let's just avoid the issue altogether. As far as public API is concerned, this causes
     /// `glazier::WindowHandle` to be `!Send` and `!Sync`.
     ///
     /// [1]: https://github.com/psychon/x11rb/blob/41ab6610f44f5041e112569684fc58cd6d690e57/src/event_loop_integration.rs.
-    marker: std::marker::PhantomData<*mut XCBConnection>,
+    pub(super) marker: std::marker::PhantomData<*mut XCBConnection>,
 
-    /// The type of visual used by the root window
-    root_visual_type: Visualtype,
-    /// The visual for windows with transparent backgrounds, if supported
-    argb_visual_type: Option<Visualtype>,
-    /// Pending events that need to be handled later
-    pending_events: Rc<RefCell<VecDeque<Event>>>,
-    /// The atoms that we need
-    atoms: Rc<AppAtoms>,
-
-    /// The X11 resource database used to query dpi.
-    pub(crate) rdb: Rc<ResourceDb>,
-    pub(crate) cursors: Cursors,
-    /// The clipboard implementation
-    clipboard: Clipboard,
-    /// The clipboard implementation for the primary selection
-    primary: Clipboard,
     /// The default screen of the connected display.
     ///
     /// The connected display may also have additional screens.
@@ -154,7 +151,32 @@ pub(crate) struct Application {
     /// In practice multiple physical monitor drawing areas are present on a single screen.
     /// This is achieved via various X server extensions (XRandR/Xinerama/TwinView),
     /// with XRandR seeming like the best choice.
-    screen_num: usize, // Needs a container when no longer const
+    pub(super) screen_num: usize, // Needs a container when no longer const
+
+    /// Pending events that need to be handled later
+    pub(super) pending_events: RefCell<VecDeque<Event>>,
+    /// The atoms that we need
+    pub(super) atoms: AppAtoms,
+    /// Newest timestamp that we received
+    pub(super) timestamp: Cell<Timestamp>,
+}
+
+pub(crate) struct AppInner {
+    /// Application state shared with the clipboards
+    shared: Rc<AppShared>,
+
+    /// The type of visual used by the root window
+    root_visual_type: Visualtype,
+    /// The visual for windows with transparent backgrounds, if supported
+    argb_visual_type: Option<Visualtype>,
+
+    /// The X11 resource database used to query dpi.
+    pub(crate) rdb: ResourceDb,
+    pub(crate) cursors: Cursors,
+    /// The clipboard implementation
+    clipboard: Clipboard,
+    /// The clipboard implementation for the primary selection
+    primary: Clipboard,
     /// The X11 window id of this `Application`.
     ///
     /// This is an input-only non-visual X11 window that is created first during initialization,
@@ -164,7 +186,7 @@ pub(crate) struct Application {
     /// This is constant for the lifetime of the `Application`.
     window_id: u32,
     /// The mutable `Application` state.
-    state: Rc<RefCell<State>>,
+    state: RefCell<State>,
     /// The read end of the "idle pipe", a pipe that allows the event loop to be woken up from
     /// other threads.
     idle_read: RawFd,
@@ -173,8 +195,6 @@ pub(crate) struct Application {
     idle_write: RawFd,
     /// Support for the render extension in at least version 0.5?
     render_argb32_pictformat_cursor: Option<Pictformat>,
-    /// Newest timestamp that we received
-    timestamp: Rc<Cell<Timestamp>>,
 }
 
 /// The mutable `Application` state.
@@ -199,6 +219,47 @@ pub(crate) struct Cursors {
 
 impl Application {
     pub fn new() -> Result<Application, Error> {
+        let inner = AppInner::new()?;
+        Ok(Application { inner })
+    }
+
+    pub fn run(self, _handler: Option<Box<dyn AppHandler>>) {
+        if let Err(e) = self.inner.run_inner() {
+            tracing::error!("{}", e);
+        }
+    }
+
+    pub fn quit(&self) {
+        if let Ok(mut state) = self.inner.state.try_borrow_mut() {
+            if !state.quitting {
+                state.quitting = true;
+                if state.windows.is_empty() {
+                    // There are no windows left, so we can immediately finalize the quit.
+                    self.inner.finalize_quit();
+                } else {
+                    // We need to queue up the destruction of all our windows.
+                    // Failure to do so will lead to resource leaks.
+                    for window in state.windows.values() {
+                        window.destroy();
+                    }
+                }
+            }
+        } else {
+            tracing::error!("Application state already borrowed");
+        }
+    }
+
+    pub fn clipboard(&self) -> Clipboard {
+        self.inner.clipboard.clone()
+    }
+
+    pub fn get_locale() -> String {
+        linux::env::locale()
+    }
+}
+
+impl AppInner {
+    fn new() -> Result<Rc<AppInner>, Error> {
         // If we want to support OpenGL, we will need to open a connection with Xlib support (see
         // https://xcb.freedesktop.org/opengl/ for background).  There is some sample code for this
         // in the `rust-xcb` crate (see `connect_with_xlib_display`), although it may be missing
@@ -207,30 +268,30 @@ impl Application {
         // might randomly eat your events / move them to its own event queue.
         //
         // https://github.com/linebender/druid/pull/1025#discussion_r442777892
-        let (conn, screen_num) = XCBConnection::connect(None)?;
-        let rdb = Rc::new(new_resource_db_from_default(&conn)?);
+        let (connection, screen_num) = XCBConnection::connect(None)?;
+        let rdb = new_resource_db_from_default(&connection)?;
         let xkb_context = xkb::Context::new();
         xkb_context.set_log_level(tracing::Level::DEBUG);
         use x11rb::protocol::xkb::ConnectionExt;
-        conn.xkb_use_extension(1, 0)?
+        connection
+            .xkb_use_extension(1, 0)?
             .reply()
             .context("init xkb extension")?;
         let device_id = xkb_context
-            .core_keyboard_device_id(&conn)
+            .core_keyboard_device_id(&connection)
             .context("get core keyboard device id")?;
 
         let keymap = xkb_context
-            .keymap_from_device(&conn, device_id)
+            .keymap_from_device(&connection, device_id)
             .context("key map from device")?;
 
         let xkb_state = keymap.state();
-        let connection = Rc::new(conn);
-        let window_id = Application::create_event_window(&connection, screen_num)?;
-        let state = Rc::new(RefCell::new(State {
+        let window_id = AppInner::create_event_window(&connection, screen_num)?;
+        let state = RefCell::new(State {
             quitting: false,
             windows: HashMap::new(),
             xkb_state,
-        }));
+        });
 
         let (idle_read, idle_write) = nix::unistd::pipe2(nix::fcntl::OFlag::O_NONBLOCK)?;
 
@@ -264,10 +325,10 @@ impl Application {
             None
         };
 
-        let handle = x11rb::cursor::Handle::new(connection.as_ref(), screen_num, &rdb)?.reply()?;
+        let handle = x11rb::cursor::Handle::new(&connection, screen_num, &rdb)?.reply()?;
         let load_cursor = |cursor| {
             handle
-                .load_cursor(connection.as_ref(), cursor)
+                .load_cursor(&connection, cursor)
                 .map_err(|e| tracing::warn!("Unable to load cursor {}, error: {}", cursor, e))
                 .ok()
         };
@@ -282,11 +343,9 @@ impl Application {
             col_resize: load_cursor("col-resize"),
         };
 
-        let atoms = Rc::new(
-            AppAtoms::new(&*connection)?
-                .reply()
-                .context("get X11 atoms")?,
-        );
+        let atoms = AppAtoms::new(&connection)?
+            .reply()
+            .context("get X11 atoms")?;
 
         let screen = connection
             .setup()
@@ -297,29 +356,23 @@ impl Application {
             .ok_or_else(|| anyhow!("Couldn't get visual from screen"))?;
         let argb_visual_type = util::get_argb_visual_type(&connection, screen)?;
 
-        let timestamp = Rc::new(Cell::new(x11rb::CURRENT_TIME));
-        let pending_events = Default::default();
-        let clipboard = Clipboard::new(
-            Rc::clone(&connection),
-            screen_num,
-            Rc::clone(&atoms),
-            atoms.CLIPBOARD,
-            Rc::clone(&pending_events),
-            Rc::clone(&timestamp),
-        );
-        let primary = Clipboard::new(
-            Rc::clone(&connection),
-            screen_num,
-            Rc::clone(&atoms),
-            atoms.PRIMARY,
-            Rc::clone(&pending_events),
-            Rc::clone(&timestamp),
-        );
+        let timestamp = Cell::new(x11rb::CURRENT_TIME);
 
-        Ok(Application {
+        let shared = Rc::new(AppShared {
             connection,
-            rdb,
+            marker: std::marker::PhantomData,
             screen_num,
+            pending_events: Default::default(),
+            atoms,
+            timestamp,
+        });
+
+        let clipboard = Clipboard::new(Rc::clone(&shared), atoms.CLIPBOARD);
+        let primary = Clipboard::new(Rc::clone(&shared), atoms.PRIMARY);
+
+        Ok(Rc::new(AppInner {
+            shared,
+            rdb,
             window_id,
             state,
             idle_read,
@@ -329,12 +382,8 @@ impl Application {
             idle_write,
             root_visual_type,
             argb_visual_type,
-            atoms,
-            pending_events: Default::default(),
-            marker: std::marker::PhantomData,
             render_argb32_pictformat_cursor,
-            timestamp,
-        })
+        }))
     }
 
     /// Return the ARGB32 pictformat of the server, but only if RENDER's CreateCursor is supported
@@ -343,7 +392,7 @@ impl Application {
         self.render_argb32_pictformat_cursor
     }
 
-    fn create_event_window(conn: &Rc<XCBConnection>, screen_num: usize) -> Result<u32, Error> {
+    fn create_event_window(conn: &XCBConnection, screen_num: usize) -> Result<u32, Error> {
         let id = conn.generate_id()?;
         let setup = conn.setup();
         let screen = setup
@@ -403,26 +452,27 @@ impl Application {
     }
 
     #[inline]
-    pub(crate) fn connection(&self) -> &Rc<XCBConnection> {
-        &self.connection
+    pub(crate) fn connection(&self) -> &XCBConnection {
+        &self.shared.connection
     }
 
     #[inline]
     pub(crate) fn screen_num(&self) -> usize {
-        self.screen_num
+        self.shared.screen_num
     }
 
     #[inline]
     pub(crate) fn argb_visual_type(&self) -> Option<Visualtype> {
         // Check if a composite manager is running
-        let atom_name = format!("_NET_WM_CM_S{}", self.screen_num);
+        let atom_name = format!("_NET_WM_CM_S{}", self.shared.screen_num);
         let owner = self
+            .shared
             .connection
             .intern_atom(false, atom_name.as_bytes())
             .ok()
             .and_then(|cookie| cookie.reply().ok())
             .map(|reply| reply.atom)
-            .and_then(|atom| self.connection.get_selection_owner(atom).ok())
+            .and_then(|atom| self.shared.connection.get_selection_owner(atom).ok())
             .and_then(|cookie| cookie.reply().ok())
             .map(|reply| reply.owner);
 
@@ -441,7 +491,7 @@ impl Application {
 
     #[inline]
     pub(crate) fn atoms(&self) -> &AppAtoms {
-        &self.atoms
+        &self.shared.atoms
     }
 
     /// Returns `Ok(true)` if we want to exit the main loop.
@@ -457,9 +507,9 @@ impl Application {
                 Event::EnterNotify(ev) => ev.time,
                 Event::LeaveNotify(ev) => ev.time,
                 Event::PropertyNotify(ev) => ev.time,
-                _ => self.timestamp.get(),
+                _ => self.shared.timestamp.get(),
             };
-            self.timestamp.set(timestamp);
+            self.shared.timestamp.set(timestamp);
         }
         match ev {
             // NOTE: When adding handling for any of the following events,
@@ -622,7 +672,7 @@ impl Application {
         Ok(false)
     }
 
-    fn run_inner(self) -> Result<(), Error> {
+    fn run_inner(&self) -> Result<(), Error> {
         // Try to figure out the refresh rate of the current screen. We run the idle loop at that
         // rate. The rate-limiting of the idle loop has two purposes:
         //  - When the present extension is disabled, we paint in the idle loop. By limiting the
@@ -647,21 +697,21 @@ impl Application {
             };
             let next_idle_time = last_idle_time + timeout;
 
-            self.connection.flush()?;
+            self.shared.connection.flush()?;
 
             // Deal with pending events
-            let mut event = self.pending_events.borrow_mut().pop_front();
+            let mut event = self.shared.pending_events.borrow_mut().pop_front();
 
             // Before we poll on the connection's file descriptor, check whether there are any
             // events ready. It could be that XCB has some events in its internal buffers because
             // of something that happened during the idle loop.
             if event.is_none() {
-                event = self.connection.poll_for_event()?;
+                event = self.shared.connection.poll_for_event()?;
             }
 
             if event.is_none() {
                 poll_with_timeout(
-                    &self.connection,
+                    &self.shared.connection,
                     self.idle_read,
                     next_timeout,
                     next_idle_time,
@@ -680,7 +730,7 @@ impl Application {
                         tracing::error!("Error handling event: {:#}", e);
                     }
                 }
-                event = self.connection.poll_for_event()?;
+                event = self.shared.connection.poll_for_event()?;
             }
 
             let now = Instant::now();
@@ -712,48 +762,14 @@ impl Application {
         }
     }
 
-    pub fn run(self, _handler: Option<Box<dyn AppHandler>>) {
-        if let Err(e) = self.run_inner() {
-            tracing::error!("{}", e);
-        }
-    }
-
-    pub fn quit(&self) {
-        if let Ok(mut state) = self.state.try_borrow_mut() {
-            if !state.quitting {
-                state.quitting = true;
-                if state.windows.is_empty() {
-                    // There are no windows left, so we can immediately finalize the quit.
-                    self.finalize_quit();
-                } else {
-                    // We need to queue up the destruction of all our windows.
-                    // Failure to do so will lead to resource leaks.
-                    for window in state.windows.values() {
-                        window.destroy();
-                    }
-                }
-            }
-        } else {
-            tracing::error!("Application state already borrowed");
-        }
-    }
-
     fn finalize_quit(&self) {
-        log_x11!(self.connection.destroy_window(self.window_id));
+        log_x11!(self.shared.connection.destroy_window(self.window_id));
         if let Err(e) = nix::unistd::close(self.idle_read) {
             tracing::error!("Error closing idle_read: {}", e);
         }
         if let Err(e) = nix::unistd::close(self.idle_write) {
             tracing::error!("Error closing idle_write: {}", e);
         }
-    }
-
-    pub fn clipboard(&self) -> Clipboard {
-        self.clipboard.clone()
-    }
-
-    pub fn get_locale() -> String {
-        linux::env::locale()
     }
 
     pub(crate) fn idle_pipe(&self) -> RawFd {
@@ -763,7 +779,7 @@ impl Application {
 
 impl crate::platform::linux::ApplicationExt for crate::Application {
     fn primary_clipboard(&self) -> crate::Clipboard {
-        self.backend_app.primary.clone().into()
+        self.backend_app.inner.primary.clone().into()
     }
 }
 
@@ -801,7 +817,7 @@ fn drain_idle_pipe(idle_read: RawFd) -> Result<(), Error> {
 // This was taken, with minor modifications, from the xclock_utc example in the x11rb crate.
 // https://github.com/psychon/x11rb/blob/a6bd1453fd8e931394b9b1f2185fad48b7cca5fe/examples/xclock_utc.rs
 fn poll_with_timeout(
-    conn: &Rc<XCBConnection>,
+    conn: &XCBConnection,
     idle: RawFd,
     timer_timeout: Option<Instant>,
     idle_timeout: Instant,
