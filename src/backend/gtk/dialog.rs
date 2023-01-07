@@ -47,7 +47,7 @@ pub(crate) fn get_file_dialog_path(
     };
     let title = options.title.as_deref().unwrap_or(title);
 
-    let mut dialog = gtk::FileChooserNativeBuilder::new()
+    let mut dialog = gtk::builders::FileChooserNativeBuilder::new()
         .transient_for(window)
         .title(title);
     if let Some(button_text) = &options.button_text {
