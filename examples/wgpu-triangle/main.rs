@@ -1,8 +1,5 @@
 use glazier::kurbo::Size;
-use glazier::{
-    Application, Cursor, FileDialogToken, FileInfo, IdleToken, KeyEvent, MouseEvent, Region,
-    Scalable, TimerToken, WinHandler, WindowHandle,
-};
+use glazier::{Application, IdleToken, Region, Scalable, WinHandler, WindowHandle};
 use std::any::Any;
 
 const WIDTH: usize = 2048;
@@ -196,64 +193,12 @@ impl WinHandler for WindowState {
         inner.schedule_render();
     }
 
-    fn command(&mut self, _id: u32) {}
-
-    fn open_file(&mut self, _token: FileDialogToken, file_info: Option<FileInfo>) {
-        println!("open file result: {:?}", file_info);
-    }
-
-    fn save_as(&mut self, _token: FileDialogToken, file: Option<FileInfo>) {
-        println!("save file result: {:?}", file);
-    }
-
-    fn key_down(&mut self, event: KeyEvent) -> bool {
-        println!("keydown: {:?}", event);
-        false
-    }
-
-    fn key_up(&mut self, event: KeyEvent) {
-        println!("keyup: {:?}", event);
-    }
-
-    fn wheel(&mut self, event: &MouseEvent) {
-        println!("mouse_wheel {:?}", event);
-    }
-
-    fn mouse_move(&mut self, event: &MouseEvent) {
-        self.inner
-            .as_mut()
-            .unwrap()
-            .window
-            .set_cursor(&Cursor::Arrow);
-        println!("mouse_move {:?}", event);
-    }
-
-    fn mouse_down(&mut self, event: &MouseEvent) {
-        println!("mouse_down {:?}", event);
-    }
-
-    fn mouse_up(&mut self, event: &MouseEvent) {
-        println!("mouse_up {:?}", event);
-    }
-
-    fn timer(&mut self, id: TimerToken) {
-        println!("timer fired: {:?}", id);
-    }
-
     fn size(&mut self, _: Size) {
         let inner = self.inner.as_mut().unwrap();
         let size = surface_size(&inner.window);
         inner.config.width = size.0;
         inner.config.height = size.1;
         inner.surface.configure(&inner.device, &inner.config);
-    }
-
-    fn got_focus(&mut self) {
-        println!("Got focus");
-    }
-
-    fn lost_focus(&mut self) {
-        println!("Lost focus");
     }
 
     fn request_close(&mut self) {
