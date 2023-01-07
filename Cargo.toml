@@ -141,6 +141,7 @@ unicode-segmentation = "1.7.0"
 vello = { git = "https://github.com/linebender/vello" }
 parley = { git = "https://github.com/dfrg/parley" }
 pollster = "0.2.5"
+wgpu = "0.14.2"
 
 [build-dependencies]
 bindgen = { version = "0.60.1", optional = true }

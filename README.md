@@ -47,9 +47,9 @@ on top of Glazier.
 Glazier does not provide drawing primitives and is intended to be agnostic to
 the drawing infrastructure. It uses [raw-window-handle] to provide an attachment
 point for the drawing code, a widely used abstraction in the Rust ecosystem. A
-top priority will be integrating with the [wgpu] ecosystem. In addition, we would
-gladly accept integration work to make [Piet] run on top of Glazier, but this is
-not a core priority.
+top priority will be integrating with the [wgpu](https://github.com/gfx-rs/wgpu)
+ecosystem. In addition, we would gladly accept integration work to make [Piet]
+run on top of Glazier, but this is not a core priority.
 
 We hope to integrate with [AccessKit] for accessibility.
 
