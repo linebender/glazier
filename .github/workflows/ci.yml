@@ -128,7 +128,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --manifest-path=Cargo.toml --all-targets -- -D warnings
+          args: --manifest-path=Cargo.toml --all-targets --features=gtk --no-default-features -- -D warnings
 
       - name: cargo test glazier
         uses: actions-rs/cargo@v1
