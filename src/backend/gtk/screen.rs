@@ -20,8 +20,8 @@ use kurbo::{Point, Rect, Size};
 
 fn translate_gdk_rectangle(r: Rectangle) -> Rect {
     Rect::from_origin_size(
-        Point::new(r.x as f64, r.y as f64),
-        Size::new(r.width as f64, r.height as f64),
+        Point::new(r.x() as f64, r.y() as f64),
+        Size::new(r.width() as f64, r.height() as f64),
     )
 }
 

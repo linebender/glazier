@@ -148,7 +148,7 @@ impl Clipboard {
         targets
             .iter()
             // SAFETY: Atom::value() is 'self.0 as usize'. No idea why that is unsafe.
-            .map(|atom| format!("{} ({})", atom.name(), unsafe { atom.value() }))
+            .map(|atom| format!("{} ({})", atom.name(), atom.value()))
             .collect()
     }
 }

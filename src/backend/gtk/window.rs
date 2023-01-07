@@ -24,8 +24,6 @@ use std::slice;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Instant;
 
-use gtk::gdk_pixbuf::Colorspace::Rgb;
-use gtk::gdk_pixbuf::Pixbuf;
 use gtk::glib::source::Continue;
 use gtk::glib::translate::FromGlib;
 use gtk::prelude::*;
@@ -43,17 +41,19 @@ use gtk::gdk::{
 use instant::Duration;
 use tracing::{error, warn};
 
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, XcbWindowHandle};
+use raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle, XcbDisplayHandle,
+    XcbWindowHandle,
+};
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
-use crate::piet::{Piet, PietText, RenderContext};
 
 use crate::common_util::{ClickCounter, IdleCallback};
 use crate::dialog::{FileDialogOptions, FileDialogType, FileInfo};
 use crate::error::Error as ShellError;
 use crate::keyboard::{KbKey, KeyEvent, KeyState, Modifiers};
 use crate::mouse::{Cursor, CursorDesc, MouseButton, MouseButtons, MouseEvent};
-use crate::piet::ImageFormat;
+// use crate::piet::ImageFormat;
 use crate::region::Region;
 use crate::scale::{Scalable, Scale, ScaledArea};
 use crate::text::{simulate_input, Event};
@@ -123,8 +123,16 @@ impl Eq for WindowHandle {}
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
         error!("HasRawWindowHandle trait not implemented for gtk.");
-        // GTK is not a platform, and there's no empty generic handle. Pick XCB randomly as fallback.
+        // TODO: We can retrieve it from GdkX11 and GdkWayland.
         RawWindowHandle::Xcb(XcbWindowHandle::empty())
+    }
+}
+
+unsafe impl HasRawDisplayHandle for WindowHandle {
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        error!("HasRawDisplayHandle trait not implemented for gtk.");
+        // TODO: We can retrieve it from GdkX11 and GdkWayland.
+        RawDisplayHandle::Xcb(XcbDisplayHandle::empty())
     }
 }
 
@@ -473,13 +481,13 @@ impl WindowBuilder {
                 // Create a new cairo surface if necessary (either because there is no surface, or
                 // because the size or scale changed).
                 let extents = widget.allocation();
-                let size_px = Size::new(extents.width as f64, extents.height as f64);
+                let size_px = Size::new(extents.width() as f64, extents.height() as f64);
                 let no_surface = state.surface.try_borrow().map(|x| x.is_none()).ok() == Some(true);
                 if no_surface || scale_changed || state.area.get().size_px() != size_px {
                     let area = ScaledArea::from_px(size_px, scale);
                     let size_dp = area.size_dp();
                     state.area.set(area);
-                    if let Err(e) = state.resize_surface(extents.width, extents.height) {
+                    if let Err(e) = state.resize_surface(extents.width(), extents.height()) {
                         error!("Failed to resize surface: {}", e);
                     }
                     state.with_handler(|h| h.size(size_dp));
@@ -512,11 +520,7 @@ impl WindowBuilder {
                         surface_context.clip();
 
                         surface_context.scale(scale.x(), scale.y());
-                        let mut piet_context = Piet::new(&surface_context);
-                        handler.paint(&mut piet_context, &invalid);
-                        if let Err(e) = piet_context.finish() {
-                            error!("piet error on render: {:?}", e);
-                        }
+                        handler.paint(&invalid);
 
                         // Copy the entire surface to the drawing area (not just the invalid
                         // region, because there might be parts of the drawing area that were
@@ -524,7 +528,7 @@ impl WindowBuilder {
                        // TODO: how are we supposed to handle these errors? What can we do besides panic? Probably nothing right?
                         let alloc = widget.allocation();
                         context.set_source_surface(surface, 0.0, 0.0).unwrap();
-                        context.rectangle(0.0, 0.0, alloc.width as f64, alloc.height as f64);
+                        context.rectangle(0.0, 0.0, alloc.width() as f64, alloc.height() as f64);
                         context.fill().unwrap();
                     });
                 } else {
@@ -1023,24 +1027,24 @@ impl WindowHandle {
             let scale = state.scale.get();
             let (width_px, height_px) = state.window.size();
             let alloc_px = state.drawing_area.allocation();
-            let menu_height_px = height_px - alloc_px.height;
+            let menu_height_px = height_px - alloc_px.height();
 
             if let Some(window) = state.window.window() {
                 let frame = window.frame_extents();
                 let (pos_x, pos_y) = window.position();
                 Insets::new(
-                    (pos_x - frame.x) as f64,
-                    (pos_y - frame.y + menu_height_px) as f64,
-                    (frame.x + frame.width - (pos_x + width_px)) as f64,
-                    (frame.y + frame.height - (pos_y + height_px)) as f64,
+                    (pos_x - frame.x()) as f64,
+                    (pos_y - frame.y() + menu_height_px) as f64,
+                    (frame.x() + frame.width() - (pos_x + width_px)) as f64,
+                    (frame.y() + frame.height() - (pos_y + height_px)) as f64,
                 )
                 .to_dp(scale)
                 .nonnegative()
             } else {
                 let window = Size::new(width_px as f64, height_px as f64).to_dp(scale);
                 let alloc = Rect::from_origin_size(
-                    (alloc_px.x as f64, alloc_px.y as f64),
-                    (alloc_px.width as f64, alloc_px.height as f64),
+                    (alloc_px.x() as f64, alloc_px.y() as f64),
+                    (alloc_px.width() as f64, alloc_px.height() as f64),
                 )
                 .to_dp(scale);
                 window.to_rect() - alloc
@@ -1144,10 +1148,6 @@ impl WindowHandle {
         }
     }
 
-    pub fn text(&self) -> PietText {
-        PietText::new()
-    }
-
     pub fn add_text_field(&self) -> TextFieldToken {
         TextFieldToken::next()
     }
@@ -1195,29 +1195,31 @@ impl WindowHandle {
         }
     }
 
-    pub fn make_cursor(&self, desc: &CursorDesc) -> Option<Cursor> {
+    pub fn make_cursor(&self, _desc: &CursorDesc) -> Option<Cursor> {
         if let Some(state) = self.state.upgrade() {
             if let Some(gdk_window) = state.window.window() {
                 // TODO: Pixbuf expects unpremultiplied alpha. We should convert.
-                let has_alpha = !matches!(desc.image.format(), ImageFormat::Rgb);
-                let bytes_per_pixel = desc.image.format().bytes_per_pixel();
-                let pixbuf = Pixbuf::from_mut_slice(
-                    desc.image.raw_pixels().to_owned(),
-                    Rgb,
-                    has_alpha,
-                    // bits_per_sample
-                    8,
-                    desc.image.width() as i32,
-                    desc.image.height() as i32,
-                    // row stride (in bytes)
-                    (desc.image.width() * bytes_per_pixel) as i32,
-                );
-                let c = gtk::gdk::Cursor::from_pixbuf(
-                    &gdk_window.display(),
-                    &pixbuf,
-                    desc.hot.x.round() as i32,
-                    desc.hot.y.round() as i32,
-                );
+                // let has_alpha = !matches!(desc.image.format(), ImageFormat::Rgb);
+                // let bytes_per_pixel = desc.image.format().bytes_per_pixel();
+                // let pixbuf = Pixbuf::from_mut_slice(
+                //     desc.image.raw_pixels().to_owned(),
+                //     Rgb,
+                //     has_alpha,
+                //     // bits_per_sample
+                //     8,
+                //     desc.image.width() as i32,
+                //     desc.image.height() as i32,
+                //     // row stride (in bytes)
+                //     (desc.image.width() * bytes_per_pixel) as i32,
+                // );
+                // let c = gtk::gdk::Cursor::from_pixbuf(
+                //     &gdk_window.display(),
+                //     &pixbuf,
+                //     desc.hot.x.round() as i32,
+                //     desc.hot.y.round() as i32,
+                // );
+                // TODO add ImageBuf to CursorDesc's field and make the cursor.
+                let c = gtk::gdk::Cursor::from_name(&gdk_window.display(), "default")?;
                 Some(Cursor::Custom(CustomCursor(c)))
             } else {
                 None

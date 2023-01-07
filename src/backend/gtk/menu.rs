@@ -18,7 +18,7 @@ use gtk::gdk::ModifierType;
 use gtk::{
     AccelGroup, CheckMenuItem, Menu as GtkMenu, MenuBar as GtkMenuBar, MenuItem as GtkMenuItem,
 };
-use gtk_rs::SeparatorMenuItemBuilder;
+use gtk_rs::builders::SeparatorMenuItemBuilder;
 
 use gtk::prelude::{GtkMenuExt, GtkMenuItemExt, MenuShellExt, WidgetExt};
 
