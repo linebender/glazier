@@ -539,9 +539,6 @@ impl WindowBuilder {
 /// App behavior, supplied by the app.
 ///
 /// Many of the "window procedure" messages map to calls to this trait.
-/// The methods are non-mut because the window procedure can be called
-/// recursively; implementers are expected to use `RefCell` or the like,
-/// but should be careful to keep the lifetime of the borrow short.
 pub trait WinHandler {
     /// Provide the handler with a handle to the window so that it can
     /// invalidate or make other requests.
