@@ -134,7 +134,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: features=gtk --no-default-features --manifest-path=Cargo.toml
+          args: --features=gtk --no-default-features --manifest-path=Cargo.toml
 
 #  test-stable-wasm:
 #    runs-on: macOS-latest
