@@ -99,42 +99,42 @@ jobs:
         with:
           command: test
           args: --manifest-path=Cargo.toml --features wayland --no-default-features
-#
-#  # we test the gtk backend as a separate job because gtk install takes
-#  # a long time.
-#  test-stable-gtk:
-#    runs-on: ubuntu-latest
-#    name: cargo clippy+test (gtk)
-#    steps:
-#      - uses: actions/checkout@v2
-#
-#      - name: install libgtk-3-dev
-#        run: |
-#          sudo apt update
-#          sudo apt install libgtk-3-dev
-#
-#      - name: install stable toolchain
-#        uses: actions-rs/toolchain@v1
-#        with:
-#          toolchain: stable
-#          components: clippy
-#          profile: minimal
-#          override: true
-#
-#      - name: restore cache
-#        uses: Swatinem/rust-cache@v1
-#
-#      - name: cargo clippy glazier
-#        uses: actions-rs/cargo@v1
-#        with:
-#          command: clippy
-#          args: --manifest-path=Cargo.toml --all-targets --features=gtk --no-default-features -- -D warnings
-#
-#      - name: cargo test glazier
-#        uses: actions-rs/cargo@v1
-#        with:
-#          command: test
-#          args: --manifest-path=Cargo.toml
+
+  # we test the gtk backend as a separate job because gtk install takes
+  # a long time.
+  test-stable-gtk:
+    runs-on: ubuntu-latest
+    name: cargo clippy+test (gtk)
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: install libgtk-3-dev
+        run: |
+          sudo apt update
+          sudo apt install libgtk-3-dev
+
+      - name: install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy
+          profile: minimal
+          override: true
+
+      - name: restore cache
+        uses: Swatinem/rust-cache@v1
+
+      - name: cargo clippy glazier
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --manifest-path=Cargo.toml --all-targets --features=gtk --no-default-features -- -D warnings
+
+      - name: cargo test glazier
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path=Cargo.toml
 
 #  test-stable-wasm:
 #    runs-on: macOS-latest
