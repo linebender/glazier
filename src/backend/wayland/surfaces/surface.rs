@@ -364,7 +364,7 @@ impl Data {
     /// - `buf` is what we draw the frame into
     /// - `size` is the physical size in pixels we are drawing.
     /// - `force` means draw the whole frame, even if it wasn't all invalidated.
-    pub(super) fn paint(&self, physical_size: buffers::RawSize, buf: &mut [u8], force: bool) {
+    pub(super) fn paint(&self, physical_size: buffers::RawSize, _buf: &mut [u8], force: bool) {
         tracing::trace!(
             "paint initiated {:?} - {:?} {:?}",
             self.get_size(),
@@ -467,10 +467,7 @@ impl Data {
         // size in pixels, so we must apply scale.
         let logical_size = self.logical_size.get();
         let scale = self.scale.get() as f64;
-        kurbo::Size::new(
-            logical_size.width as f64 * scale,
-            logical_size.height as f64 * scale,
-        )
+        kurbo::Size::new(logical_size.width * scale, logical_size.height * scale)
     }
 
     pub(super) fn request_anim_frame(&self) {
