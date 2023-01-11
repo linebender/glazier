@@ -138,8 +138,8 @@ static_assertions = "1.1.0"
 test-log = { version = "0.2.5", features = ["trace"], default-features = false }
 tracing-subscriber = { version = "0.3.2", features = ["env-filter"] }
 unicode-segmentation = "1.7.0"
-vello = { git = "https://github.com/linebender/vello" }
-parley = { git = "https://github.com/dfrg/parley" }
+vello = { git = "https://github.com/linebender/vello", rev = "5f45c2bdfb59c1b9fbaaf52229bcd9f1105274da" }
+parley = { git = "https://github.com/dfrg/parley", rev = "e4276b4d1001a050c07121f95ca255c771e9a641" }
 pollster = "0.2.5"
 wgpu = "0.14.2"
 
@@ -153,7 +153,7 @@ required-features = ["accesskit"]
 
 
 [patch."https://github.com/dfrg/fount"]
-fount = { git = "https://github.com/jneem/fount" }
+fount = { git = "https://github.com/jneem/fount", rev = "361c76fecf813ebc64d2634d3df7bfb6089c6414" }
 
 [patch.crates-io]
 # Required for metal support to work on wgpu

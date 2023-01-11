@@ -34,7 +34,6 @@ fn main() {
 struct WindowState {
     handle: WindowHandle,
     render: RenderContext,
-    renderer: Renderer,
     surface: Option<RenderSurface>,
     scene: Scene,
     size: Size,
@@ -44,13 +43,11 @@ struct WindowState {
 
 impl WindowState {
     pub fn new() -> Self {
-        let render = pollster::block_on(RenderContext::new()).unwrap();
-        let renderer = Renderer::new(&render.device).unwrap();
+        let render = RenderContext::new().unwrap();
         Self {
             handle: Default::default(),
             surface: None,
             render,
-            renderer,
             scene: Default::default(),
             font_context: FontContext::new(),
             counter: 0,
@@ -84,7 +81,11 @@ impl WindowState {
     fn render(&mut self) {
         let (width, height) = self.surface_size();
         if self.surface.is_none() {
-            self.surface = Some(self.render.create_surface(&self.handle, width, height));
+            self.surface = Some(pollster::block_on(self.render.create_surface(
+                &self.handle,
+                width,
+                height,
+            )));
         }
 
         render_anim_frame(&mut self.scene, &mut self.font_context, self.counter);
@@ -95,15 +96,13 @@ impl WindowState {
                 self.render.resize_surface(surface, width, height);
             }
             let surface_texture = surface.surface.get_current_texture().unwrap();
-            self.renderer
-                .render_to_surface(
-                    &self.render.device,
-                    &self.render.queue,
-                    &self.scene,
-                    &surface_texture,
-                    width,
-                    height,
-                )
+            let dev_id = surface.dev_id;
+            let device = &self.render.devices[dev_id].device;
+            let queue = &self.render.devices[dev_id].queue;
+            let mut renderer = Renderer::new(device).unwrap();
+
+            renderer
+                .render_to_surface(device, queue, &self.scene, &surface_texture, width, height)
                 .unwrap();
             surface_texture.present();
         }
