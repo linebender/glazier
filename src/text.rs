@@ -876,7 +876,6 @@ pub enum Action {
 ///
 /// This type is returned by [`InputHandler::hit_test_point`].
 #[derive(Debug, Default, PartialEq, Eq)]
-#[non_exhaustive]
 pub struct HitTestPoint {
     /// The index representing the grapheme boundary closest to the `Point`.
     pub idx: usize,
