@@ -38,6 +38,13 @@ pub enum Error {
     OldWindows,
     /// The `hwnd` pointer was null.
     NullHwnd,
+    WindowsResult(windows::core::Error),
+}
+
+impl From<windows::core::Error> for Error {
+    fn from(v: windows::core::Error) -> Self {
+        Self::WindowsResult(v)
+    }
 }
 
 fn hresult_description(hr: HRESULT) -> Option<String> {
@@ -78,6 +85,7 @@ impl fmt::Display for Error {
             Error::Direct2D => write!(f, "Direct2D error"),
             Error::OldWindows => write!(f, "Attempted newer API on older Windows"),
             Error::NullHwnd => write!(f, "Window handle is Null"),
+            Error::WindowsResult(e) => e.fmt(f),
         }
     }
 }
