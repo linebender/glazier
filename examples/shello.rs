@@ -33,6 +33,7 @@ fn main() {
 
 struct WindowState {
     handle: WindowHandle,
+    renderer: Option<Renderer>,
     render: RenderContext,
     surface: Option<RenderSurface>,
     scene: Scene,
@@ -47,6 +48,7 @@ impl WindowState {
         Self {
             handle: Default::default(),
             surface: None,
+            renderer: None,
             render,
             scene: Default::default(),
             font_context: FontContext::new(),
@@ -99,9 +101,8 @@ impl WindowState {
             let dev_id = surface.dev_id;
             let device = &self.render.devices[dev_id].device;
             let queue = &self.render.devices[dev_id].queue;
-            let mut renderer = Renderer::new(device).unwrap();
-
-            renderer
+            self.renderer
+                .get_or_insert_with(|| Renderer::new(device).unwrap())
                 .render_to_surface(device, queue, &self.scene, &surface_texture, width, height)
                 .unwrap();
             surface_texture.present();
