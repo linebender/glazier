@@ -39,10 +39,10 @@ pub fn refresh_rate(conn: &XCBConnection, window_id: Window) -> Option<f64> {
                 let flags = mode_info.mode_flags;
                 let vtotal = {
                     let mut val = mode_info.vtotal;
-                    if (flags & u32::from(ModeFlag::DOUBLE_SCAN)) != 0 {
+                    if u32::from(flags) & u32::from(ModeFlag::DOUBLE_SCAN) != 0 {
                         val *= 2;
                     }
-                    if (flags & u32::from(ModeFlag::INTERLACE)) != 0 {
+                    if u32::from(flags) & u32::from(ModeFlag::INTERLACE) != 0 {
                         val /= 2;
                     }
                     val

@@ -38,5 +38,6 @@ pub mod clipboard;
 pub mod dialog;
 pub mod error;
 pub mod menu;
+pub mod pointer;
 pub mod screen;
 pub mod window;
