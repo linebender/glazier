@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{any::Any, num::NonZeroU128, sync::Arc};
+use std::{any::Any, num::NonZeroU128};
 
-use accesskit::kurbo::Rect;
 use accesskit::{
-    Action, ActionRequest, CheckedState, DefaultActionVerb, Node, NodeId, Role, Tree, TreeUpdate,
+    Action, ActionRequest, CheckedState, DefaultActionVerb, Node, NodeBuilder, NodeClassSet, NodeId, Rect, Role, Tree, TreeUpdate,
 };
 
 use glazier::kurbo::Size;
@@ -47,26 +46,24 @@ const CHECKBOX_2_RECT: Rect = Rect {
     y1: 100.0,
 };
 
-fn make_checkbox(id: NodeId, checked: bool) -> Arc<Node> {
+fn build_checkbox(id: NodeId, checked: bool, classes: &mut NodeClassSet) -> Node {
     let (name, rect) = match id {
         CHECKBOX_1_ID => (CHECKBOX_1_NAME, CHECKBOX_1_RECT),
         CHECKBOX_2_ID => (CHECKBOX_2_NAME, CHECKBOX_2_RECT),
         _ => unreachable!(),
     };
 
-    Arc::new(Node {
-        role: Role::CheckBox,
-        bounds: Some(rect),
-        name: Some(name.into()),
-        focusable: true,
-        default_action_verb: Some(DefaultActionVerb::Click),
-        checked_state: Some(if checked {
+    let mut builder = NodeBuilder::new(Role::CheckBox);
+    builder.set_bounds(rect);
+    builder.set_name(name);
+    builder.add_action(Action::Focus);
+    builder.set_default_action_verb(DefaultActionVerb::Click);
+    builder.set_checked_state(if checked {
             CheckedState::True
         } else {
             CheckedState::False
-        }),
-        ..Default::default()
-    })
+        });
+    builder.build(classes)
 }
 
 struct HelloState {
@@ -76,6 +73,7 @@ struct HelloState {
     checkbox_1_checked: bool,
     checkbox_2_checked: bool,
     handle: WindowHandle,
+    node_classes: NodeClassSet,
 }
 
 impl HelloState {
@@ -87,6 +85,7 @@ impl HelloState {
             checkbox_1_checked: false,
             checkbox_2_checked: false,
             handle: Default::default(),
+            node_classes: NodeClassSet::new(),
         }
     }
 
@@ -114,12 +113,17 @@ impl HelloState {
             }
             _ => unreachable!(),
         };
+        // We have to be slightly less lazy here than we'd like because we can't
+        // borrow self immutably inside the closure while we have a mutable
+        // borrow of self.node_classes. TBD: Does this indicate a design flaw?
+        let focus = self.accesskit_focus();
+        let node_classes = &mut self.node_classes;
         self.handle.update_accesskit_if_active(|| {
-            let node = make_checkbox(id, checked);
+            let node = build_checkbox(id, checked, node_classes);
             TreeUpdate {
                 nodes: vec![(id, node)],
                 tree: None,
-                focus: self.accesskit_focus(),
+                focus,
             }
         });
     }
@@ -135,14 +139,14 @@ impl WinHandler for HelloState {
     fn paint(&mut self, _: &Region) {}
 
     fn accesskit_tree(&mut self) -> TreeUpdate {
-        let root = Arc::new(Node {
-            role: Role::Window,
-            children: vec![CHECKBOX_1_ID, CHECKBOX_2_ID],
-            name: Some(WINDOW_TITLE.into()),
-            ..Default::default()
-        });
-        let checkbox_1 = make_checkbox(CHECKBOX_1_ID, self.checkbox_1_checked);
-        let checkbox_2 = make_checkbox(CHECKBOX_2_ID, self.checkbox_2_checked);
+        let root = {
+            let mut builder = NodeBuilder::new(Role::Window);
+            builder.set_children([CHECKBOX_1_ID, CHECKBOX_2_ID]);
+            builder.set_name(WINDOW_TITLE);
+            builder.build(&mut self.node_classes)
+        };
+        let checkbox_1 = build_checkbox(CHECKBOX_1_ID, self.checkbox_1_checked, &mut self.node_classes);
+        let checkbox_2 = build_checkbox(CHECKBOX_2_ID, self.checkbox_2_checked, &mut self.node_classes);
         TreeUpdate {
             nodes: vec![
                 (WINDOW_ID, root),
