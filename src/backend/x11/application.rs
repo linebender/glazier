@@ -25,7 +25,7 @@ use anyhow::{anyhow, Context, Error};
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::render::{self, ConnectionExt as _, Pictformat};
 use x11rb::protocol::xproto::{
-    self, ConnectionExt, CreateWindowAux, EventMask, Timestamp, Visualtype, WindowClass,
+    self, ConnectionExt as _, CreateWindowAux, EventMask, Timestamp, Visualtype, WindowClass,
 };
 use x11rb::protocol::Event;
 use x11rb::resource_manager::{
@@ -333,6 +333,8 @@ impl AppInner {
                 .ok()
         };
 
+        super::pointer::initialize_pointers(&connection, window_id)?;
+
         let cursors = Cursors {
             default: load_cursor("default"),
             text: load_cursor("text"),
@@ -552,7 +554,7 @@ impl AppInner {
 
                 w.handle_key_event(key_event);
             }
-            Event::ButtonPress(ev) => {
+            Event::XinputButtonPress(ev) => {
                 let w = self
                     .window(ev.event)
                     .context("BUTTON_PRESS - failed to get window")?;
@@ -566,7 +568,7 @@ impl AppInner {
                     w.handle_button_press(ev)?;
                 }
             }
-            Event::ButtonRelease(ev) => {
+            Event::XinputButtonRelease(ev) => {
                 let w = self
                     .window(ev.event)
                     .context("BUTTON_RELEASE - failed to get window")?;
@@ -577,7 +579,7 @@ impl AppInner {
                     w.handle_button_release(ev)?;
                 }
             }
-            Event::MotionNotify(ev) => {
+            Event::XinputMotion(ev) => {
                 let w = self
                     .window(ev.event)
                     .context("MOTION_NOTIFY - failed to get window")?;
@@ -667,7 +669,9 @@ impl AppInner {
                 // https://github.com/psychon/x11rb/issues/503 but no longer is
                 return Err(x11rb::errors::ReplyError::from(e.clone()).into());
             }
-            _ => {}
+            ev => {
+                dbg!(ev);
+            }
         }
         Ok(false)
     }
