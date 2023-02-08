@@ -15,7 +15,8 @@
 use std::{any::Any, num::NonZeroU128};
 
 use accesskit::{
-    Action, ActionRequest, CheckedState, DefaultActionVerb, Node, NodeBuilder, NodeClassSet, NodeId, Rect, Role, Tree, TreeUpdate,
+    Action, ActionRequest, CheckedState, DefaultActionVerb, Node, NodeBuilder, NodeClassSet,
+    NodeId, Rect, Role, Tree, TreeUpdate,
 };
 
 use glazier::kurbo::Size;
@@ -59,10 +60,10 @@ fn build_checkbox(id: NodeId, checked: bool, classes: &mut NodeClassSet) -> Node
     builder.add_action(Action::Focus);
     builder.set_default_action_verb(DefaultActionVerb::Click);
     builder.set_checked_state(if checked {
-            CheckedState::True
-        } else {
-            CheckedState::False
-        });
+        CheckedState::True
+    } else {
+        CheckedState::False
+    });
     builder.build(classes)
 }
 
@@ -145,8 +146,16 @@ impl WinHandler for HelloState {
             builder.set_name(WINDOW_TITLE);
             builder.build(&mut self.node_classes)
         };
-        let checkbox_1 = build_checkbox(CHECKBOX_1_ID, self.checkbox_1_checked, &mut self.node_classes);
-        let checkbox_2 = build_checkbox(CHECKBOX_2_ID, self.checkbox_2_checked, &mut self.node_classes);
+        let checkbox_1 = build_checkbox(
+            CHECKBOX_1_ID,
+            self.checkbox_1_checked,
+            &mut self.node_classes,
+        );
+        let checkbox_2 = build_checkbox(
+            CHECKBOX_2_ID,
+            self.checkbox_2_checked,
+            &mut self.node_classes,
+        );
         TreeUpdate {
             nodes: vec![
                 (WINDOW_ID, root),
