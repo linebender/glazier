@@ -28,8 +28,8 @@ fn surface_size(handle: &WindowHandle) -> (u32, u32) {
 impl InnerWindowState {
     fn create(window: WindowHandle) -> Self {
         let size = surface_size(&window);
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
-        let surface = unsafe { instance.create_surface(&window) };
+        let instance = wgpu::Instance::default();
+        let surface = unsafe { instance.create_surface(&window) }.unwrap();
         let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
             power_preference: wgpu::PowerPreference::default(),
             force_fallback_adapter: false,
@@ -63,7 +63,8 @@ impl InnerWindowState {
             push_constant_ranges: &[],
         });
 
-        let swapchain_format = surface.get_supported_formats(&adapter)[0];
+        let caps = surface.get_capabilities(&adapter);
+        let swapchain_format = caps.formats[0];
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: None,
@@ -90,7 +91,8 @@ impl InnerWindowState {
             width: size.0,
             height: size.1,
             present_mode: wgpu::PresentMode::Fifo,
-            alpha_mode: surface.get_supported_alpha_modes(&adapter)[0],
+            alpha_mode: caps.alpha_modes[0],
+            view_formats: vec![],
         };
 
         surface.configure(&device, &config);

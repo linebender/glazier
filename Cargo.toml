@@ -138,10 +138,10 @@ static_assertions = "1.1.0"
 test-log = { version = "0.2.5", features = ["trace"], default-features = false }
 tracing-subscriber = { version = "0.3.2", features = ["env-filter"] }
 unicode-segmentation = "1.7.0"
-vello = { git = "https://github.com/linebender/vello", rev = "9721d4a6acd9cc7b852fbbcc33ecab9fba06d433" }
+vello = { git = "https://github.com/linebender/vello", rev = "5f59a2e8181a7d01f8753680676dd150b965728b" }
 parley = { git = "https://github.com/dfrg/parley", rev = "e4276b4d1001a050c07121f95ca255c771e9a641" }
 pollster = "0.2.5"
-wgpu = "0.14.2"
+wgpu = "0.15.0"
 
 [build-dependencies]
 bindgen = { version = "0.60.1", optional = true }
@@ -154,8 +154,3 @@ required-features = ["accesskit"]
 
 [patch."https://github.com/dfrg/fount"]
 fount = { git = "https://github.com/jneem/fount", rev = "361c76fecf813ebc64d2634d3df7bfb6089c6414" }
-
-[patch.crates-io]
-# Required for metal support to work on wgpu
-# TODO: remove when wgpu is upgraded to 0.15
-naga = { git = "https://github.com/gfx-rs/naga", rev = "ddcd5d3121150b2b1beee6e54e9125ff31aaa9a2" }
