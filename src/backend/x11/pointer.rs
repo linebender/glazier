@@ -52,7 +52,7 @@ pub(crate) fn initialize_pointers(
     conn.xinput_xi_select_events(
         window,
         &[EventMask {
-            deviceid: 0,
+            deviceid: xinput::Device::ALL_MASTER.into(),
             mask: vec![
                 (XIEventMask::BUTTON_PRESS | XIEventMask::BUTTON_RELEASE | XIEventMask::MOTION),
             ],
