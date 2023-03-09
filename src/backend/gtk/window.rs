@@ -714,7 +714,7 @@ impl WindowBuilder {
                             wheel_delta
                         };
 
-                        state.with_handler(|h| h.wheel(&mouse_event));
+                        state.with_handler(|h| h.mouse_wheel(&mouse_event));
                     }
                 }
 

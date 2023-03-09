@@ -845,7 +845,7 @@ impl Window {
         mouse_ev.wheel_delta = delta.into();
         mouse_ev.button = MouseButton::None;
 
-        self.with_handler(|h| h.wheel(&mouse_ev));
+        self.with_handler(|h| h.mouse_wheel(&mouse_ev));
         Ok(())
     }
 

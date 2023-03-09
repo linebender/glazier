@@ -29,6 +29,7 @@ use crate::mouse::{Cursor, CursorDesc, MouseEvent};
 use crate::region::Region;
 use crate::scale::Scale;
 use crate::text::{Event, InputHandler};
+use crate::PointerEvent;
 
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
@@ -658,6 +659,39 @@ pub trait WinHandler {
         panic!("release_input_lock was called on a WinHandler that did not expect text input.")
     }
 
+    /// Called when a platform-defined zoom gesture occurs (such as pinching
+    /// on the trackpad).
+    #[allow(unused_variables)]
+    fn zoom(&mut self, delta: f64) {}
+
+    // While the backends transition from mouse events to pointer events, we keep these compatibility
+    // shims.
+
+    #[doc(hidden)]
+    fn mouse_wheel(&mut self, event: &MouseEvent) {
+        self.wheel(&event.clone().into())
+    }
+
+    #[doc(hidden)]
+    fn mouse_move(&mut self, event: &MouseEvent) {
+        self.pointer_move(&event.clone().into())
+    }
+
+    #[doc(hidden)]
+    fn mouse_down(&mut self, event: &MouseEvent) {
+        self.pointer_down(&event.clone().into())
+    }
+
+    #[doc(hidden)]
+    fn mouse_up(&mut self, event: &MouseEvent) {
+        self.pointer_up(&event.clone().into())
+    }
+
+    #[doc(hidden)]
+    fn mouse_leave(&mut self) {
+        self.pointer_leave()
+    }
+
     /// Called on a mouse wheel event.
     ///
     /// The polarity is the amount to be added to the scroll position,
@@ -667,27 +701,26 @@ pub trait WinHandler {
     ///
     /// [WheelEvent]: https://w3c.github.io/uievents/#event-type-wheel
     #[allow(unused_variables)]
-    fn wheel(&mut self, event: &MouseEvent) {}
+    fn wheel(&mut self, event: &PointerEvent) {}
 
-    /// Called when a platform-defined zoom gesture occurs (such as pinching
-    /// on the trackpad).
+    /// Called when a pointer moves.
     #[allow(unused_variables)]
-    fn zoom(&mut self, delta: f64) {}
+    fn pointer_move(&mut self, event: &PointerEvent) {}
 
-    /// Called when the mouse moves.
+    /// Called when a pointer goes "down."
+    ///
+    /// This includes things like mouse button presses, and styli coming in contact with screens.
     #[allow(unused_variables)]
-    fn mouse_move(&mut self, event: &MouseEvent) {}
+    fn pointer_down(&mut self, event: &PointerEvent) {}
 
-    /// Called on mouse button down.
+    /// Called when a pointer goes "up."
+    ///
+    /// This includes things like mouse button releases, and styli lifting from screens.
     #[allow(unused_variables)]
-    fn mouse_down(&mut self, event: &MouseEvent) {}
+    fn pointer_up(&mut self, event: &PointerEvent) {}
 
-    /// Called on mouse button up.
-    #[allow(unused_variables)]
-    fn mouse_up(&mut self, event: &MouseEvent) {}
-
-    /// Called when the mouse cursor has left the application window
-    fn mouse_leave(&mut self) {}
+    /// Called when a pointer has left the application window.
+    fn pointer_leave(&mut self) {}
 
     /// Called on timer event.
     ///
