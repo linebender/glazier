@@ -14,7 +14,7 @@ jobs:
       - name: install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.68
           profile: minimal
           components: rustfmt
           override: true
@@ -43,7 +43,7 @@ jobs:
       - name: install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.68
           components: clippy
           profile: minimal
           override: true
@@ -80,7 +80,7 @@ jobs:
       - name: install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.68
           components: clippy
           profile: minimal
           override: true
@@ -116,7 +116,7 @@ jobs:
       - name: install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.68
           components: clippy
           profile: minimal
           override: true
@@ -150,7 +150,7 @@ jobs:
 #      - name: install stable toolchain
 #        uses: actions-rs/toolchain@v1
 #        with:
-#          toolchain: stable
+#          toolchain: 1.68
 #          target: wasm32-unknown-unknown
 #          components: clippy
 #          profile: minimal
@@ -182,7 +182,7 @@ jobs:
       - name: install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.68
           profile: minimal
           override: true
 
@@ -273,7 +273,7 @@ jobs:
       - name: install stable toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: 1.68
           profile: minimal
           override: true
 
