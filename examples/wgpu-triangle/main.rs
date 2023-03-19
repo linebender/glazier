@@ -107,15 +107,6 @@ impl InnerWindowState {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    fn schedule_render(&self) {
-        self.window
-            .get_idle_handle()
-            .unwrap()
-            .schedule_idle(IdleToken::new(0));
-    }
-
-    #[cfg(not(target_os = "macos"))]
     fn schedule_render(&self) {
         self.window.invalidate();
     }
@@ -189,11 +180,7 @@ impl WinHandler for WindowState {
         inner.schedule_render();
     }
 
-    fn idle(&mut self, _: IdleToken) {
-        let inner = self.inner.as_mut().unwrap();
-        inner.draw();
-        inner.schedule_render();
-    }
+    fn idle(&mut self, _: IdleToken) {}
 
     fn size(&mut self, _: Size) {
         let inner = self.inner.as_mut().unwrap();

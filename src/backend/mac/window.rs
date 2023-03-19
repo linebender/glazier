@@ -182,8 +182,10 @@ struct ViewState {
     idle_queue: Arc<Mutex<Vec<IdleKind>>>,
     /// Tracks window focusing left clicks
     focus_click: bool,
-    // Tracks whether we have already received the mouseExited event
+    /// Tracks whether we have already received the mouseExited event
     mouse_left: bool,
+    /// Tracks whether we've installed a delegate on the sublayer
+    installed_layer_delegate: bool,
     keyboard_state: KeyboardState,
     active_text_input: Option<TextFieldToken>,
     parent: Option<crate::WindowHandle>,
@@ -350,6 +352,8 @@ impl WindowBuilder {
                 .handler
                 .size(Size::new(frame.size.width, frame.size.height));
 
+            check_if_layer_delegate_install_needed(view, view_state);
+
             Ok(handle)
         }
     }
@@ -362,7 +366,7 @@ unsafe impl Send for ViewClass {}
 
 lazy_static! {
     static ref VIEW_CLASS: ViewClass = unsafe {
-        let mut decl = ClassDecl::new("DruidView", class!(NSView)).expect("View class defined");
+        let mut decl = ClassDecl::new("GlazierView", class!(NSView)).expect("View class defined");
         decl.add_ivar::<*mut c_void>("viewState");
 
         decl.add_method(
@@ -582,6 +586,14 @@ lazy_static! {
         let protocol = Protocol::get("NSTextInputClient").unwrap();
         decl.add_protocol(protocol);
 
+        decl.add_method(
+            sel!(displayLayer:),
+            display_layer as extern fn(&mut Object, Sel, Sel),
+        );
+
+        let protocol = Protocol::get("CALayerDelegate").unwrap();
+        decl.add_protocol(protocol);
+
         ViewClass(decl.register())
     };
 }
@@ -617,6 +629,7 @@ fn make_view(handler: Box<dyn WinHandler>) -> (id, Weak<Mutex<Vec<IdleKind>>>) {
             idle_queue,
             focus_click: false,
             mouse_left: true,
+            installed_layer_delegate: false,
             keyboard_state,
             //text: PietText::new_with_unique_state(),
             active_text_input: None,
@@ -639,7 +652,7 @@ unsafe impl Send for WindowClass {}
 lazy_static! {
     static ref WINDOW_CLASS: WindowClass = unsafe {
         let mut decl =
-            ClassDecl::new("DruidWindow", class!(NSWindow)).expect("Window class defined");
+            ClassDecl::new("GlazierWindow", class!(NSWindow)).expect("Window class defined");
         decl.add_method(
             sel!(canBecomeKeyWindow),
             canBecomeKeyWindow as extern "C" fn(&Object, Sel) -> BOOL,
@@ -716,6 +729,36 @@ fn get_mouse_buttons(mask: NSUInteger) -> MouseButtons {
         buttons.insert(MouseButton::X2);
     }
     buttons
+}
+
+// If the main view becomes layer-backed (often this is the case with anything that does GPU
+// drawing) then we will no longer get drawRect() calls on our main view. Instead we must
+// install a layer delegate that implements the CALayerDelegate protocol on the layer. Since
+// a layer can be installed at any of several points within the lifecycle of a view --- ie during
+// initialization, or during the first draw call --- we regularly call this function to check
+// whether a delegate needs to be installed.
+//
+// For more info, see:
+// - Layer-backed vs layer-hosting views:
+//   https://developer.apple.com/documentation/appkit/nsview/1483695-wantslayer?language=objc
+// - StackOverflow explaining how drawRect is not called on layer-backed views:
+//   https://stackoverflow.com/questions/16751441/nsview-subclass-drawrect-not-called
+// - CALayerDelegate protocol:
+//   https://developer.apple.com/documentation/quartzcore/calayerdelegate
+fn check_if_layer_delegate_install_needed(view: *mut Object, view_state: &mut ViewState) {
+    if !view_state.installed_layer_delegate {
+        let layer: id = unsafe { msg_send![view, layer] };
+        if layer != nil {
+            // assume that the user is using a layer-backed view, and install our delegate on the layer.
+            // i expect that this code would break if the user was using a layer-hosting view, but unfortunatedly
+            // i'm not aware of any way to check if a view is layer-backed or layer-hosting.
+            let () = unsafe { msg_send![layer, setDelegate: view] };
+            // always invalidate the layer when first installed; otherwise the user has to think hard about
+            // the order of installing the layer and calling invalidate() in their initialization code
+            unsafe { request_anim_frame(view) };
+            view_state.installed_layer_delegate = true;
+        }
+    }
 }
 
 extern "C" fn mouse_down_left(this: &mut Object, _: Sel, nsevent: id) {
@@ -911,8 +954,29 @@ extern "C" fn draw_rect(this: &mut Object, _: Sel, dirtyRect: NSRect) {
 
         view_state.handler.paint(&invalid);
 
+        // sometimes layers are attached in the paint handler
+        check_if_layer_delegate_install_needed(this, view_state);
+
         let superclass = msg_send![this, superclass];
         let () = msg_send![super(this, superclass), drawRect: dirtyRect];
+    }
+}
+
+extern "C" fn display_layer(this: &mut Object, _: Sel, _: Sel) {
+    unsafe {
+        // FIXME: use the actual invalid region instead of just this bounding box.
+        // https://developer.apple.com/documentation/appkit/nsview/1483772-getrectsbeingdrawn?language=objc
+        let frame: core_graphics::display::CGRect = msg_send![this, frame];
+        let rect = Rect::new(0.0, 0.0, frame.size.width, frame.size.height);
+        let invalid = Region::from(rect);
+
+        let view_state: *mut c_void = *this.get_ivar("viewState");
+        let view_state = &mut *(view_state as *mut ViewState);
+
+        view_state.handler.paint(&invalid);
+
+        // sometimes layers are attached in the paint handler
+        check_if_layer_delegate_install_needed(this, view_state);
     }
 }
 
@@ -977,6 +1041,10 @@ extern "C" fn run_idle(this: &mut Object, _: Sel) {
 extern "C" fn redraw(this: &mut Object, _: Sel) {
     unsafe {
         let () = msg_send![this as *const _, setNeedsDisplay: YES];
+        let layer: id = msg_send![this, layer];
+        if layer != nil {
+            let () = msg_send![layer, setNeedsDisplay];
+        }
     }
 }
 
@@ -1045,6 +1113,12 @@ extern "C" fn window_will_close(this: &mut Object, _: Sel, _notification: id) {
     }
 }
 
+unsafe fn request_anim_frame(view: *mut Object) {
+    // TODO: synchronize with screen refresh rate using CVDisplayLink instead.
+    let () = msg_send![view, performSelectorOnMainThread: sel!(redraw)
+                withObject: nil waitUntilDone: NO];
+}
+
 impl WindowHandle {
     pub fn show(&self) {
         unsafe {
@@ -1077,19 +1151,12 @@ impl WindowHandle {
     }
 
     pub fn request_anim_frame(&self) {
-        unsafe {
-            // TODO: synchronize with screen refresh rate using CVDisplayLink instead.
-            let () = msg_send![*self.nsview.load(), performSelectorOnMainThread: sel!(redraw)
-                withObject: nil waitUntilDone: NO];
-        }
+        unsafe { request_anim_frame(*self.nsview.load()) }
     }
 
     // Request invalidation of the entire window contents.
     pub fn invalidate(&self) {
-        unsafe {
-            // We could share impl with redraw, but we'd need to deal with nil.
-            let () = msg_send![*self.nsview.load(), setNeedsDisplay: YES];
-        }
+        self.request_anim_frame();
     }
 
     /// Request invalidation of one rectangle.

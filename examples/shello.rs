@@ -23,7 +23,6 @@ const HEIGHT: usize = 1536;
 fn main() {
     let app = Application::new().unwrap();
     let mut window_builder = glazier::WindowBuilder::new(app.clone());
-    window_builder.resizable(false);
     window_builder.set_size((WIDTH as f64 / 2., HEIGHT as f64 / 2.).into());
     window_builder.set_handler(Box::new(WindowState::new()));
     let window_handle = window_builder.build().unwrap();
@@ -57,15 +56,6 @@ impl WindowState {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    fn schedule_render(&self) {
-        self.handle
-            .get_idle_handle()
-            .unwrap()
-            .schedule_idle(IdleToken::new(0));
-    }
-
-    #[cfg(not(target_os = "macos"))]
     fn schedule_render(&self) {
         self.handle.invalidate();
     }
@@ -123,10 +113,7 @@ impl WinHandler for WindowState {
         self.schedule_render();
     }
 
-    fn idle(&mut self, _: IdleToken) {
-        self.render();
-        self.schedule_render();
-    }
+    fn idle(&mut self, _: IdleToken) {}
 
     fn command(&mut self, _id: u32) {}
 
