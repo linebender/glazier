@@ -132,8 +132,8 @@ pub struct PenInfo {
     pub tangential_pressure: f32,
     /// The inclination (or tilt) of the pen relative to the tablet.
     pub inclination: PenInclination,
-    /// How much has the pen been twisted around its access. In radians, in the range `[0, 2π)`.
-    pub twist: f32,
+    /// How much has the pen been twisted around its access. In the range `[0, 2π)` radians.
+    pub twist: Angle,
 }
 
 impl PenInfo {}
@@ -155,7 +155,7 @@ impl Default for PenInfo {
         PenInfo {
             pressure: 0.5, // In the range zero to one, must be 0.5 when in active buttons state for hardware that doesn't support pressure, and 0 otherwise
             tangential_pressure: 0.0,
-            twist: 0.0,
+            twist: Angle::degrees(0.0),
             inclination: PenInclination {
                 altitude: Angle::degrees(90.0),
                 azimuth: Angle::degrees(0.0),
