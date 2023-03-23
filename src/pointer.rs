@@ -1,26 +1,73 @@
 use crate::kurbo::{Point, Size, Vec2};
 use crate::Modifiers;
 
+/// For pens that support tilt, this specifies where the pen is tilted.
+///
+/// Imagine that the tablet is on the x-y plane, with the positive x-axis pointing to the user's right. The pen's tip
+/// is at the origin of the x-y plane. Then the `altitude` is the angle between the pen and the tablet (so an altitude
+/// of zero means that the pen is lying on the tablet, and an altitude of 90 degrees means that the pen is sticking
+/// straight up). The `azimuth` is the angle formed by projecting the plane onto the tablet and measuring the
+/// clockwise rotation from the positive x-axis (so an azimuth of zero means the eraser is pointing at 3 o'clock
+/// and an azimuth of 90 degrees means the eraser is pointing at 6 o'clock).
 // NOTE: We store pen inclination as azimuth/altitude even though some platforms use the tilt x/y representation.
 // There is a small conversion cost, but azimuth/altitude is more accurate for large tilts so it's the better
 // base representation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PenInclination {
-    pub azimuth_angle: f64,
-    pub altitude_angle: f64,
+    pub azimuth: Angle,
+    pub altitude: Angle,
 }
 
+/// Tilt X and tilt Y are another representation of the pen inclination.
+///
+/// This representation is provided for compatibility, but in most cases the azimuth/altitude representation is
+/// preferred.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PenInclinationTilt {
     pub tilt_x: i8,
     pub tilt_y: i8,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Angle {
+    radians: f64,
+}
+
+impl Angle {
+    pub fn radians(radians: f64) -> Self {
+        Angle { radians }
+    }
+
+    pub fn degrees(degrees: f64) -> Self {
+        Angle {
+            radians: degrees * std::f64::consts::PI / 180.0,
+        }
+    }
+
+    pub fn to_radians(self) -> f64 {
+        self.radians
+    }
+
+    pub fn to_degrees(self) -> f64 {
+        self.radians * 180.0 / std::f64::consts::PI
+    }
+
+    pub fn sin(self) -> f64 {
+        self.radians.sin()
+    }
+
+    pub fn cos(self) -> f64 {
+        self.radians.cos()
+    }
+
+    pub fn tan(self) -> f64 {
+        self.radians.tan()
+    }
+}
+
 impl PenInclination {
-    // NOTE: We store pen inclination as whatever the platform gives it to us as - either tilt x/y or azimuth_angle/altitude_angle.
-    //  It can be requested as either tilt or azimuth/angle form, and conversion is only performed on demand.
-    //  Functions are taken from:
-    //  https://www.w3.org/TR/pointerevents3/#converting-between-tiltx-tilty-and-altitudeangle-azimuthangle
+    // Reference for the conversion functions:
+    // https://www.w3.org/TR/pointerevents3/#converting-between-tiltx-tilty-and-altitudeangle-azimuthangle
 
     pub fn from_tilt(tilt_x: i8, tilt_y: i8) -> Option<PenInclination> {
         use std::f64::consts::{PI, TAU};
@@ -45,8 +92,8 @@ impl PenInclination {
         // calculate altitude angle
         let altitude_angle = f64::atan(1.0 / (tan_x * tan_x + tan_y * tan_y).sqrt());
         Some(PenInclination {
-            altitude_angle,
-            azimuth_angle,
+            altitude: Angle::radians(altitude_angle),
+            azimuth: Angle::radians(azimuth_angle),
         })
     }
 
@@ -57,11 +104,11 @@ impl PenInclination {
 
         // Tilts are not capable of representing angles close to the horizon, so avoid numerical
         // issues by thresholding the altidue away from the horizon.
-        let altitude_angle = self.altitude_angle.max(0.5 * deg_to_rad);
+        let altitude_angle = self.altitude.to_radians().max(0.5 * deg_to_rad);
 
         let tan_alt = altitude_angle.tan();
-        let tilt_x_rad = f64::atan2(f64::cos(self.azimuth_angle), tan_alt);
-        let tilt_y_rad = f64::atan2(f64::sin(self.azimuth_angle), tan_alt);
+        let tilt_x_rad = f64::atan2(self.azimuth.cos(), tan_alt);
+        let tilt_y_rad = f64::atan2(self.azimuth.sin(), tan_alt);
 
         PenInclinationTilt {
             tilt_x: f64::round(tilt_x_rad * rad_to_deg) as i8,
@@ -70,12 +117,23 @@ impl PenInclination {
     }
 }
 
+/// Various properties of a pen event.
+///
+/// These follow the web [PointerEvents] specification fairly closely, so see those
+/// documents for more context and nice pictures.
+///
+/// [PointerEvents]: (https://www.w3.org/TR/pointerevents3)
 #[derive(Debug, Clone, PartialEq)]
 pub struct PenInfo {
-    pub pressure: f32,            // 0.0..1.0
-    pub tangential_pressure: f32, // -1.0..1.0
+    /// The pressure of the pen against the tablet ranging from `0.0` (no pressure) to `1.0` (maximum pressure).
+    pub pressure: f32,
+    /// Another pressure parameter, often controlled by an additional physical control (like the a finger wheel
+    /// on an airbrush stylus. Ranges from `-1.0` to `1.0`.
+    pub tangential_pressure: f32,
+    /// The inclination (or tilt) of the pen relative to the tablet.
     pub inclination: PenInclination,
-    pub twist: u16, // 0..359 degrees clockwise rotation
+    /// How much has the pen been twisted around its access. In radians, in the range `[0, 2π)`.
+    pub twist: f32,
 }
 
 impl PenInfo {}
@@ -97,10 +155,10 @@ impl Default for PenInfo {
         PenInfo {
             pressure: 0.5, // In the range zero to one, must be 0.5 when in active buttons state for hardware that doesn't support pressure, and 0 otherwise
             tangential_pressure: 0.0,
-            twist: 0,
+            twist: 0.0,
             inclination: PenInclination {
-                altitude_angle: std::f64::consts::PI / 2.0,
-                azimuth_angle: 0.0,
+                altitude: Angle::degrees(90.0),
+                azimuth: Angle::degrees(0.0),
             },
         }
     }
@@ -205,6 +263,17 @@ impl PointerButton {
 #[derive(PartialEq, Eq, Clone, Copy, Default)]
 pub struct PointerButtons(u8);
 
+fn button_bit(button: PointerButton) -> u8 {
+    match button {
+        PointerButton::None => 0,
+        PointerButton::Left => 0b1,
+        PointerButton::Right => 0b10,
+        PointerButton::Middle => 0b100,
+        PointerButton::X1 => 0b1000,
+        PointerButton::X2 => 0b10000,
+    }
+}
+
 impl PointerButtons {
     /// Create a new empty set.
     #[inline]
@@ -215,33 +284,33 @@ impl PointerButtons {
     /// Add the `button` to the set.
     #[inline]
     pub fn insert(&mut self, button: PointerButton) {
-        self.0 |= 1.min(button as u8) << button as u8;
+        self.0 |= button_bit(button);
     }
 
     /// Remove the `button` from the set.
     #[inline]
     pub fn remove(&mut self, button: PointerButton) {
-        self.0 &= !(1.min(button as u8) << button as u8);
+        self.0 &= !button_bit(button);
     }
 
     /// Builder-style method for adding the `button` to the set.
     #[inline]
     pub fn with(mut self, button: PointerButton) -> PointerButtons {
-        self.0 |= 1.min(button as u8) << button as u8;
+        self.insert(button);
         self
     }
 
     /// Builder-style method for removing the `button` from the set.
     #[inline]
     pub fn without(mut self, button: PointerButton) -> PointerButtons {
-        self.0 &= !(1.min(button as u8) << button as u8);
+        self.remove(button);
         self
     }
 
     /// Returns `true` if the `button` is in the set.
     #[inline]
     pub fn contains(self, button: PointerButton) -> bool {
-        (self.0 & (1.min(button as u8) << button as u8)) != 0
+        (self.0 & button_bit(button)) != 0
     }
 
     /// Returns `true` if the set is empty.
