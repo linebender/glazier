@@ -132,7 +132,7 @@ pub struct PenInfo {
     pub tangential_pressure: f32,
     /// The inclination (or tilt) of the pen relative to the tablet.
     pub inclination: PenInclination,
-    /// How much has the pen been twisted around its access. In the range `[0, 2π)` radians.
+    /// How much has the pen been twisted around its axis. In the range `[0, 2π)` radians.
     pub twist: Angle,
 }
 
