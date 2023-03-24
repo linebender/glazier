@@ -121,7 +121,7 @@ impl MouseButton {
 ///
 /// [`MouseButton`]: enum.MouseButton.html
 #[derive(PartialEq, Eq, Clone, Copy, Default)]
-pub struct MouseButtons(u8);
+pub struct MouseButtons(pub(crate) u8);
 
 impl MouseButtons {
     /// Create a new empty set.

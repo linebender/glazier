@@ -834,7 +834,7 @@ extern "C" fn scroll_wheel(this: &mut Object, _: Sel, nsevent: id) {
             MouseButton::None,
             Vec2::new(dx, dy),
         );
-        view_state.handler.wheel(&event);
+        view_state.handler.mouse_wheel(&event);
     }
 }
 

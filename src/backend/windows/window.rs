@@ -973,7 +973,7 @@ impl WndProc for MyWndProc {
                         button: MouseButton::None,
                         wheel_delta,
                     };
-                    s.handler.wheel(&event);
+                    s.handler.mouse_wheel(&event);
                     true
                 });
                 if handled == Some(false) {

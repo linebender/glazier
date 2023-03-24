@@ -285,7 +285,7 @@ impl Pointer {
                         MouseEvtKind::Move(evt) => winhandle.mouse_move(&evt),
                         MouseEvtKind::Up(evt) => winhandle.mouse_up(&evt),
                         MouseEvtKind::Down(evt) => winhandle.mouse_down(&evt),
-                        MouseEvtKind::Wheel(evt) => winhandle.wheel(&evt),
+                        MouseEvtKind::Wheel(evt) => winhandle.mouse_wheel(&evt),
                         MouseEvtKind::Leave => winhandle.mouse_leave(),
                     }
                 }
