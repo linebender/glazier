@@ -379,10 +379,7 @@ impl InputHandler for AppInputHandler {
             true => cursor.text_range().start,
             false => cursor.text_range().end,
         };
-        HitTestPoint {
-            idx,
-            is_inside: cursor.is_inside(),
-        }
+        HitTestPoint::new(idx, cursor.is_inside())
     }
     fn bounding_box(&self) -> Option<Rect> {
         Some(Rect::new(

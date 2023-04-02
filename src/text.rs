@@ -876,6 +876,7 @@ pub enum Action {
 ///
 /// This type is returned by [`InputHandler::hit_test_point`].
 #[derive(Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct HitTestPoint {
     /// The index representing the grapheme boundary closest to the `Point`.
     pub idx: usize,
@@ -886,4 +887,10 @@ pub struct HitTestPoint {
     /// end of that line, and a click below the last line will resolve to a
     /// position in that line.
     pub is_inside: bool,
+}
+
+impl HitTestPoint {
+    pub fn new(idx: usize, is_inside: bool) -> Self {
+        Self { idx, is_inside }
+    }
 }
