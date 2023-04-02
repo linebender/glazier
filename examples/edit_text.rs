@@ -113,15 +113,6 @@ impl WindowState {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    fn schedule_render(&self) {
-        self.handle
-            .get_idle_handle()
-            .unwrap()
-            .schedule_idle(IdleToken::new(0));
-    }
-
-    #[cfg(not(target_os = "macos"))]
     fn schedule_render(&self) {
         self.handle.invalidate();
     }
@@ -216,11 +207,6 @@ impl WinHandler for WindowState {
     fn prepare_paint(&mut self) {}
 
     fn paint(&mut self, _: &Region) {
-        self.render();
-        self.schedule_render();
-    }
-
-    fn idle(&mut self, _: IdleToken) {
         self.render();
         self.schedule_render();
     }
