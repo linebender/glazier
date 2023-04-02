@@ -5,7 +5,7 @@ use glazier::{
         Action, Affinity, Direction, Event, HitTestPoint, InputHandler, Movement, Selection,
         VerticalMovement,
     },
-    Application, IdleToken, KeyEvent, Region, Scalable, TextFieldToken, WinHandler, WindowHandle,
+    Application, KeyEvent, Region, Scalable, TextFieldToken, WinHandler, WindowHandle,
 };
 use parley::{FontContext, Layout};
 use std::any::Any;
