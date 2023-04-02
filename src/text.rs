@@ -888,3 +888,9 @@ pub struct HitTestPoint {
     /// position in that line.
     pub is_inside: bool,
 }
+
+impl HitTestPoint {
+    pub fn new(idx: usize, is_inside: bool) -> Self {
+        Self { idx, is_inside }
+    }
+}
