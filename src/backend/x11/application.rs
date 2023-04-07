@@ -203,8 +203,7 @@ pub(crate) struct AppInner {
     idle_write: RawFd,
     /// Support for the render extension in at least version 0.5?
     render_argb32_pictformat_cursor: Option<Pictformat>,
-
-    /// The known input devices and their master/slave relationships.
+    /// The attached input devices, with internal mutability because X events can make them change.
     pointers: RefCell<PointersState>,
 }
 
