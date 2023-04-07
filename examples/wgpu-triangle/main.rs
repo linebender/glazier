@@ -185,15 +185,18 @@ impl WinHandler for WindowState {
     fn prepare_paint(&mut self) {}
 
     fn paint(&mut self, _: &Region) {
+        dbg!("paint");
         let inner = self.inner.as_mut().unwrap();
         inner.draw();
-        inner.schedule_render();
+        //inner.schedule_render();
     }
 
     fn idle(&mut self, _: IdleToken) {
+        /*
         let inner = self.inner.as_mut().unwrap();
         inner.draw();
         inner.schedule_render();
+        */
     }
 
     fn size(&mut self, _: Size) {

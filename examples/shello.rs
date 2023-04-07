@@ -21,6 +21,7 @@ const WIDTH: usize = 2048;
 const HEIGHT: usize = 1536;
 
 fn main() {
+    pretty_env_logger::init();
     let app = Application::new().unwrap();
     let window = glazier::WindowBuilder::new(app.clone())
         .resizable(false)

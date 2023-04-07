@@ -24,6 +24,7 @@ use std::time::{Duration, Instant};
 use anyhow::{anyhow, Context, Error};
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::render::{self, ConnectionExt as _, Pictformat};
+use x11rb::protocol::xinput::ChangeReason;
 use x11rb::protocol::xproto::{
     self, ConnectionExt as _, CreateWindowAux, EventMask, Timestamp, Visualtype, WindowClass,
 };
@@ -36,6 +37,7 @@ use x11rb::xcb_ffi::XCBConnection;
 use crate::application::AppHandler;
 
 use super::clipboard::Clipboard;
+use super::pointer::{DeviceInfo, PointersState};
 use super::util;
 use super::window::Window;
 use crate::backend::shared::linux;
@@ -108,6 +110,12 @@ x11rb::atom_manager! {
         PRIMARY,
         TARGETS,
         INCR,
+        ABS_X: b"Abs X",
+        ABS_Y: b"Abs Y",
+        ABS_PRESSURE: b"Abs Pressure",
+        ABS_XTILT: b"Abs Tilt X",
+        ABS_YTILT: b"Abs Tilt Y",
+        ABS_WHEEL: b"Abs Wheel",
     }
 }
 
@@ -195,6 +203,9 @@ pub(crate) struct AppInner {
     idle_write: RawFd,
     /// Support for the render extension in at least version 0.5?
     render_argb32_pictformat_cursor: Option<Pictformat>,
+
+    /// The known input devices and their master/slave relationships.
+    pointers: RefCell<PointersState>,
 }
 
 /// The mutable `Application` state.
@@ -333,8 +344,6 @@ impl AppInner {
                 .ok()
         };
 
-        super::pointer::initialize_pointers(&connection, window_id)?;
-
         let cursors = Cursors {
             default: load_cursor("default"),
             text: load_cursor("text"),
@@ -348,6 +357,8 @@ impl AppInner {
         let atoms = AppAtoms::new(&connection)?
             .reply()
             .context("get X11 atoms")?;
+
+        let pointers = super::pointer::initialize_pointers(&connection, &atoms, window_id)?;
 
         let screen = connection
             .setup()
@@ -385,6 +396,7 @@ impl AppInner {
             root_visual_type,
             argb_visual_type,
             render_argb32_pictformat_cursor,
+            pointers: RefCell::new(pointers),
         }))
     }
 
@@ -486,6 +498,25 @@ impl AppInner {
         }
     }
 
+    pub(crate) fn pointer_device(&self, id: u16) -> Option<DeviceInfo> {
+        self.pointers.borrow().device_info(id).cloned()
+    }
+
+    fn reinitialize_pointers(&self) {
+        match super::pointer::initialize_pointers(
+            &self.shared.connection,
+            &self.shared.atoms,
+            self.window_id,
+        ) {
+            // When something changes about the input devices, we just reload the whole pointer configuration.
+            // We could be smarter here, but it probably doesn't happen often.
+            Ok(p) => *self.pointers.borrow_mut() = p,
+            Err(e) => {
+                tracing::warn!("failed to reload pointers: {e}");
+            }
+        }
+    }
+
     #[inline]
     pub(crate) fn root_visual_type(&self) -> Visualtype {
         self.root_visual_type
@@ -553,6 +584,12 @@ impl AppInner {
                         .key_event(hw_keycode as _, keyboard_types::KeyState::Up, false);
 
                 w.handle_key_event(key_event);
+            }
+            Event::XinputHierarchy(_) => {
+                self.reinitialize_pointers();
+            }
+            Event::XinputDeviceChanged(ev) if ev.reason == ChangeReason::DEVICE_CHANGE => {
+                self.reinitialize_pointers();
             }
             Event::XinputButtonPress(ev) => {
                 let w = self

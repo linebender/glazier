@@ -12,10 +12,20 @@ use crate::Modifiers;
 // NOTE: We store pen inclination as azimuth/altitude even though some platforms use the tilt x/y representation.
 // There is a small conversion cost, but azimuth/altitude is more accurate for large tilts so it's the better
 // base representation.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PenInclination {
     pub azimuth: Angle,
     pub altitude: Angle,
+}
+
+impl Default for PenInclination {
+    /// The default pen inclination is straight up.
+    fn default() -> Self {
+        Self {
+            azimuth: Angle::degrees(0.0),
+            altitude: Angle::degrees(90.0),
+        }
+    }
 }
 
 /// Tilt X and tilt Y are another representation of the pen inclination.
@@ -69,12 +79,12 @@ impl PenInclination {
     // Reference for the conversion functions:
     // https://www.w3.org/TR/pointerevents3/#converting-between-tiltx-tilty-and-altitudeangle-azimuthangle
 
-    pub fn from_tilt(tilt_x: i8, tilt_y: i8) -> Option<PenInclination> {
+    pub fn from_tilt(tilt_x: f64, tilt_y: f64) -> Option<PenInclination> {
         use std::f64::consts::{PI, TAU};
-        let tilt_x_rad = tilt_x as f64 * PI / 180.0;
-        let tilt_y_rad = tilt_y as f64 * PI / 180.0;
+        let tilt_x_rad = tilt_x * PI / 180.0;
+        let tilt_y_rad = tilt_y * PI / 180.0;
 
-        if tilt_x.abs() == 90 || tilt_y.abs() == 90 {
+        if tilt_x.abs() > 89.0 || tilt_y.abs() > 89.0 {
             // The tilt representation breaks down at the horizon, so the position
             // is undefined.
             return None;
@@ -126,10 +136,10 @@ impl PenInclination {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PenInfo {
     /// The pressure of the pen against the tablet ranging from `0.0` (no pressure) to `1.0` (maximum pressure).
-    pub pressure: f32,
+    pub pressure: f64,
     /// Another pressure parameter, often controlled by an additional physical control (like the a finger wheel
-    /// on an airbrush stylus. Ranges from `-1.0` to `1.0`.
-    pub tangential_pressure: f32,
+    /// on an airbrush stylus). Ranges from `-1.0` to `1.0`.
+    pub tangential_pressure: f64,
     /// The inclination (or tilt) of the pen relative to the tablet.
     pub inclination: PenInclination,
     /// How much has the pen been twisted around its axis. In the range `[0, 2π)` radians.
@@ -488,7 +498,9 @@ mod tests {
     fn tilt_round_trip() {
         for x in -89..=89 {
             for y in -89..=89 {
-                let result = PenInclination::from_tilt(x, y).unwrap().tilt();
+                let result = PenInclination::from_tilt(x as f64, y as f64)
+                    .unwrap()
+                    .tilt();
                 assert_eq!((x, y), (result.tilt_x, result.tilt_y));
             }
         }

@@ -16,28 +16,8 @@ default-target = "x86_64-pc-windows-msvc"
 [features]
 default = ["x11"]
 gtk = ["cairo-rs", "gdk-sys", "glib-sys", "gtk-sys", "gtk-rs"]
-x11 = [
-    "ashpd",
-    "bindgen",
-    "futures",
-    "nix",
-    "pkg-config",
-    "x11rb",
-]
-wayland = [
-    "wayland-client",
-    "wayland-protocols/client",
-    "wayland-protocols/unstable_protocols",
-    "nix",
-    "cairo-sys-rs",
-    "rand",
-    "calloop",
-    "wayland-cursor",
-    "log",
-    "im",
-    "bindgen",
-    "pkg-config",
-]
+x11 = ["ashpd", "bindgen", "futures", "nix", "pkg-config", "x11rb"]
+wayland = ["wayland-client", "wayland-protocols/client", "wayland-protocols/unstable_protocols", "nix", "cairo-sys-rs", "rand", "calloop", "wayland-cursor", "log", "im", "bindgen", "pkg-config"]
 
 # passing on all the image features. AVIF is not supported because it does not
 # support decoding, and that's all we use `Image` for.
@@ -58,18 +38,13 @@ jpeg_rayon = []
 pnm = []
 serde = ["kurbo/serde"]
 
-accesskit = [
-    "dep:accesskit",
-    "accesskit_macos",
-    "accesskit_windows",
-    "once_cell",
-]
+accesskit = ["dep:accesskit", "accesskit_macos", "accesskit_windows", "once_cell"]
 
 [dependencies]
 # Moving forward, this version should align with the kurbo version in peniko.
 kurbo = "0.9.0"
 
-tracing = "0.1.22"
+tracing = { version = "0.1.22", features = ["log"] }
 lazy_static = "1.4.0"
 time = "0.3.0"
 cfg-if = "1.0.0"
@@ -82,6 +57,7 @@ image = { version = "0.24.4", optional = true, default_features = false }
 raw-window-handle = { version = "0.5.0", default_features = false }
 accesskit = { version = "0.9.0", optional = true }
 once_cell = { version = "1", optional = true }
+memchr = "2.5.0"
 
 [target.'cfg(target_os="windows")'.dependencies]
 scopeguard = "1.1.0"
@@ -142,6 +118,7 @@ vello = { git = "https://github.com/linebender/vello", rev = "5f59a2e8181a7d01f8
 parley = { git = "https://github.com/dfrg/parley", rev = "e4276b4d1001a050c07121f95ca255c771e9a641" }
 pollster = "0.2.5"
 wgpu = "0.15.0"
+pretty_env_logger = "0.4.0"
 
 [build-dependencies]
 bindgen = { version = "0.60.1", optional = true }
