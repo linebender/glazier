@@ -455,7 +455,7 @@ impl WindowBuilder {
     ///
     /// This is the object that will receive callbacks from this window.
     pub fn set_handler(mut self, handler: Box<dyn WinHandler>) -> Self {
-        self.0.set_handler(handler);
+        self.0 = self.0.set_handler(handler);
         self
     }
 
@@ -470,7 +470,7 @@ impl WindowBuilder {
     ///
     /// [display points]: crate::Scale
     pub fn set_size(mut self, size: Size) -> Self {
-        self.0.set_size(size);
+        self.0 = self.0.set_size(size);
         self
     }
 
@@ -483,25 +483,25 @@ impl WindowBuilder {
     ///
     /// [display points]: crate::Scale
     pub fn set_min_size(mut self, size: Size) -> Self {
-        self.0.set_min_size(size);
+        self.0 = self.0.set_min_size(size);
         self
     }
 
     /// Set whether the window should be resizable.
     pub fn resizable(mut self, resizable: bool) -> Self {
-        self.0.resizable(resizable);
+        self.0 = self.0.resizable(resizable);
         self
     }
 
     /// Set whether the window should have a titlebar and decorations.
     pub fn show_titlebar(mut self, show_titlebar: bool) -> Self {
-        self.0.show_titlebar(show_titlebar);
+        self.0 = self.0.show_titlebar(show_titlebar);
         self
     }
 
     /// Set whether the window background should be transparent
     pub fn set_transparent(mut self, transparent: bool) -> Self {
-        self.0.set_transparent(transparent);
+        self.0 = self.0.set_transparent(transparent);
         self
     }
 
@@ -512,31 +512,31 @@ impl WindowBuilder {
     ///
     /// [set_level]: crate::WindowBuilder::set_level
     pub fn set_position(mut self, position: Point) -> Self {
-        self.0.set_position(position);
+        self.0 = self.0.set_position(position);
         self
     }
 
     /// Sets the initial [`WindowLevel`].
     pub fn set_level(mut self, level: WindowLevel) -> Self {
-        self.0.set_level(level);
+        self.0 = self.0.set_level(level);
         self
     }
 
     /// Set the window's initial title.
     pub fn set_title(mut self, title: impl Into<String>) -> Self {
-        self.0.set_title(title);
+        self.0 = self.0.set_title(title);
         self
     }
 
     /// Set the window's menu.
     pub fn set_menu(mut self, menu: Menu) -> Self {
-        self.0.set_menu(menu.into_inner());
+        self.0 = self.0.set_menu(menu.into_inner());
         self
     }
 
     /// Sets the initial state of the window.
     pub fn set_window_state(mut self, state: WindowState) -> Self {
-        self.0.set_window_state(state);
+        self.0 = self.0.set_window_state(state);
         self
     }
 

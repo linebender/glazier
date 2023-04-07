@@ -1225,27 +1225,32 @@ impl WindowBuilder {
     }
 
     /// This takes ownership, and is typically used with UiMain
-    pub fn set_handler(&mut self, handler: Box<dyn WinHandler>) {
+    pub fn set_handler(mut self, handler: Box<dyn WinHandler>) -> Self {
         self.handler = Some(handler);
+        self
     }
 
-    pub fn set_size(&mut self, size: Size) {
+    pub fn set_size(mut self, size: Size) -> Self {
         self.size = Some(size);
+        self
     }
 
-    pub fn set_min_size(&mut self, size: Size) {
+    pub fn set_min_size(mut self, size: Size) -> Self {
         self.min_size = Some(size);
+        self
     }
 
-    pub fn resizable(&mut self, resizable: bool) {
+    pub fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
+        self
     }
 
-    pub fn show_titlebar(&mut self, show_titlebar: bool) {
+    pub fn show_titlebar(mut self, show_titlebar: bool) -> Self {
         self.show_titlebar = show_titlebar;
+        self
     }
 
-    pub fn set_transparent(&mut self, transparent: bool) {
+    pub fn set_transparent(mut self, transparent: bool) -> Self {
         // Transparency and Flip is only supported on Windows 8 and newer and
         // require DComposition
         if transparent {
@@ -1256,26 +1261,32 @@ impl WindowBuilder {
                 warn!("Transparency requires Windows 8 or newer");
             }
         }
+        self
     }
 
-    pub fn set_title<S: Into<String>>(&mut self, title: S) {
+    pub fn set_title<S: Into<String>>(mut self, title: S) -> Self {
         self.title = title.into();
+        self
     }
 
-    pub fn set_menu(&mut self, menu: Menu) {
+    pub fn set_menu(mut self, menu: Menu) -> Self {
         self.menu = Some(menu);
+        self
     }
 
-    pub fn set_position(&mut self, position: Point) {
+    pub fn set_position(mut self, position: Point) -> Self {
         self.position = Some(position);
+        self
     }
 
-    pub fn set_window_state(&mut self, state: window::WindowState) {
+    pub fn set_window_state(mut self, state: window::WindowState) -> Self {
         self.state = state;
+        self
     }
 
-    pub fn set_level(&mut self, level: WindowLevel) {
-        self.level = Some(level)
+    pub fn set_level(mut self, level: WindowLevel) -> Self {
+        self.level = Some(level);
+        self
     }
 
     pub fn build(self) -> Result<WindowHandle, Error> {

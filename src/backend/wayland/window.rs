@@ -365,50 +365,61 @@ impl WindowBuilder {
         }
     }
 
-    pub fn set_handler(&mut self, handler: Box<dyn WinHandler>) {
+    pub fn set_handler(mut self, handler: Box<dyn WinHandler>) -> Self {
         self.handler = Some(handler);
+        self
     }
 
-    pub fn set_size(&mut self, size: Size) {
+    pub fn set_size(mut self, size: Size) -> Self {
         self.size = size;
+        self
     }
 
-    pub fn set_min_size(&mut self, size: Size) {
+    pub fn set_min_size(mut self, size: Size) -> Self {
         self.min_size = Some(size);
+        self
     }
 
-    pub fn resizable(&mut self, resizable: bool) {
+    pub fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
+        self
     }
 
-    pub fn show_titlebar(&mut self, show_titlebar: bool) {
+    pub fn show_titlebar(mut self, show_titlebar: bool) -> Self {
         self.show_titlebar = show_titlebar;
+        self
     }
 
-    pub fn set_transparent(&mut self, _transparent: bool) {
+    pub fn set_transparent(self, _transparent: bool) -> Self {
         tracing::warn!(
             "set_transparent unimplemented for wayland, it allows transparency by default"
         );
+        self
     }
 
-    pub fn set_position(&mut self, position: Point) {
+    pub fn set_position(mut self, position: Point) -> Self {
         self.position = Some(position);
+        self
     }
 
-    pub fn set_level(&mut self, level: WindowLevel) {
+    pub fn set_level(mut self, level: WindowLevel) -> Self {
         self.level = level;
+        self
     }
 
-    pub fn set_window_state(&mut self, state: window::WindowState) {
+    pub fn set_window_state(mut self, state: window::WindowState) -> Self {
         self.state = Some(state);
+        self
     }
 
-    pub fn set_title(&mut self, title: impl Into<String>) {
+    pub fn set_title(mut self, title: impl Into<String>) -> Self {
         self.title = title.into();
+        self
     }
 
-    pub fn set_menu(&mut self, menu: Menu) {
+    pub fn set_menu(mut self, menu: Menu) -> Self {
         self.menu = Some(menu);
+        self
     }
 
     pub fn build(self) -> Result<WindowHandle, ShellError> {
