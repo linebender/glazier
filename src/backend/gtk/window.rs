@@ -243,17 +243,17 @@ impl WindowBuilder {
         }
     }
 
-    pub fn set_handler(mut self, handler: Box<dyn WinHandler>) -> Self {
+    pub fn handler(mut self, handler: Box<dyn WinHandler>) -> Self {
         self.handler = Some(handler);
         self
     }
 
-    pub fn set_size(mut self, size: Size) -> Self {
+    pub fn size(mut self, size: Size) -> Self {
         self.size = size;
         self
     }
 
-    pub fn set_min_size(mut self, size: Size) -> Self {
+    pub fn min_size(mut self, size: Size) -> Self {
         self.min_size = Some(size);
         self
     }
@@ -268,32 +268,32 @@ impl WindowBuilder {
         self
     }
 
-    pub fn set_transparent(mut self, transparent: bool) -> Self {
+    pub fn transparent(mut self, transparent: bool) -> Self {
         self.transparent = transparent;
         self
     }
 
-    pub fn set_position(mut self, position: Point) -> Self {
+    pub fn position(mut self, position: Point) -> Self {
         self.position = Some(position);
         self
     }
 
-    pub fn set_level(mut self, level: WindowLevel) -> Self {
+    pub fn level(mut self, level: WindowLevel) -> Self {
         self.level = Some(level);
         self
     }
 
-    pub fn set_window_state(mut self, state: window::WindowState) -> Self {
+    pub fn window_state(mut self, state: window::WindowState) -> Self {
         self.state = Some(state);
         self
     }
 
-    pub fn set_title(mut self, title: impl Into<String>) -> Self {
+    pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = title.into();
         self
     }
 
-    pub fn set_menu(mut self, menu: Menu) -> Self {
+    pub fn menu(mut self, menu: Menu) -> Self {
         self.menu = Some(menu);
         self
     }

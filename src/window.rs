@@ -454,8 +454,8 @@ impl WindowBuilder {
     /// Set the [`WinHandler`] for this window.
     ///
     /// This is the object that will receive callbacks from this window.
-    pub fn set_handler(mut self, handler: Box<dyn WinHandler>) -> Self {
-        self.0 = self.0.set_handler(handler);
+    pub fn handler(mut self, handler: Box<dyn WinHandler>) -> Self {
+        self.0 = self.0.handler(handler);
         self
     }
 
@@ -469,8 +469,8 @@ impl WindowBuilder {
     /// [`WinHandler::size`] method.
     ///
     /// [display points]: crate::Scale
-    pub fn set_size(mut self, size: Size) -> Self {
-        self.0 = self.0.set_size(size);
+    pub fn size(mut self, size: Size) -> Self {
+        self.0 = self.0.size(size);
         self
     }
 
@@ -482,8 +482,8 @@ impl WindowBuilder {
     /// The platform might increase the size a tiny bit due to DPI.
     ///
     /// [display points]: crate::Scale
-    pub fn set_min_size(mut self, size: Size) -> Self {
-        self.0 = self.0.set_min_size(size);
+    pub fn min_size(mut self, size: Size) -> Self {
+        self.0 = self.0.min_size(size);
         self
     }
 
@@ -500,43 +500,43 @@ impl WindowBuilder {
     }
 
     /// Set whether the window background should be transparent
-    pub fn set_transparent(mut self, transparent: bool) -> Self {
-        self.0 = self.0.set_transparent(transparent);
+    pub fn transparent(mut self, transparent: bool) -> Self {
+        self.0 = self.0.transparent(transparent);
         self
     }
 
     /// Sets the initial window position in display points.
     /// For windows with a parent, the position is relative to the parent.
     /// For windows without a parent, it is relative to the origin of the virtual screen.
-    /// See also [set_level]
+    /// See also [level]
     ///
-    /// [set_level]: crate::WindowBuilder::set_level
-    pub fn set_position(mut self, position: Point) -> Self {
-        self.0 = self.0.set_position(position);
+    /// [level]: crate::WindowBuilder::level
+    pub fn position(mut self, position: Point) -> Self {
+        self.0 = self.0.position(position);
         self
     }
 
     /// Sets the initial [`WindowLevel`].
-    pub fn set_level(mut self, level: WindowLevel) -> Self {
-        self.0 = self.0.set_level(level);
+    pub fn level(mut self, level: WindowLevel) -> Self {
+        self.0 = self.0.level(level);
         self
     }
 
     /// Set the window's initial title.
-    pub fn set_title(mut self, title: impl Into<String>) -> Self {
-        self.0 = self.0.set_title(title);
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.0 = self.0.title(title);
         self
     }
 
     /// Set the window's menu.
-    pub fn set_menu(mut self, menu: Menu) -> Self {
-        self.0 = self.0.set_menu(menu.into_inner());
+    pub fn menu(mut self, menu: Menu) -> Self {
+        self.0 = self.0.menu(menu.into_inner());
         self
     }
 
     /// Sets the initial state of the window.
-    pub fn set_window_state(mut self, state: WindowState) -> Self {
-        self.0 = self.0.set_window_state(state);
+    pub fn window_state(mut self, state: WindowState) -> Self {
+        self.0 = self.0.window_state(state);
         self
     }
 

@@ -138,12 +138,12 @@ impl WindowBuilder {
         }
     }
 
-    pub fn set_handler(mut self, handler: Box<dyn WinHandler>) -> Self {
+    pub fn handler(mut self, handler: Box<dyn WinHandler>) -> Self {
         self.handler = Some(handler);
         self
     }
 
-    pub fn set_size(mut self, size: Size) -> Self {
+    pub fn size(mut self, size: Size) -> Self {
         // zero sized window results in server error
         self.size = if size.width == 0. || size.height == 0. {
             Size::new(1., 1.)
@@ -153,7 +153,7 @@ impl WindowBuilder {
         self
     }
 
-    pub fn set_min_size(mut self, min_size: Size) -> Self {
+    pub fn min_size(mut self, min_size: Size) -> Self {
         self.min_size = min_size;
         self
     }
@@ -169,34 +169,34 @@ impl WindowBuilder {
         self
     }
 
-    pub fn set_transparent(mut self, transparent: bool) -> Self {
+    pub fn transparent(mut self, transparent: bool) -> Self {
         self.transparent = transparent;
         self
     }
 
-    pub fn set_position(mut self, position: Point) -> Self {
+    pub fn position(mut self, position: Point) -> Self {
         self.position = Some(position);
         self
     }
 
-    pub fn set_level(mut self, level: WindowLevel) -> Self {
+    pub fn level(mut self, level: WindowLevel) -> Self {
         self.level = level;
         self
     }
 
-    pub fn set_window_state(mut self, state: window::WindowState) -> Self {
+    pub fn window_state(mut self, state: window::WindowState) -> Self {
         self.state = Some(state);
         self
     }
 
-    pub fn set_title<S: Into<String>>(mut self, title: S) -> Self {
+    pub fn title<S: Into<String>>(mut self, title: S) -> Self {
         self.title = title.into();
         self
     }
 
-    pub fn set_menu(self, _menu: Menu) -> Self {
+    pub fn menu(self, _menu: Menu) -> Self {
         // TODO(x11/menus): implement WindowBuilder::set_menu (currently a no-op)
-        warn!("WindowBuilder::set_menu is currently unimplemented for X11 backend.");
+        warn!("WindowBuilder::menu is currently unimplemented for X11 backend.");
         self
     }
 

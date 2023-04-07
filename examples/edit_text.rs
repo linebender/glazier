@@ -36,8 +36,8 @@ fn main() {
     let app = Application::new().unwrap();
     let window = glazier::WindowBuilder::new(app.clone())
         .resizable(true)
-        .set_size((WIDTH as f64 / 2., HEIGHT as f64 / 2.).into())
-        .set_handler(Box::new(WindowState::new()))
+        .size((WIDTH as f64 / 2., HEIGHT as f64 / 2.).into())
+        .handler(Box::new(WindowState::new()))
         .build()
         .unwrap();
     window.show();

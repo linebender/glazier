@@ -366,17 +366,17 @@ impl WindowBuilder {
     }
 
     /// This takes ownership, and is typically used with UiMain
-    pub fn set_handler(mut self, handler: Box<dyn WinHandler>) -> Self {
+    pub fn handler(mut self, handler: Box<dyn WinHandler>) -> Self {
         self.handler = Some(handler);
         self
     }
 
-    pub fn set_size(self, _: Size) -> Self {
+    pub fn size(self, _: Size) -> Self {
         // Ignored
         self
     }
 
-    pub fn set_min_size(self, _: Size) -> Self {
+    pub fn min_size(self, _: Size) -> Self {
         // Ignored
         self
     }
@@ -391,32 +391,32 @@ impl WindowBuilder {
         self
     }
 
-    pub fn set_transparent(self, _transparent: bool) -> Self {
+    pub fn transparent(self, _transparent: bool) -> Self {
         // Ignored
         self
     }
 
-    pub fn set_position(self, _position: Point) -> Self {
+    pub fn position(self, _position: Point) -> Self {
         // Ignored
         self
     }
 
-    pub fn set_window_state(self, _state: window::WindowState) -> Self {
+    pub fn window_state(self, _state: window::WindowState) -> Self {
         // Ignored
         self
     }
 
-    pub fn set_level(self, _level: WindowLevel) -> Self {
+    pub fn level(self, _level: WindowLevel) -> Self {
         // ignored
         self
     }
 
-    pub fn set_title<S: Into<String>>(mut self, title: S) -> Self {
+    pub fn title<S: Into<String>>(mut self, title: S) -> Self {
         self.title = title.into();
         self
     }
 
-    pub fn set_menu(mut self, menu: Menu) -> Self {
+    pub fn menu(mut self, menu: Menu) -> Self {
         self.menu = Some(menu);
         self
     }

@@ -238,8 +238,8 @@ fn main() {
 
     let app = Application::new().unwrap();
     let window = WindowBuilder::new(app.clone())
-        .set_handler(Box::new(HelloState::new()))
-        .set_title(WINDOW_TITLE)
+        .handler(Box::new(HelloState::new()))
+        .title(WINDOW_TITLE)
         .build()
         .unwrap();
 
