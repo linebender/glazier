@@ -197,7 +197,12 @@ pub(crate) fn enable_window_pointers(conn: &XCBConnection, window: u32) -> anyho
         &[EventMask {
             deviceid: xinput::Device::ALL_MASTER.into(),
             mask: vec![
-                (XIEventMask::BUTTON_PRESS | XIEventMask::BUTTON_RELEASE | XIEventMask::MOTION),
+                (XIEventMask::BUTTON_PRESS
+                    | XIEventMask::BUTTON_RELEASE
+                    | XIEventMask::MOTION
+                    | XIEventMask::TOUCH_BEGIN
+                    | XIEventMask::TOUCH_UPDATE
+                    | XIEventMask::TOUCH_END),
             ],
         }],
     )?

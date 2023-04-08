@@ -412,10 +412,12 @@ impl std::fmt::Debug for PointerButtons {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PointerId(pub(crate) u64);
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct PointerEvent {
-    // This is a super-set of mouse events and stylus + touch events.
-    pub pointer_id: u32,
+    pub pointer_id: PointerId,
     pub is_primary: bool,
     pub pointer_type: PointerType,
 
@@ -447,7 +449,7 @@ impl Default for PointerEvent {
             button: PointerButton::None,
             focus: false,
             count: 0,
-            pointer_id: 0,
+            pointer_id: PointerId(0),
             is_primary: true,
             pointer_type: PointerType::Mouse(MouseInfo {
                 wheel_delta: Vec2::ZERO,
@@ -459,7 +461,7 @@ impl Default for PointerEvent {
 impl From<crate::MouseEvent> for PointerEvent {
     fn from(m: crate::MouseEvent) -> Self {
         Self {
-            pointer_id: 0,
+            pointer_id: PointerId(0),
             is_primary: true,
             pointer_type: PointerType::Mouse(MouseInfo {
                 wheel_delta: m.wheel_delta,

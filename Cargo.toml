@@ -69,7 +69,7 @@ accesskit = [
 # Moving forward, this version should align with the kurbo version in peniko.
 kurbo = "0.9.0"
 
-tracing = "0.1.22"
+tracing = { version = "0.1.22", features = ["log"] }
 lazy_static = "1.4.0"
 time = "0.3.0"
 cfg-if = "1.0.0"
@@ -135,6 +135,7 @@ version = "0.3.44"
 features = ["Window", "MouseEvent", "CssStyleDeclaration", "WheelEvent", "KeyEvent", "KeyboardEvent", "Navigator"]
 
 [dev-dependencies]
+pretty_env_logger = "0.4"
 static_assertions = "1.1.0"
 test-log = { version = "0.2.5", features = ["trace"], default-features = false }
 tracing-subscriber = { version = "0.3.2", features = ["env-filter"] }

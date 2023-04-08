@@ -621,6 +621,24 @@ impl AppInner {
                     .context("MOTION_NOTIFY - failed to get window")?;
                 w.handle_motion_notify(ev)?;
             }
+            Event::XinputTouchBegin(ev) => {
+                let w = self
+                    .window(ev.event)
+                    .context("TOUCH_BEGIN - failed to get window")?;
+                w.handle_touch_begin(ev)?;
+            }
+            Event::XinputTouchEnd(ev) => {
+                let w = self
+                    .window(ev.event)
+                    .context("TOUCH_END - failed to get window")?;
+                w.handle_touch_end(ev)?;
+            }
+            Event::XinputTouchUpdate(ev) => {
+                let w = self
+                    .window(ev.event)
+                    .context("TOUCH_UPDATE - failed to get window")?;
+                w.handle_touch_update(ev)?;
+            }
             Event::LeaveNotify(ev) => {
                 let w = self
                     .window(ev.event)
@@ -706,7 +724,7 @@ impl AppInner {
                 return Err(x11rb::errors::ReplyError::from(e.clone()).into());
             }
             ev => {
-                dbg!(ev);
+                tracing::debug!("unhandled event {ev:?}");
             }
         }
         Ok(false)

@@ -23,7 +23,9 @@ use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use crate::pointer::{Angle, MouseInfo, PenInclination, PenInfo, PointerType};
+use crate::pointer::{
+    Angle, MouseInfo, PenInclination, PenInfo, PointerId, PointerType, TouchInfo,
+};
 use crate::scale::Scalable;
 use anyhow::{anyhow, Context, Error};
 use tracing::{error, warn};
@@ -31,7 +33,7 @@ use x11rb::connection::Connection;
 use x11rb::errors::ReplyOrIdError;
 use x11rb::properties::{WmHints, WmHintsState, WmSizeHints};
 use x11rb::protocol::render::Pictformat;
-use x11rb::protocol::xinput::{self, DeviceType};
+use x11rb::protocol::xinput::{self, DeviceType, ModifierInfo, TouchEventFlags};
 use x11rb::protocol::xproto::{
     self, AtomEnum, ChangeWindowAttributesAux, ColormapAlloc, ConfigureNotifyEvent,
     ConfigureWindowAux, ConnectionExt, EventMask, ImageOrder as X11ImageOrder, KeyButMask,
@@ -799,15 +801,61 @@ impl Window {
         });
     }
 
-    fn pointer_event(&self, ev: &xinput::ButtonPressEvent) -> PointerEvent {
-        // In x11rb these are i32's but in the protocol they're fixed-precision FP1616s
+    fn base_pointer_event(
+        &self,
+        x: i32,
+        y: i32,
+        mods: ModifierInfo,
+        detail: u32,
+        src_id: u16,
+    ) -> PointerEvent {
+        // In x11rb, xinput x and y coordinates are i32's but in the protocol they're fixed-precision FP1616s
         // https://github.com/psychon/x11rb/blob/dacfba5e2a8eef4b80df75d9bec9061c3d98d279/xcb-proto-1.15.2/src/xinput.xml#L2374
-        let (ev_x, ev_y) = (ev.event_x as f64 / 65536.0, ev.event_y as f64 / 65536.0);
+        let (ev_x, ev_y) = (x as f64 / 65536.0, y as f64 / 65536.0);
         let scale = self.scale.get();
-        let mods = ev.mods.base | ev.mods.locked | ev.mods.latched;
+        let mods = mods.base | mods.locked | mods.latched;
         // TODO: what are the high 16 bits for? Maybe virtual modifiers?
         let mods = (mods as u16).into();
-        let button = pointer_button(ev.detail);
+        let button = pointer_button(detail);
+
+        PointerEvent {
+            pointer_id: PointerId(src_id as u64),
+            is_primary: false,
+            pointer_type: PointerType::Mouse(MouseInfo {
+                wheel_delta: Default::default(),
+            }),
+            pos: Point::new(ev_x, ev_y).to_dp(scale),
+            buttons: pointer_buttons(mods),
+            modifiers: key_mods(mods),
+            button,
+            focus: false,
+            count: 0,
+        }
+    }
+
+    fn pointer_touch_event(&self, ev: &xinput::TouchBeginEvent) -> PointerEvent {
+        // TODO: I think future x11rb will have BitAnd?
+        let is_primary = (ev.flags | TouchEventFlags::TOUCH_EMULATING_POINTER) == ev.flags;
+        let pointer_type = PointerType::Touch(TouchInfo {
+            contact_geometry: Size::ZERO,
+            pressure: 0.0,
+        });
+        let button = if is_primary {
+            PointerButton::Left
+        } else {
+            PointerButton::None
+        };
+
+        PointerEvent {
+            is_primary,
+            pointer_type,
+            button,
+            pointer_id: PointerId(ev.sourceid as u64 | (ev.detail as u64) << 32),
+            ..self.base_pointer_event(ev.event_x, ev.event_y, ev.mods, ev.detail, ev.sourceid)
+        }
+    }
+
+    fn pointer_event(&self, ev: &xinput::ButtonPressEvent) -> PointerEvent {
         let device = self.app.pointer_device(ev.deviceid);
         let src_device = self.app.pointer_device(ev.sourceid);
 
@@ -864,15 +912,9 @@ impl Window {
         };
 
         PointerEvent {
-            pointer_id: ev.sourceid as u32,
             is_primary,
             pointer_type,
-            pos: Point::new(ev_x, ev_y).to_dp(scale),
-            buttons: pointer_buttons(mods),
-            modifiers: key_mods(mods),
-            button,
-            focus: false,
-            count: 0,
+            ..self.base_pointer_event(ev.event_x, ev.event_y, ev.mods, ev.detail, ev.sourceid)
         }
     }
 
@@ -893,6 +935,26 @@ impl Window {
         // doesn't want it.
         pointer_ev.buttons = pointer_ev.buttons.without(pointer_ev.button);
         self.with_handler(|h| h.pointer_up(&pointer_ev));
+        Ok(())
+    }
+
+    pub fn handle_touch_begin(&self, ev: &xinput::TouchBeginEvent) -> Result<(), Error> {
+        let mut pointer_ev = self.pointer_touch_event(ev);
+        pointer_ev.buttons = pointer_ev.buttons.with(pointer_ev.button);
+        self.with_handler(|h| h.pointer_down(&pointer_ev));
+        Ok(())
+    }
+
+    pub fn handle_touch_update(&self, ev: &xinput::TouchBeginEvent) -> Result<(), Error> {
+        let pointer_ev = self.pointer_touch_event(ev);
+        self.with_handler(|h| h.pointer_move(&pointer_ev));
+        Ok(())
+    }
+
+    pub fn handle_touch_end(&self, ev: &xinput::TouchBeginEvent) -> Result<(), Error> {
+        let mut pointer_ev = self.pointer_touch_event(ev);
+        pointer_ev.buttons = pointer_ev.buttons.without(pointer_ev.button);
+        self.with_handler(|h| h.pointer_move(&pointer_ev));
         Ok(())
     }
 
