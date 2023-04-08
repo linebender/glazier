@@ -26,11 +26,11 @@ const HEIGHT: usize = 1536;
 fn main() {
     pretty_env_logger::init();
     let app = Application::new().unwrap();
-    let mut window_builder = glazier::WindowBuilder::new(app.clone());
-    window_builder.resizable(false);
-    window_builder.set_size((WIDTH as f64 / 2.0, HEIGHT as f64 / 2.0).into());
-    window_builder.set_handler(Box::new(WindowState::new()));
-    let window_handle = window_builder.build().unwrap();
+    let window_handle = glazier::WindowBuilder::new(app.clone())
+        .size((WIDTH as f64 / 2.0, HEIGHT as f64 / 2.0).into())
+        .handler(Box::new(WindowState::new()))
+        .build()
+        .unwrap();
     window_handle.show();
     app.run(None);
 }
