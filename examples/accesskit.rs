@@ -237,12 +237,11 @@ fn main() {
     tracing_subscriber::fmt().init();
 
     let app = Application::new().unwrap();
-    let mut builder = WindowBuilder::new(app.clone());
-    builder.set_handler(Box::new(HelloState::new()));
-    builder.set_title(WINDOW_TITLE);
-
-    let window = builder.build().unwrap();
-    window.show();
+    let window = WindowBuilder::new(app.clone())
+        .handler(Box::new(HelloState::new()))
+        .title(WINDOW_TITLE)
+        .build()
+        .unwrap();
 
     app.run(None);
 }

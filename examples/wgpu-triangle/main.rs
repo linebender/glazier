@@ -155,12 +155,13 @@ impl InnerWindowState {
 
 fn main() {
     let app = Application::new().unwrap();
-    let mut window_builder = glazier::WindowBuilder::new(app.clone());
-    window_builder.resizable(true);
-    window_builder.set_size((WIDTH as f64 / 2., HEIGHT as f64 / 2.).into());
-    window_builder.set_handler(Box::new(WindowState::new()));
-    let window_handle = window_builder.build().unwrap();
-    window_handle.show();
+    let window = glazier::WindowBuilder::new(app.clone())
+        .resizable(true)
+        .size((WIDTH as f64 / 2., HEIGHT as f64 / 2.).into())
+        .handler(Box::new(WindowState::new()))
+        .build()
+        .unwrap();
+    window.show();
     app.run(None);
 }
 
