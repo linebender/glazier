@@ -78,7 +78,6 @@ impl WindowState {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
     fn schedule_render(&self) {
         self.handle.invalidate();
     }
