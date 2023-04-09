@@ -366,48 +366,59 @@ impl WindowBuilder {
     }
 
     /// This takes ownership, and is typically used with UiMain
-    pub fn set_handler(&mut self, handler: Box<dyn WinHandler>) {
+    pub fn handler(mut self, handler: Box<dyn WinHandler>) -> Self {
         self.handler = Some(handler);
+        self
     }
 
-    pub fn set_size(&mut self, _: Size) {
+    pub fn size(self, _: Size) -> Self {
         // Ignored
+        self
     }
 
-    pub fn set_min_size(&mut self, _: Size) {
+    pub fn min_size(self, _: Size) -> Self {
         // Ignored
+        self
     }
 
-    pub fn resizable(&mut self, _resizable: bool) {
+    pub fn resizable(self, _resizable: bool) -> Self {
         // Ignored
+        self
     }
 
-    pub fn show_titlebar(&mut self, _show_titlebar: bool) {
+    pub fn show_titlebar(self, _show_titlebar: bool) -> Self {
         // Ignored
+        self
     }
 
-    pub fn set_transparent(&mut self, _transparent: bool) {
+    pub fn transparent(self, _transparent: bool) -> Self {
         // Ignored
+        self
     }
 
-    pub fn set_position(&mut self, _position: Point) {
+    pub fn position(self, _position: Point) -> Self {
         // Ignored
+        self
     }
 
-    pub fn set_window_state(&self, _state: window::WindowState) {
+    pub fn window_state(self, _state: window::WindowState) -> Self {
         // Ignored
+        self
     }
 
-    pub fn set_level(&mut self, _level: WindowLevel) {
+    pub fn level(self, _level: WindowLevel) -> Self {
         // ignored
+        self
     }
 
-    pub fn set_title<S: Into<String>>(&mut self, title: S) {
+    pub fn title<S: Into<String>>(mut self, title: S) -> Self {
         self.title = title.into();
+        self
     }
 
-    pub fn set_menu(&mut self, menu: Menu) {
+    pub fn menu(mut self, menu: Menu) -> Self {
         self.menu = Some(menu);
+        self
     }
 
     pub fn build(self) -> Result<WindowHandle, Error> {

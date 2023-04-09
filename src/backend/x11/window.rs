@@ -138,54 +138,66 @@ impl WindowBuilder {
         }
     }
 
-    pub fn set_handler(&mut self, handler: Box<dyn WinHandler>) {
+    pub fn handler(mut self, handler: Box<dyn WinHandler>) -> Self {
         self.handler = Some(handler);
+        self
     }
 
-    pub fn set_size(&mut self, size: Size) {
+    pub fn size(mut self, size: Size) -> Self {
         // zero sized window results in server error
         self.size = if size.width == 0. || size.height == 0. {
             Size::new(1., 1.)
         } else {
             size
         };
+        self
     }
 
-    pub fn set_min_size(&mut self, min_size: Size) {
+    pub fn min_size(mut self, min_size: Size) -> Self {
         self.min_size = min_size;
+        self
     }
 
-    pub fn resizable(&mut self, resizable: bool) {
+    pub fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
+        self
     }
 
-    pub fn show_titlebar(&mut self, _show_titlebar: bool) {
+    pub fn show_titlebar(self, _show_titlebar: bool) -> Self {
         // not sure how to do this, maybe _MOTIF_WM_HINTS?
         warn!("WindowBuilder::show_titlebar is currently unimplemented for X11 backend.");
+        self
     }
 
-    pub fn set_transparent(&mut self, transparent: bool) {
+    pub fn transparent(mut self, transparent: bool) -> Self {
         self.transparent = transparent;
+        self
     }
 
-    pub fn set_position(&mut self, position: Point) {
+    pub fn position(mut self, position: Point) -> Self {
         self.position = Some(position);
+        self
     }
 
-    pub fn set_level(&mut self, level: WindowLevel) {
+    pub fn level(mut self, level: WindowLevel) -> Self {
         self.level = level;
+        self
     }
 
-    pub fn set_window_state(&mut self, state: window::WindowState) {
+    pub fn window_state(mut self, state: window::WindowState) -> Self {
         self.state = Some(state);
+        self
     }
 
-    pub fn set_title<S: Into<String>>(&mut self, title: S) {
+    pub fn title<S: Into<String>>(mut self, title: S) -> Self {
         self.title = title.into();
+        self
     }
 
-    pub fn set_menu(&mut self, _menu: Menu) {
+    pub fn menu(self, _menu: Menu) -> Self {
         // TODO(x11/menus): implement WindowBuilder::set_menu (currently a no-op)
+        warn!("WindowBuilder::menu is currently unimplemented for X11 backend.");
+        self
     }
 
     // TODO(x11/menus): make menus if requested
