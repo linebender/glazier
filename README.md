@@ -118,7 +118,7 @@ sudo dnf install clang libxkbcommon-x11-devel libxcb-devel pkg-config vulkan-loa
 ```
 To install them on Debian or Ubuntu, run
 ```
-sudo apt-get install clang libxkbcommon-x11-dev libxcb libvulkan-dev
+sudo apt-get install clang libxkbcommon-x11-dev pkg-config libvulkan-dev
 ```
 
 ## Further reading
