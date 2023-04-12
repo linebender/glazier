@@ -112,6 +112,17 @@ On Linux and BSD, Glazier also requires `pkg-config` and `clang`,
 and the development packages of `libxkbcommon` and `libxcb`, to be installed.
 Some of the examples require `vulkan-loader`.
 
+Most distributions already have `pkg-config` installed. To install the other packages
+on Fedora, run
+```
+sudo dnf install clang.x86_64 libxkbcommon-x11-devel.x86_64 libxcb-devel.x86_64 vulkan-loader.x86_64
+# This assumes you're using the x86_64 architecture; otherwise, append the appropriate value
+```
+To install the other packages on Debian or Ubuntu, run
+```
+sudo apt-get install clang libxkbcommon-x11-dev libxcb libvulkan-dev
+```
+
 ## Further reading
 
 * [Advice for the next dozen Rust GUIs](https://raphlinus.github.io/rust/gui/2022/07/15/next-dozen-guis.html)
