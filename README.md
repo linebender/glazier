@@ -112,9 +112,9 @@ On Linux and BSD, Glazier also requires `pkg-config` and `clang`,
 and the development packages of `libxkbcommon` and `libxcb`, to be installed.
 Some of the examples require `vulkan-loader`.
 
-To install these packages on Fedora, run
+Most distributions have `pkg-config` installed by default. To install the remaining packages on Fedora, run
 ```
-sudo dnf install clang libxkbcommon-x11-devel libxcb-devel pkg-config vulkan-loader-devel
+sudo dnf install clang libxkbcommon-x11-devel libxcb-devel vulkan-loader-devel
 ```
 To install them on Debian or Ubuntu, run
 ```
