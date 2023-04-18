@@ -102,6 +102,25 @@ menus and support for IME.
 * [baseview]. Another window creation abstraction, motivated mostly by the
 audio plugin use case where the module is not in control of its own UI runloop.
 
+## Dependencies
+
+Glazier requires a recent rust toolchain to build; it does not (yet) have an
+explicit minimum supported rust version, but the latest stable version should
+work.
+
+On Linux and BSD, Glazier also requires `pkg-config` and `clang`,
+and the development packages of `libxkbcommon` and `libxcb`, to be installed.
+Some of the examples require `vulkan-loader`.
+
+Most distributions have `pkg-config` installed by default. To install the remaining packages on Fedora, run
+```
+sudo dnf install clang libxkbcommon-x11-devel libxcb-devel vulkan-loader-devel
+```
+To install them on Debian or Ubuntu, run
+```
+sudo apt-get install clang libxkbcommon-x11-dev pkg-config libvulkan-dev
+```
+
 ## Further reading
 
 * [Advice for the next dozen Rust GUIs](https://raphlinus.github.io/rust/gui/2022/07/15/next-dozen-guis.html)
