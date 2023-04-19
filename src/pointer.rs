@@ -87,6 +87,11 @@ impl PenInclination {
         if tilt_x.abs() > 89.0 || tilt_y.abs() > 89.0 {
             // The tilt representation breaks down at the horizon, so the position
             // is undefined.
+            //
+            // The choice of 89 as the threshold just comes from the fact that on
+            // Windows and Linux, tilt is reported as an integer and so "> 89.0"
+            // is the same as "== 90". The exact value of the threshold probably doesn't
+            // matter, since most (all?) styli don't support such steep angles anyway.
             return None;
         }
 
