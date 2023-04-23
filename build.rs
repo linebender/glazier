@@ -1,18 +1,17 @@
-#[cfg(not(any(feature = "x11", feature = "wayland")))]
+#[cfg(not(all(
+    any(feature = "x11", feature = "wayland"),
+    any(target_os = "freebsd", target_os = "linux", target_os = "openbsd")
+)))]
 fn main() {}
 
-#[cfg(any(feature = "x11", feature = "wayland"))]
+#[cfg(all(
+    any(feature = "x11", feature = "wayland"),
+    any(target_os = "freebsd", target_os = "linux", target_os = "openbsd")
+))]
 fn main() {
     use pkg_config::probe_library;
     use std::env;
     use std::path::PathBuf;
-
-    if env::var("CARGO_CFG_TARGET_OS").unwrap() != "freebsd"
-        && env::var("CARGO_CFG_TARGET_OS").unwrap() != "linux"
-        && env::var("CARGO_CFG_TARGET_OS").unwrap() != "openbsd"
-    {
-        return;
-    }
 
     let xkbcommon = probe_library("xkbcommon").unwrap();
 
