@@ -89,6 +89,10 @@ impl Application {
         }
         locale
     }
+
+    pub fn get_handle(&self) -> Option<AppHandle> {
+        None
+    }
 }
 
 impl crate::platform::linux::ApplicationExt for crate::Application {
@@ -96,5 +100,17 @@ impl crate::platform::linux::ApplicationExt for crate::Application {
         crate::Clipboard(Clipboard {
             selection: gtk::gdk::SELECTION_PRIMARY,
         })
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct AppHandle;
+
+impl AppHandle {
+    pub fn run_on_main<F>(&self, _callback: F)
+    where
+        F: FnOnce(&mut dyn AppHandler) + Send + 'static,
+    {
+        todo!()
     }
 }

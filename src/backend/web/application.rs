@@ -40,4 +40,20 @@ impl Application {
             .and_then(|w| w.navigator().language())
             .unwrap_or_else(|| "en-US".into())
     }
+
+    pub fn get_handle(&self) -> Option<AppHandle> {
+        None
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct AppHandle;
+
+impl AppHandle {
+    pub fn run_on_main<F>(&self, _callback: F)
+    where
+        F: FnOnce(&mut dyn AppHandler) + Send + 'static,
+    {
+        todo!()
+    }
 }

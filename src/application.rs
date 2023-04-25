@@ -44,7 +44,8 @@ pub trait AppHandler {
 
 /// The top level application object.
 ///
-/// This can be thought of as a reference and it can be safely cloned.
+/// This can be thought of as a reference and it can be safely cloned. However, this reference is
+/// not thread-safe; instead, use [Application::get_handle] to get a thread-safe handle.
 #[derive(Clone)]
 pub struct Application {
     pub(crate) backend_app: backend::Application,
@@ -99,6 +100,7 @@ impl Application {
     /// For a non-panicking function use [`try_global`].
     ///
     /// This function will also panic if called from a non-main thread.
+    /// Use [AppHandle] instead.
     ///
     /// [`new`]: #method.new
     /// [`run`]: #method.run
@@ -183,4 +185,32 @@ impl Application {
     pub fn get_locale() -> String {
         backend::Application::get_locale()
     }
+
+    /// Get a handle that can be used to schedule tasks on the application loop.
+    pub fn get_handle(&self) -> Option<AppHandle> {
+        self.backend_app.get_handle().map(AppHandle)
+    }
+}
+
+/// A handle that can enqueue tasks on the application loop.
+#[derive(Clone)]
+pub struct AppHandle(backend::AppHandle);
+
+impl AppHandle {
+    pub fn run_on_main<F>(&self, callback: F)
+    where
+        F: FnOnce(&mut dyn AppHandler) + Send + 'static,
+    {
+        self.0.run_on_main(callback)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    use static_assertions as sa;
+
+    sa::assert_not_impl_any!(Application: Send, Sync);
+    sa::assert_impl_all!(AppHandle: Send, Sync);
 }

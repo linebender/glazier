@@ -118,6 +118,10 @@ impl Application {
             locale
         }
     }
+
+    pub fn get_handle(&self) -> Option<AppHandle> {
+        None
+    }
 }
 
 impl crate::platform::mac::ApplicationExt for crate::Application {
@@ -139,6 +143,18 @@ impl crate::platform::mac::ApplicationExt for crate::Application {
         unsafe {
             NSApp().setMainMenu_(menu.0.menu);
         }
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct AppHandle;
+
+impl AppHandle {
+    pub fn run_on_main<F>(&self, _callback: F)
+    where
+        F: FnOnce(&mut dyn AppHandler) + Send + 'static,
+    {
+        todo!()
     }
 }
 
