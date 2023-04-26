@@ -199,7 +199,7 @@ pub struct AppHandle(backend::AppHandle);
 impl AppHandle {
     pub fn run_on_main<F>(&self, callback: F)
     where
-        F: FnOnce(&mut dyn AppHandler) + Send + 'static,
+        F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
     {
         self.0.run_on_main(callback)
     }

@@ -797,7 +797,7 @@ impl crate::platform::linux::ApplicationExt for crate::Application {
 impl AppHandle {
     pub fn run_on_main<F>(&self, _callback: F)
     where
-        F: FnOnce(&mut dyn AppHandler) + Send + 'static,
+        F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
     {
         todo!()
     }
