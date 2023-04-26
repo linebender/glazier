@@ -164,9 +164,7 @@ impl crate::platform::mac::ApplicationExt for crate::Application {
     }
 }
 
-struct MainThreadCb {
-    func: Box<dyn FnOnce(Option<&mut dyn AppHandler>) + Send + 'static>,
-}
+type MainThreadCb = Box<dyn FnOnce(Option<&mut dyn AppHandler>) + Send>;
 
 #[derive(Clone)]
 pub(crate) struct AppHandle {
@@ -194,9 +192,7 @@ impl AppHandle {
             }
         }
 
-        queue.push(MainThreadCb {
-            func: Box::new(callback),
-        });
+        queue.push(Box::new(callback));
     }
 }
 
@@ -277,7 +273,7 @@ extern "C" fn run_on_main_queue(this: &mut Object, _: Sel) {
             mem::take::<Vec<_>>(&mut lock)
         };
         for cb in queue {
-            (cb.func)(match state.handler.as_mut() {
+            cb(match state.handler.as_mut() {
                 Some(handler) => Some(handler.as_mut()),
                 None => None,
             });
