@@ -92,8 +92,8 @@ impl Counter {
 
     /// Return the next value, as a `NonZeroU64`.
     pub fn next_nonzero(&self) -> NonZeroU64 {
-        // safe because our initial value is 1 and can only be incremented.
-        unsafe { NonZeroU64::new_unchecked(self.0.fetch_add(1, Ordering::Relaxed)) }
+        // unwrap won't happen because our initial value is 1 and can only be incremented.
+        NonZeroU64::new(self.0.fetch_add(1, Ordering::Relaxed)).unwrap()
     }
 }
 
