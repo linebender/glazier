@@ -18,9 +18,7 @@
 
 use std::cell::RefCell;
 use std::ffi::c_void;
-use std::mem;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex, Weak};
 
 use cocoa::appkit::{NSApp, NSApplication, NSApplicationActivationPolicyRegular};
 use cocoa::base::{id, nil, NO, YES};
@@ -31,6 +29,7 @@ use objc::runtime::{Class, Object, Sel};
 use objc::{class, msg_send, sel, sel_impl};
 
 use crate::application::AppHandler;
+use crate::common_util::{shared_queue, SharedDequeuer, SharedEnqueuer};
 
 use super::clipboard::Clipboard;
 use super::error::Error;
@@ -64,7 +63,7 @@ impl Application {
             let () = msg_send![delegate, init];
             let delegate_state = DelegateState {
                 handler: None,
-                run_on_main_queue: Arc::new(Mutex::new(vec![])),
+                run_on_main_queue: shared_queue(),
             };
             let delegate_state_ptr = Box::into_raw(Box::new(delegate_state));
             (*delegate).set_ivar(APP_DELEGATE_STATE_IVAR, delegate_state_ptr as *mut c_void);
@@ -137,7 +136,7 @@ impl Application {
         let delegate = unsafe { DelegateState::from_delegate(&mut *self.delegate) };
 
         Some(AppHandle {
-            main_cb_queue: Arc::downgrade(&delegate.run_on_main_queue),
+            enqueuer: delegate.run_on_main_queue.0.clone(),
         })
     }
 }
@@ -168,7 +167,7 @@ type MainThreadCb = Box<dyn FnOnce(Option<&mut dyn AppHandler>) + Send>;
 
 #[derive(Clone)]
 pub(crate) struct AppHandle {
-    main_cb_queue: Weak<Mutex<Vec<MainThreadCb>>>,
+    enqueuer: SharedEnqueuer<MainThreadCb>,
 }
 
 impl AppHandle {
@@ -176,12 +175,7 @@ impl AppHandle {
     where
         F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
     {
-        let Some(queue) = self.main_cb_queue.upgrade() else {
-            return;
-        };
-        let mut queue = queue.lock().expect("queue lock");
-
-        if queue.is_empty() {
+        if self.enqueuer.is_empty() {
             unsafe {
                 let nsapp = NSApp();
                 let delegate: id = msg_send![nsapp, delegate];
@@ -192,13 +186,13 @@ impl AppHandle {
             }
         }
 
-        queue.push(Box::new(callback));
+        self.enqueuer.enqueue(Box::new(callback));
     }
 }
 
 struct DelegateState {
     handler: Option<Box<dyn AppHandler>>,
-    run_on_main_queue: Arc<Mutex<Vec<MainThreadCb>>>,
+    run_on_main_queue: (SharedEnqueuer<MainThreadCb>, SharedDequeuer<MainThreadCb>),
 }
 
 impl DelegateState {
@@ -265,14 +259,7 @@ extern "C" fn handle_menu_item(this: &mut Object, _: Sel, item: id) {
 extern "C" fn run_on_main_queue(this: &mut Object, _: Sel) {
     unsafe {
         let state = DelegateState::from_delegate(this);
-        let queue = {
-            let mut lock = state
-                .run_on_main_queue
-                .lock()
-                .expect("run on main thread queue");
-            mem::take::<Vec<_>>(&mut lock)
-        };
-        for cb in queue {
+        for cb in &mut state.run_on_main_queue.1 {
             cb(match state.handler.as_mut() {
                 Some(handler) => Some(handler.as_mut()),
                 None => None,

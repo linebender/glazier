@@ -17,12 +17,13 @@
 use std::cell::Cell;
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::TryRecvError;
+use std::sync::{mpsc, Arc, RwLock};
 use std::time::Duration;
 
 use instant::Instant;
 
 use crate::kurbo::Point;
-use crate::WinHandler;
 
 // This is the default timing on windows.
 const MULTI_CLICK_INTERVAL: Duration = Duration::from_millis(500);
@@ -50,14 +51,73 @@ pub fn strip_access_key(raw_menu_text: &str) -> String {
     result
 }
 
-/// A trait for implementing the boxed callback hack.
-pub(crate) trait IdleCallback: Send {
-    fn call(self: Box<Self>, a: &mut dyn WinHandler);
+/// A sharable queue. Similar to a `std::sync::mpsc` channel, this queue is implmented as two types:
+/// [SharedEnqueuer] and [SharedDequeuer]. The enqueuer can be cloned, while the dequeuer cannot.
+/// The major difference between this and a channel is that the queue can be checked for emptiness.
+pub(crate) fn shared_queue<T>() -> (SharedEnqueuer<T>, SharedDequeuer<T>) {
+    let (sender, receiver) = mpsc::channel();
+    let empty_flag = Arc::new(RwLock::new(true));
+
+    (
+        SharedEnqueuer {
+            sender,
+            empty_flag: Arc::clone(&empty_flag),
+        },
+        SharedDequeuer {
+            receiver,
+            empty_flag,
+        },
+    )
 }
 
-impl<F: FnOnce(&mut dyn WinHandler) + Send> IdleCallback for F {
-    fn call(self: Box<F>, a: &mut dyn WinHandler) {
-        (*self)(a)
+/// A reference to a [SharedQueue] that lets you enqueue callbacks.
+pub(crate) struct SharedEnqueuer<T> {
+    sender: mpsc::Sender<T>,
+    empty_flag: Arc<RwLock<bool>>,
+}
+
+impl<T> SharedEnqueuer<T> {
+    pub(crate) fn enqueue(&self, t: T) {
+        self.sender.send(t).unwrap();
+        *self.empty_flag.write().unwrap() = false;
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.empty_flag.read().unwrap().clone()
+    }
+}
+
+impl<T> Clone for SharedEnqueuer<T> {
+    fn clone(&self) -> Self {
+        Self {
+            sender: self.sender.clone(),
+            empty_flag: Arc::clone(&self.empty_flag),
+        }
+    }
+}
+
+pub(crate) struct SharedDequeuer<T> {
+    receiver: mpsc::Receiver<T>,
+    empty_flag: Arc<RwLock<bool>>,
+}
+
+impl<T> SharedDequeuer<T> {
+    pub(crate) fn try_dequeue(&self) -> Option<T> {
+        let result = self.receiver.try_recv();
+
+        if matches!(result, Err(TryRecvError::Empty)) {
+            *self.empty_flag.write().unwrap() = true;
+        }
+
+        result.ok()
+    }
+}
+
+impl<T> Iterator for SharedDequeuer<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.try_dequeue()
     }
 }
 
