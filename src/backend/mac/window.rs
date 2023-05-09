@@ -57,6 +57,7 @@ use super::keyboard::{make_modifiers, KeyboardState};
 use super::menu::Menu;
 use super::text_input::NSRange;
 use super::util::{assert_main_thread, make_nsstring};
+use crate::common_util::IdleCallback;
 use crate::dialog::{FileDialogOptions, FileDialogType};
 use crate::keyboard_types::KeyState;
 use crate::mouse::{Cursor, CursorDesc, MouseButton, MouseButtons, MouseEvent};
@@ -166,8 +167,6 @@ enum DeferredOp {
     SetSize(Size),
     SetPosition(Point),
 }
-
-type IdleCallback = Box<dyn for<'a> FnOnce(&'a mut dyn WinHandler) + Send>;
 
 /// This represents different Idle Callback Mechanism
 enum IdleKind {

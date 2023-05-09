@@ -23,6 +23,7 @@ use std::time::Duration;
 
 use instant::Instant;
 
+use crate::WinHandler;
 use crate::kurbo::Point;
 
 // This is the default timing on windows.
@@ -50,6 +51,8 @@ pub fn strip_access_key(raw_menu_text: &str) -> String {
     }
     result
 }
+
+pub(crate) type IdleCallback = Box<dyn for<'a> FnOnce(&'a mut dyn WinHandler) + Send>;
 
 /// A sharable queue. Similar to a `std::sync::mpsc` channel, this queue is implmented as two types:
 /// [SharedEnqueuer] and [SharedDequeuer]. The enqueuer can be cloned, while the dequeuer cannot.
@@ -96,6 +99,7 @@ impl<T> Clone for SharedEnqueuer<T> {
     }
 }
 
+/// A reference to a [SharedQueue] that lets you dequeue and consume callbacks.
 pub(crate) struct SharedDequeuer<T> {
     receiver: mpsc::Receiver<T>,
     empty_flag: Arc<RwLock<bool>>,

@@ -207,7 +207,7 @@ pub struct IdleHandle {
 
 /// This represents different Idle Callback Mechanism
 enum IdleKind {
-    Callback(Box<dyn IdleCallback>),
+    Callback(IdleCallback),
     Token(IdleToken),
 }
 
@@ -1159,7 +1159,7 @@ impl WndProc for MyWndProc {
                     let queue = self.handle.borrow().take_idle_queue();
                     for callback in queue {
                         match callback {
-                            IdleKind::Callback(it) => it.call(&mut *s.handler),
+                            IdleKind::Callback(it) => it(&mut *s.handler),
                             IdleKind::Token(token) => s.handler.idle(token),
                         }
                     }
