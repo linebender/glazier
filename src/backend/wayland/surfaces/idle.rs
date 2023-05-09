@@ -3,7 +3,7 @@ use crate::window;
 
 /// This represents different Idle Callback Mechanism
 pub(super) enum Kind {
-    Callback(Box<dyn IdleCallback>),
+    Callback(IdleCallback),
     Token(window::IdleToken),
 }
 
@@ -51,7 +51,7 @@ pub(crate) fn run(state: &Handle, winhandle: &mut dyn window::WinHandler) {
     let queue: Vec<_> = std::mem::take(&mut state.queue.lock().unwrap());
     for item in queue {
         match item {
-            Kind::Callback(it) => it.call(winhandle),
+            Kind::Callback(it) => it(winhandle),
             Kind::Token(it) => winhandle.idle(it),
         }
     }

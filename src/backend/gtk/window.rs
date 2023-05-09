@@ -168,7 +168,7 @@ pub struct IdleHandle {
 
 /// This represents different Idle Callback Mechanism
 enum IdleKind {
-    Callback(Box<dyn IdleCallback>),
+    Callback(IdleCallback),
     Token(IdleToken),
 }
 
@@ -1369,7 +1369,7 @@ fn run_idle(state: &Arc<WindowState>) -> Continue {
 
         for item in queue {
             match item {
-                IdleKind::Callback(it) => it.call(handler),
+                IdleKind::Callback(it) => it(handler),
                 IdleKind::Token(it) => handler.idle(it),
             }
         }

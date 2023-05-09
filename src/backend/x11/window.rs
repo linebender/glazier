@@ -914,7 +914,7 @@ impl Window {
             for callback in queue {
                 match callback {
                     IdleKind::Callback(f) => {
-                        f.call(handler);
+                        f(handler);
                     }
                     IdleKind::Token(tok) => {
                         handler.idle(tok);
@@ -1023,7 +1023,7 @@ pub struct IdleHandle {
 }
 
 pub(crate) enum IdleKind {
-    Callback(Box<dyn IdleCallback>),
+    Callback(IdleCallback),
     Token(IdleToken),
     Redraw,
 }
