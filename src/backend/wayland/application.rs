@@ -578,7 +578,7 @@ impl Seat {
 }
 
 #[derive(Clone)]
-pub(crate) struct AppHandle;
+pub struct AppHandle;
 
 impl AppHandle {
     pub fn run_on_main<F>(&self, _callback: F)

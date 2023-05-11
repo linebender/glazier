@@ -68,6 +68,7 @@ pub(crate) type IdleCallback = Box<dyn for<'a> FnOnce(&'a mut dyn WinHandler) + 
 /// * The dequeuer can only be polled to dequeue items. There is no blocking receive.
 /// * The enqueuer can indicate when when the queue transitions from empty to non-empty, signaling
 ///   you wake the dequeue loop.
+#[allow(dead_code)]
 pub(crate) fn shared_queue<T>() -> (SharedEnqueuer<T>, SharedDequeuer<T>) {
     let (sender, receiver) = mpsc::channel();
     let empty_flag = Arc::new(Mutex::new(true));
@@ -84,7 +85,8 @@ pub(crate) fn shared_queue<T>() -> (SharedEnqueuer<T>, SharedDequeuer<T>) {
     )
 }
 
-/// A reference to a [SharedQueue] that lets you enqueue callbacks.
+/// A reference to a [`shared_queue`] that lets you enqueue callbacks.
+#[allow(dead_code)]
 pub(crate) struct SharedEnqueuer<T> {
     // NOTE: All sends must be done with the `empty_flag` lock held and updated.
     sender: mpsc::Sender<T>,
@@ -117,7 +119,8 @@ impl<T> Clone for SharedEnqueuer<T> {
     }
 }
 
-/// A reference to a [SharedQueue] that lets you dequeue and consume callbacks.
+/// A reference to a [`shared_queue`] that lets you dequeue and consume callbacks.
+#[allow(dead_code)]
 pub(crate) struct SharedDequeuer<T> {
     // NOTE: All recieves must be done with the `empty_flag` lock held and updated.
     receiver: mpsc::Receiver<T>,
