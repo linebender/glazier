@@ -249,7 +249,9 @@ impl AppHandle {
     where
         F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
     {
-        if self.enqueuer.is_empty() {
+        let needs_wake = self.enqueuer.enqueue(Box::new(callback));
+
+        if needs_wake {
             unsafe {
                 PostThreadMessageW(
                     self.main_thread_id,
@@ -259,7 +261,5 @@ impl AppHandle {
                 );
             }
         }
-
-        self.enqueuer.enqueue(Box::new(callback));
     }
 }

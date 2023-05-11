@@ -18,13 +18,13 @@ use std::cell::Cell;
 use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::TryRecvError;
-use std::sync::{mpsc, Arc, RwLock};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use instant::Instant;
 
-use crate::WinHandler;
 use crate::kurbo::Point;
+use crate::WinHandler;
 
 // This is the default timing on windows.
 const MULTI_CLICK_INTERVAL: Duration = Duration::from_millis(500);
@@ -55,11 +55,22 @@ pub fn strip_access_key(raw_menu_text: &str) -> String {
 pub(crate) type IdleCallback = Box<dyn for<'a> FnOnce(&'a mut dyn WinHandler) + Send>;
 
 /// A sharable queue. Similar to a `std::sync::mpsc` channel, this queue is implmented as two types:
-/// [SharedEnqueuer] and [SharedDequeuer]. The enqueuer can be cloned, while the dequeuer cannot.
-/// The major difference between this and a channel is that the queue can be checked for emptiness.
+/// [`SharedEnqueuer`] and [`SharedDequeuer`].
+///
+/// # Comparison to `std::sync::mpsc::channel`
+///
+/// Similarities:
+/// * The enqueuer is like a channel's `Sender` and the dequeuer is like a channel's `Receiver`.
+/// * The enqueuer can be cloned and the dequeuer cannot be cloned.
+/// * The queue is unbounded.
+///
+/// Differences:
+/// * The dequeuer can only be polled to dequeue items. There is no blocking receive.
+/// * The enqueuer can indicate when when the queue transitions from empty to non-empty, signaling
+///   you wake the dequeue loop.
 pub(crate) fn shared_queue<T>() -> (SharedEnqueuer<T>, SharedDequeuer<T>) {
     let (sender, receiver) = mpsc::channel();
-    let empty_flag = Arc::new(RwLock::new(true));
+    let empty_flag = Arc::new(Mutex::new(true));
 
     (
         SharedEnqueuer {
@@ -75,18 +86,25 @@ pub(crate) fn shared_queue<T>() -> (SharedEnqueuer<T>, SharedDequeuer<T>) {
 
 /// A reference to a [SharedQueue] that lets you enqueue callbacks.
 pub(crate) struct SharedEnqueuer<T> {
+    // NOTE: All sends must be done with the `empty_flag` lock held and updated.
     sender: mpsc::Sender<T>,
-    empty_flag: Arc<RwLock<bool>>,
+    empty_flag: Arc<Mutex<bool>>,
 }
 
 impl<T> SharedEnqueuer<T> {
-    pub(crate) fn enqueue(&self, t: T) {
-        self.sender.send(t).unwrap();
-        *self.empty_flag.write().unwrap() = false;
-    }
+    /// Adds a value to the queue. Returns `true` if the queue was empty before the value was added.
+    /// This should be used to wake the dequeuer.
+    #[must_use]
+    pub(crate) fn enqueue(&self, t: T) -> bool {
+        // Lock the empty flag before we send, otherwise it might become out of sync.
+        let mut empty_flag = self.empty_flag.lock().unwrap();
 
-    pub(crate) fn is_empty(&self) -> bool {
-        self.empty_flag.read().unwrap().clone()
+        self.sender.send(t).unwrap();
+
+        let was_empty = *empty_flag;
+        *empty_flag = false;
+
+        was_empty
     }
 }
 
@@ -101,16 +119,20 @@ impl<T> Clone for SharedEnqueuer<T> {
 
 /// A reference to a [SharedQueue] that lets you dequeue and consume callbacks.
 pub(crate) struct SharedDequeuer<T> {
+    // NOTE: All recieves must be done with the `empty_flag` lock held and updated.
     receiver: mpsc::Receiver<T>,
-    empty_flag: Arc<RwLock<bool>>,
+    empty_flag: Arc<Mutex<bool>>,
 }
 
 impl<T> SharedDequeuer<T> {
     pub(crate) fn try_dequeue(&self) -> Option<T> {
+        // Lock the empty flag before we receive, otherwise it might become out of sync.
+        let mut empty_flag = self.empty_flag.lock().unwrap();
+
         let result = self.receiver.try_recv();
 
         if matches!(result, Err(TryRecvError::Empty)) {
-            *self.empty_flag.write().unwrap() = true;
+            *empty_flag = true;
         }
 
         result.ok()

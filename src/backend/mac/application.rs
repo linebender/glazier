@@ -175,7 +175,9 @@ impl AppHandle {
     where
         F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
     {
-        if self.enqueuer.is_empty() {
+        let needs_wake = self.enqueuer.enqueue(Box::new(callback));
+
+        if needs_wake {
             unsafe {
                 let nsapp = NSApp();
                 let delegate: id = msg_send![nsapp, delegate];
@@ -185,8 +187,6 @@ impl AppHandle {
                     waitUntilDone: NO];
             }
         }
-
-        self.enqueuer.enqueue(Box::new(callback));
     }
 }
 
