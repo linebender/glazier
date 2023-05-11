@@ -96,6 +96,7 @@ pub(crate) struct SharedEnqueuer<T> {
 impl<T> SharedEnqueuer<T> {
     /// Adds a value to the queue. Returns `true` if the queue was empty before the value was added.
     /// This should be used to wake the dequeuer.
+    #[allow(dead_code)]
     #[must_use]
     pub(crate) fn enqueue(&self, t: T) -> bool {
         // Lock the empty flag before we send, otherwise it might become out of sync.
@@ -128,6 +129,7 @@ pub(crate) struct SharedDequeuer<T> {
 }
 
 impl<T> SharedDequeuer<T> {
+    #[allow(dead_code)]
     pub(crate) fn try_dequeue(&self) -> Option<T> {
         // Lock the empty flag before we receive, otherwise it might become out of sync.
         let mut empty_flag = self.empty_flag.lock().unwrap();
