@@ -19,7 +19,9 @@ use std::collections::HashSet;
 use std::mem;
 use std::ptr;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use once_cell::race::OnceRef;
 
 use winapi::shared::minwindef::{DWORD, FALSE, HINSTANCE};
 use winapi::shared::ntdef::LPCWSTR;
@@ -59,8 +61,6 @@ struct State {
 
 /// Used to ensure the window class is registered only once per process.
 static WINDOW_CLASS_REGISTERED: AtomicBool = AtomicBool::new(false);
-
-static MSG_RUN_MAIN_CB_QUEUE: AtomicU32 = AtomicU32::new(0);
 
 impl Application {
     pub fn new() -> Result<Application, Error> {
@@ -111,11 +111,6 @@ impl Application {
                 panic!("Error registering class");
             }
         }
-        if MSG_RUN_MAIN_CB_QUEUE.load(Ordering::Relaxed) == 0 {
-            let msg_id =
-                unsafe { RegisterWindowMessageW("GlazierRunMainCbQueue\0".to_wide().as_ptr()) };
-            MSG_RUN_MAIN_CB_QUEUE.store(msg_id, Ordering::Relaxed);
-        }
         Ok(())
     }
 
@@ -129,7 +124,7 @@ impl Application {
 
     pub fn run(self, mut handler: Option<Box<dyn AppHandler>>) {
         unsafe {
-            let run_main_cb_queue_msg_id = MSG_RUN_MAIN_CB_QUEUE.load(Ordering::Relaxed);
+            let run_main_cb_queue_msg_id = WM_RUN_MAIN_CB_QUEUE.get();
 
             // Handle windows messages.
             //
@@ -253,12 +248,7 @@ impl AppHandle {
 
         if needs_wake {
             unsafe {
-                PostThreadMessageW(
-                    self.main_thread_id,
-                    MSG_RUN_MAIN_CB_QUEUE.load(Ordering::Relaxed),
-                    0,
-                    0,
-                );
+                PostThreadMessageW(self.main_thread_id, WM_RUN_MAIN_CB_QUEUE.get(), 0, 0);
             }
         }
     }
