@@ -100,7 +100,7 @@ impl Application {
     /// For a non-panicking function use [`try_global`].
     ///
     /// This function will also panic if called from a non-main thread.
-    /// Use [AppHandle] instead.
+    /// Use [`AppHandle`] instead.
     ///
     /// [`new`]: #method.new
     /// [`run`]: #method.run
