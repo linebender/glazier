@@ -45,7 +45,7 @@ pub trait AppHandler {
 /// The top level application object.
 ///
 /// This can be thought of as a reference and it can be safely cloned. However, this reference is
-/// not thread-safe; instead, use [Application::get_handle] to get a thread-safe handle.
+/// not thread-safe; instead, use [`Application::get_handle`] to get a thread-safe handle.
 #[derive(Clone)]
 pub struct Application {
     pub(crate) backend_app: backend::Application,
