@@ -1,5 +1,6 @@
 use once_cell::race::OnceBox;
 use winapi::shared::minwindef::UINT;
+use winapi::um::winuser::RegisterWindowMessageW;
 
 pub(crate) static WM_RUN_MAIN_CB_QUEUE: LazyMsg = LazyMsg::new("WM_RUN_MAIN_CB_QUEUE");
 

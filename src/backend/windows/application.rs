@@ -21,8 +21,6 @@ use std::ptr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use once_cell::race::OnceRef;
-
 use winapi::shared::minwindef::{DWORD, FALSE, HINSTANCE};
 use winapi::shared::ntdef::LPCWSTR;
 use winapi::shared::windef::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, HCURSOR, HWND};
@@ -32,7 +30,6 @@ use winapi::um::processthreadsapi::GetCurrentThreadId;
 use winapi::um::shellscalingapi::PROCESS_PER_MONITOR_DPI_AWARE;
 use winapi::um::winnls::GetUserDefaultLocaleName;
 use winapi::um::winnt::LOCALE_NAME_MAX_LENGTH;
-use winapi::um::winuser::RegisterWindowMessageW;
 use winapi::um::winuser::{
     DispatchMessageW, GetAncestor, GetMessageW, LoadIconW, PeekMessageW, PostMessageW,
     PostQuitMessage, PostThreadMessageW, RegisterClassW, TranslateAcceleratorW, TranslateMessage,
@@ -45,6 +42,7 @@ use crate::common_util::{shared_queue, SharedDequeuer, SharedEnqueuer};
 use super::accels;
 use super::clipboard::Clipboard;
 use super::error::Error;
+use super::msgs::WM_RUN_MAIN_CB_QUEUE;
 use super::util::{self, FromWide, ToWide, CLASS_NAME, OPTIONAL_FUNCTIONS};
 use super::window::{self, DS_REQUEST_DESTROY};
 
