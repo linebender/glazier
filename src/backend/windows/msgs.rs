@@ -2,6 +2,8 @@ use once_cell::race::OnceBox;
 use winapi::shared::minwindef::UINT;
 use winapi::um::winuser::RegisterWindowMessageW;
 
+use super::util::ToWide;
+
 pub(crate) static WM_RUN_MAIN_CB_QUEUE: LazyMsg = LazyMsg::new("WM_RUN_MAIN_CB_QUEUE");
 
 pub(crate) struct LazyMsg {
@@ -22,6 +24,6 @@ impl LazyMsg {
     pub fn get(&self) -> UINT {
         *self
             .msg
-            .get_or_init(|| unsafe { RegisterWindowMessageW(self.name.to_wide().as_ptr()) })
+            .get_or_init(|| Box::new(unsafe { RegisterWindowMessageW(self.name.to_wide().as_ptr()) }))
     }
 }
