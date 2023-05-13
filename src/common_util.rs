@@ -95,7 +95,7 @@ pub(crate) struct SharedEnqueuer<T> {
 
 impl<T> SharedEnqueuer<T> {
     /// Adds a value to the queue. Returns `true` if the queue was empty before the value was added.
-    /// This should be used to wake the dequeuer.
+    /// In this case, you need to wake the dequeuer.
     #[allow(dead_code)]
     #[must_use]
     pub(crate) fn enqueue(&self, t: T) -> bool {
