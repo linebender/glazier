@@ -22,8 +22,8 @@ impl LazyMsg {
     }
 
     pub fn get(&self) -> UINT {
-        *self
-            .msg
-            .get_or_init(|| Box::new(unsafe { RegisterWindowMessageW(self.name.to_wide().as_ptr()) }))
+        *self.msg.get_or_init(|| {
+            Box::new(unsafe { RegisterWindowMessageW(self.name.to_wide().as_ptr()) })
+        })
     }
 }
