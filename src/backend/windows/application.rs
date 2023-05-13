@@ -21,25 +21,28 @@ use std::ptr;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use winapi::shared::minwindef::{FALSE, HINSTANCE};
+use winapi::shared::minwindef::{DWORD, FALSE, HINSTANCE};
 use winapi::shared::ntdef::LPCWSTR;
 use winapi::shared::windef::{DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, HCURSOR, HWND};
 use winapi::shared::winerror::HRESULT_FROM_WIN32;
 use winapi::um::errhandlingapi::GetLastError;
+use winapi::um::processthreadsapi::GetCurrentThreadId;
 use winapi::um::shellscalingapi::PROCESS_PER_MONITOR_DPI_AWARE;
 use winapi::um::winnls::GetUserDefaultLocaleName;
 use winapi::um::winnt::LOCALE_NAME_MAX_LENGTH;
 use winapi::um::winuser::{
     DispatchMessageW, GetAncestor, GetMessageW, LoadIconW, PeekMessageW, PostMessageW,
-    PostQuitMessage, RegisterClassW, TranslateAcceleratorW, TranslateMessage, GA_ROOT,
-    IDI_APPLICATION, MSG, PM_NOREMOVE, WM_TIMER, WNDCLASSW,
+    PostQuitMessage, PostThreadMessageW, RegisterClassW, TranslateAcceleratorW, TranslateMessage,
+    GA_ROOT, IDI_APPLICATION, MSG, PM_NOREMOVE, WM_TIMER, WNDCLASSW,
 };
 
 use crate::application::AppHandler;
+use crate::common_util::{shared_queue, SharedDequeuer, SharedEnqueuer};
 
 use super::accels;
 use super::clipboard::Clipboard;
 use super::error::Error;
+use super::msgs::WM_RUN_MAIN_CB_QUEUE;
 use super::util::{self, FromWide, ToWide, CLASS_NAME, OPTIONAL_FUNCTIONS};
 use super::window::{self, DS_REQUEST_DESTROY};
 
@@ -51,6 +54,7 @@ pub(crate) struct Application {
 struct State {
     quitting: bool,
     windows: HashSet<HWND>,
+    main_thread_cb_queue: (SharedEnqueuer<MainThreadCb>, SharedDequeuer<MainThreadCb>),
 }
 
 /// Used to ensure the window class is registered only once per process.
@@ -62,6 +66,7 @@ impl Application {
         let state = Rc::new(RefCell::new(State {
             quitting: false,
             windows: HashSet::new(),
+            main_thread_cb_queue: shared_queue(),
         }));
         Ok(Application { state })
     }
@@ -115,8 +120,10 @@ impl Application {
         self.state.borrow_mut().windows.remove(&hwnd)
     }
 
-    pub fn run(self, _handler: Option<Box<dyn AppHandler>>) {
+    pub fn run(self, mut handler: Option<Box<dyn AppHandler>>) {
         unsafe {
+            let run_main_cb_queue_msg_id = WM_RUN_MAIN_CB_QUEUE.get();
+
             // Handle windows messages.
             //
             // NOTE: Code here will not run when we aren't in charge of the message loop. That
@@ -146,6 +153,16 @@ impl Application {
                     break;
                 }
                 let mut msg: MSG = msg.assume_init();
+
+                if msg.message == run_main_cb_queue_msg_id {
+                    for cb in &mut self.state.borrow_mut().main_thread_cb_queue.1 {
+                        cb(match handler.as_mut() {
+                            Some(handler) => Some(handler.as_mut()),
+                            None => None,
+                        });
+                    }
+                }
+
                 let accels = accels::find_accels(GetAncestor(msg.hwnd, GA_ROOT));
                 let translated = accels.map_or(false, |it| {
                     TranslateAcceleratorW(msg.hwnd, it.handle(), &mut msg) != 0
@@ -202,5 +219,35 @@ impl Application {
             tracing::warn!("Failed to get user locale");
             "en-US".into()
         })
+    }
+
+    pub fn get_handle(&self) -> Option<AppHandle> {
+        Some(AppHandle {
+            main_thread_id: unsafe { GetCurrentThreadId() },
+            enqueuer: self.state.borrow().main_thread_cb_queue.0.clone(),
+        })
+    }
+}
+
+type MainThreadCb = Box<dyn FnOnce(Option<&mut dyn AppHandler>) + Send>;
+
+#[derive(Clone)]
+pub(crate) struct AppHandle {
+    main_thread_id: DWORD,
+    enqueuer: SharedEnqueuer<MainThreadCb>,
+}
+
+impl AppHandle {
+    pub fn run_on_main<F>(&self, callback: F)
+    where
+        F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
+    {
+        let needs_wake = self.enqueuer.enqueue(Box::new(callback));
+
+        if needs_wake {
+            unsafe {
+                PostThreadMessageW(self.main_thread_id, WM_RUN_MAIN_CB_QUEUE.get(), 0, 0);
+            }
+        }
     }
 }

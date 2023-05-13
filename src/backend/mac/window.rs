@@ -170,7 +170,7 @@ enum DeferredOp {
 
 /// This represents different Idle Callback Mechanism
 enum IdleKind {
-    Callback(Box<dyn IdleCallback>),
+    Callback(IdleCallback),
     Token(IdleToken),
     DeferredOp(DeferredOp),
 }
@@ -1040,7 +1040,7 @@ extern "C" fn run_idle(this: &mut Object, _: Sel) {
     let queue: Vec<_> = mem::take(&mut view_state.idle_queue.lock().expect("queue"));
     for item in queue {
         match item {
-            IdleKind::Callback(it) => it.call(&mut *view_state.handler),
+            IdleKind::Callback(it) => it(&mut *view_state.handler),
             IdleKind::Token(it) => {
                 view_state.handler.as_mut().idle(it);
             }

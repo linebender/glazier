@@ -29,16 +29,18 @@ use objc::runtime::{Class, Object, Sel};
 use objc::{class, msg_send, sel, sel_impl};
 
 use crate::application::AppHandler;
+use crate::common_util::{shared_queue, SharedDequeuer, SharedEnqueuer};
 
 use super::clipboard::Clipboard;
 use super::error::Error;
 use super::util;
 
-static APP_HANDLER_IVAR: &str = "druidAppHandler";
+static APP_DELEGATE_STATE_IVAR: &str = "glazierDelegateState";
 
 #[derive(Clone)]
 pub(crate) struct Application {
     ns_app: id,
+    delegate: id,
     state: Rc<RefCell<State>>,
 }
 
@@ -56,19 +58,30 @@ impl Application {
             let ns_app = NSApp();
             let state = Rc::new(RefCell::new(State { quitting: false }));
 
-            Ok(Application { ns_app, state })
+            // Initialize the application delegate
+            let delegate: id = msg_send![APP_DELEGATE.0, alloc];
+            let () = msg_send![delegate, init];
+            let delegate_state = DelegateState {
+                handler: None,
+                run_on_main_queue: shared_queue(),
+            };
+            let delegate_state_ptr = Box::into_raw(Box::new(delegate_state));
+            (*delegate).set_ivar(APP_DELEGATE_STATE_IVAR, delegate_state_ptr as *mut c_void);
+            let () = msg_send![ns_app, setDelegate: delegate];
+
+            Ok(Application {
+                ns_app,
+                delegate,
+                state,
+            })
         }
     }
 
     pub fn run(self, handler: Option<Box<dyn AppHandler>>) {
         unsafe {
-            // Initialize the application delegate
-            let delegate: id = msg_send![APP_DELEGATE.0, alloc];
-            let () = msg_send![delegate, init];
-            let state = DelegateState { handler };
-            let state_ptr = Box::into_raw(Box::new(state));
-            (*delegate).set_ivar(APP_HANDLER_IVAR, state_ptr as *mut c_void);
-            let () = msg_send![self.ns_app, setDelegate: delegate];
+            let state_ptr = *(*self.delegate).get_ivar::<*mut c_void>(APP_DELEGATE_STATE_IVAR)
+                as *mut DelegateState;
+            state_ptr.as_mut().expect("delegate state").handler = handler;
 
             // Run the main app loop
             self.ns_app.run();
@@ -118,6 +131,14 @@ impl Application {
             locale
         }
     }
+
+    pub fn get_handle(&self) -> Option<AppHandle> {
+        let delegate = unsafe { DelegateState::from_delegate(&mut *self.delegate) };
+
+        Some(AppHandle {
+            enqueuer: delegate.run_on_main_queue.0.clone(),
+        })
+    }
 }
 
 impl crate::platform::mac::ApplicationExt for crate::Application {
@@ -142,11 +163,44 @@ impl crate::platform::mac::ApplicationExt for crate::Application {
     }
 }
 
+type MainThreadCb = Box<dyn FnOnce(Option<&mut dyn AppHandler>) + Send>;
+
+#[derive(Clone)]
+pub(crate) struct AppHandle {
+    enqueuer: SharedEnqueuer<MainThreadCb>,
+}
+
+impl AppHandle {
+    pub fn run_on_main<F>(&self, callback: F)
+    where
+        F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
+    {
+        let needs_wake = self.enqueuer.enqueue(Box::new(callback));
+
+        if needs_wake {
+            unsafe {
+                let nsapp = NSApp();
+                let delegate: id = msg_send![nsapp, delegate];
+                let () = msg_send![delegate,
+                    performSelectorOnMainThread: sel!(runOnMainQueue)
+                    withObject: nil
+                    waitUntilDone: NO];
+            }
+        }
+    }
+}
+
 struct DelegateState {
     handler: Option<Box<dyn AppHandler>>,
+    run_on_main_queue: (SharedEnqueuer<MainThreadCb>, SharedDequeuer<MainThreadCb>),
 }
 
 impl DelegateState {
+    unsafe fn from_delegate(delegate: &mut Object) -> &mut Self {
+        let state: *mut c_void = *delegate.get_ivar(APP_DELEGATE_STATE_IVAR);
+        &mut *(state as *mut DelegateState)
+    }
+
     fn command(&mut self, command: u32) {
         if let Some(inner) = self.handler.as_mut() {
             inner.command(command)
@@ -162,7 +216,7 @@ lazy_static! {
     static ref APP_DELEGATE: AppDelegate = unsafe {
         let mut decl = ClassDecl::new("DruidAppDelegate", class!(NSObject))
             .expect("App Delegate definition failed");
-        decl.add_ivar::<*mut c_void>(APP_HANDLER_IVAR);
+        decl.add_ivar::<*mut c_void>(APP_DELEGATE_STATE_IVAR);
 
         decl.add_method(
             sel!(applicationDidFinishLaunching:),
@@ -173,6 +227,12 @@ lazy_static! {
             sel!(handleMenuItem:),
             handle_menu_item as extern "C" fn(&mut Object, Sel, id),
         );
+
+        decl.add_method(
+            sel!(runOnMainQueue),
+            run_on_main_queue as extern "C" fn(&mut Object, Sel),
+        );
+
         AppDelegate(decl.register())
     };
 }
@@ -191,8 +251,19 @@ extern "C" fn application_did_finish_launching(_this: &mut Object, _: Sel, _noti
 extern "C" fn handle_menu_item(this: &mut Object, _: Sel, item: id) {
     unsafe {
         let tag: isize = msg_send![item, tag];
-        let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
-        let inner = &mut *(inner as *mut DelegateState);
-        (*inner).command(tag as u32);
+        let state = DelegateState::from_delegate(this);
+        state.command(tag as u32);
+    }
+}
+
+extern "C" fn run_on_main_queue(this: &mut Object, _: Sel) {
+    unsafe {
+        let state = DelegateState::from_delegate(this);
+        for cb in &mut state.run_on_main_queue.1 {
+            cb(match state.handler.as_mut() {
+                Some(handler) => Some(handler.as_mut()),
+                None => None,
+            });
+        }
     }
 }

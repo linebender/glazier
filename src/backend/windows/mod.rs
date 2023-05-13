@@ -22,6 +22,7 @@ pub mod dialog;
 pub mod error;
 mod keyboard;
 pub mod menu;
+pub mod msgs;
 //pub mod paint;
 pub mod screen;
 mod timers;

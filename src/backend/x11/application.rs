@@ -227,6 +227,9 @@ pub(crate) struct Cursors {
     pub col_resize: Option<xproto::Cursor>,
 }
 
+#[derive(Clone)]
+pub(crate) struct AppHandle;
+
 impl Application {
     pub fn new() -> Result<Application, Error> {
         let inner = AppInner::new()?;
@@ -265,6 +268,10 @@ impl Application {
 
     pub fn get_locale() -> String {
         linux::env::locale()
+    }
+
+    pub fn get_handle(&self) -> Option<AppHandle> {
+        None
     }
 }
 
@@ -838,6 +845,15 @@ impl AppInner {
 impl crate::platform::linux::ApplicationExt for crate::Application {
     fn primary_clipboard(&self) -> crate::Clipboard {
         self.backend_app.inner.primary.clone().into()
+    }
+}
+
+impl AppHandle {
+    pub fn run_on_main<F>(&self, _callback: F)
+    where
+        F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
+    {
+        todo!()
     }
 }
 

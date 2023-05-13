@@ -299,12 +299,12 @@ impl Application {
                             seat.pointer = Some(pointer);
                         }
 
-                        // TODO: We should react to capability removal, 
-                        // "if a seat regains the pointer capability 
-                        // and a client has a previously obtained wl_pointer object 
-                        // of version 4 or less, that object may start sending pointer events again. 
-                        // This behavior is considered a misinterpretation of the intended behavior 
-                        // and must not be relied upon by the client", 
+                        // TODO: We should react to capability removal,
+                        // "if a seat regains the pointer capability
+                        // and a client has a previously obtained wl_pointer object
+                        // of version 4 or less, that object may start sending pointer events again.
+                        // This behavior is considered a misinterpretation of the intended behavior
+                        // and must not be relied upon by the client",
                         // versions 5 up guarantee that events will not be sent for sure
                     }
                     wl_seat::Event::Name { name } => {
@@ -407,6 +407,10 @@ impl Application {
 
     pub fn get_locale() -> String {
         linux::env::locale()
+    }
+
+    pub fn get_handle(&self) -> Option<AppHandle> {
+        None
     }
 }
 
@@ -570,5 +574,17 @@ impl Seat {
             keyboard: None,
             pointer: None,
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct AppHandle;
+
+impl AppHandle {
+    pub fn run_on_main<F>(&self, _callback: F)
+    where
+        F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
+    {
+        todo!()
     }
 }

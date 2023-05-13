@@ -105,7 +105,7 @@ pub struct IdleHandle {
 }
 
 enum IdleKind {
-    Callback(Box<dyn IdleCallback>),
+    Callback(IdleCallback),
     Token(IdleToken),
 }
 
@@ -151,7 +151,7 @@ impl WindowState {
         let mut queue = self.idle_queue.lock().expect("process_idle_queue");
         for item in queue.drain(..) {
             match item {
-                IdleKind::Callback(cb) => cb.call(&mut **self.handler.borrow_mut()),
+                IdleKind::Callback(cb) => cb(&mut **self.handler.borrow_mut()),
                 IdleKind::Token(tok) => self.handler.borrow_mut().idle(tok),
             }
         }
