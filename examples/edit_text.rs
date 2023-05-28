@@ -1,12 +1,12 @@
 use glazier::kurbo::Size;
 use glazier::{
-    keyboard_types::Key,
     text::{
         Action, Affinity, Direction, Event, HitTestPoint, InputHandler, Movement, Selection,
         VerticalMovement,
     },
     Application, KeyEvent, Region, Scalable, TextFieldToken, WinHandler, WindowHandle,
 };
+use glazier::{HotKey, SysMods};
 use parley::{FontContext, Layout};
 use std::any::Any;
 use std::borrow::Cow;
@@ -44,6 +44,28 @@ fn main() {
     app.run(None);
 }
 
+struct HotKeys {
+    copy: HotKey,
+    paste: HotKey,
+    select_all: HotKey,
+}
+
+impl HotKeys {
+    fn new() -> Self {
+        HotKeys {
+            copy: HotKey::new(SysMods::Cmd, "c"),
+            paste: HotKey::new(SysMods::Cmd, "v"),
+            select_all: HotKey::new(SysMods::Cmd, "a"),
+        }
+    }
+}
+
+impl Default for HotKeys {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 struct WindowState {
     handle: WindowHandle,
     render: RenderContext,
@@ -53,6 +75,7 @@ struct WindowState {
     size: Size,
     document: Rc<RefCell<DocumentState>>,
     text_input_token: Option<TextFieldToken>,
+    hotkeys: HotKeys,
 }
 
 struct DocumentState {
@@ -111,6 +134,7 @@ impl WindowState {
             scene: Default::default(),
             size: Size::new(800.0, 600.0),
             text_input_token: None,
+            hotkeys: Default::default(),
         }
     }
 
@@ -242,13 +266,42 @@ impl WinHandler for WindowState {
     }
 
     fn key_down(&mut self, event: KeyEvent) -> bool {
-        if event.key == Key::Character("c".to_string()) {
-            // custom hotkey for pressing "c"
-            println!("user pressed c! wow! setting selection to 0");
+        if self.hotkeys.copy.matches(&event) {
+            let doc = self.document.borrow_mut();
+            let text = &doc.text[doc.selection.range()];
+            Application::global().clipboard().put_string(text); // return true prevents the keypress event from being handled as text input
 
-            // update internal selection state
-            self.document.borrow_mut().selection = Selection::caret(0);
+            return true;
+        }
+        if self.hotkeys.paste.matches(&event) {
+            println!("Pasting");
+            let clipboard_contents = Application::global().clipboard().get_string();
+            if let Some(mut contents) = clipboard_contents {
+                contents.retain(|c| c != '\n');
+                {
+                    let mut doc = self.document.borrow_mut();
+                    let selection = doc.selection;
+                    doc.text.replace_range(selection.range(), &contents);
+                    let new_caret_index = selection.min() + contents.len();
+                    doc.selection = Selection::caret(new_caret_index);
+                    doc.refresh_layout();
+                    doc.composition = None;
+                }
+                // notify the OS that we've updated the selection
+                self.handle
+                    .update_text_field(self.text_input_token.unwrap(), Event::Reset);
 
+                // repaint window
+                self.handle.request_anim_frame();
+            }
+
+            return true;
+        }
+        if self.hotkeys.select_all.matches(&event) {
+            {
+                let mut doc = self.document.borrow_mut();
+                doc.selection = Selection::new(0, doc.text.len());
+            }
             // notify the OS that we've updated the selection
             self.handle
                 .update_text_field(self.text_input_token.unwrap(), Event::SelectionChanged);
