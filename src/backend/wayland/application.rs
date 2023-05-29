@@ -44,9 +44,8 @@ use wayland_client::{
     },
 };
 use wayland_cursor::CursorTheme;
-use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1;
-use wayland_protocols::xdg_shell::client::xdg_positioner::XdgPositioner;
-use wayland_protocols::xdg_shell::client::xdg_surface;
+use wayland_protocols::xdg::shell::client::xdg_positioner::XdgPositioner;
+use wayland_protocols::xdg::shell::client::xdg_surface;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Timer(backend::shared::Timer<u64>);

@@ -1,7 +1,7 @@
 //! This module contains functions for opening file dialogs using DBus.
 
 use ashpd::desktop::file_chooser;
-use ashpd::{zbus, WindowIdentifier};
+use ashpd::WindowIdentifier;
 use futures::executor::block_on;
 use tracing::warn;
 
@@ -35,8 +35,6 @@ fn dialog(
 
     std::thread::spawn(move || {
         if let Err(e) = block_on(async {
-            let conn = zbus::Connection::session().await?;
-            let proxy = file_chooser::FileChooserProxy::new(&conn).await?;
             let id = WindowIdentifier::from_xid(window as u64);
             let multi = options.multi_selection;
 
@@ -50,15 +48,29 @@ fn dialog(
             let open_result;
             let save_result;
             let uris = if open {
-                open_result = proxy.open_file(&id, title, options.into()).await?;
+                let open_builder = file_chooser::OpenFileRequest::default()
+                    .identifier(id)
+                    .title(title);
+                open_result = options
+                    .apply_to_open(open_builder)
+                    .send()
+                    .await?
+                    .response()?;
                 open_result.uris()
             } else {
-                save_result = proxy.save_file(&id, title, options.into()).await?;
+                let save_builder = file_chooser::SaveFileRequest::default()
+                    .identifier(id)
+                    .title(title);
+                save_result = options
+                    .apply_to_save(save_builder)
+                    .send()
+                    .await?
+                    .response()?;
                 save_result.uris()
             };
 
             let mut paths = uris.iter().filter_map(|s| {
-                s.strip_prefix("file://").or_else(|| {
+                s.as_str().strip_prefix("file://").or_else(|| {
                     warn!("expected path '{}' to start with 'file://'", s);
                     None
                 })
@@ -110,55 +122,53 @@ impl From<crate::FileSpec> for file_chooser::FileFilter {
     }
 }
 
-impl From<crate::FileDialogOptions> for file_chooser::OpenFileOptions {
-    fn from(opts: crate::FileDialogOptions) -> file_chooser::OpenFileOptions {
-        let mut fc = file_chooser::OpenFileOptions::default()
+impl crate::FileDialogOptions {
+    fn apply_to_open(self, mut fc: file_chooser::OpenFileRequest) -> file_chooser::OpenFileRequest {
+        fc = fc
             .modal(true)
-            .multiple(opts.multi_selection)
-            .directory(opts.select_directories);
+            .multiple(self.multi_selection)
+            .directory(self.select_directories);
 
-        if let Some(label) = &opts.button_text {
-            fc = fc.accept_label(label);
+        if let Some(label) = self.button_text {
+            fc = fc.accept_label(label.as_str());
         }
 
-        if let Some(filters) = opts.allowed_types {
-            for f in filters {
-                fc = fc.add_filter(f.into());
-            }
+        if let Some(filters) = self.allowed_types {
+            fc = fc.filters(filters.into_iter().map(Into::into));
         }
 
-        if let Some(filter) = opts.default_type {
-            fc = fc.current_filter(filter.into());
+        if let Some(filter) = self.default_type {
+            fc = fc.current_filter(Some(filter.into()));
         }
 
         fc
     }
 }
 
-impl From<crate::FileDialogOptions> for file_chooser::SaveFileOptions {
-    fn from(opts: crate::FileDialogOptions) -> file_chooser::SaveFileOptions {
-        let mut fc = file_chooser::SaveFileOptions::default().modal(true);
+impl crate::FileDialogOptions {
+    fn apply_to_save(self, mut fc: file_chooser::SaveFileRequest) -> file_chooser::SaveFileRequest {
+        fc = fc.modal(true);
 
-        if let Some(name) = &opts.default_name {
-            fc = fc.current_name(name);
+        if let Some(name) = self.default_name {
+            fc = fc.current_name(name.as_str());
         }
 
-        if let Some(label) = &opts.button_text {
-            fc = fc.accept_label(label);
+        if let Some(label) = self.button_text {
+            fc = fc.accept_label(label.as_str());
         }
 
-        if let Some(filters) = opts.allowed_types {
-            for f in filters {
-                fc = fc.add_filter(f.into());
-            }
+        if let Some(filters) = self.allowed_types {
+            fc = fc.filters(filters.into_iter().map(Into::into));
         }
 
-        if let Some(filter) = opts.default_type {
-            fc = fc.current_filter(filter.into());
+        if let Some(filter) = self.default_type {
+            fc = fc.current_filter(Some(filter.into()));
         }
 
-        if let Some(dir) = &opts.starting_directory {
-            fc = fc.current_folder(dir);
+        if let Some(dir) = self.starting_directory {
+            fc = fc
+                .current_folder(dir)
+                .expect("Shouldn't have nul bytes in provided directory");
         }
 
         fc

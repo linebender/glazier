@@ -8,10 +8,10 @@ const HEIGHT: usize = 1536;
 use std::borrow::Cow;
 
 struct InnerWindowState {
+    surface: wgpu::Surface,
     window: WindowHandle,
     device: wgpu::Device,
     config: wgpu::SurfaceConfiguration,
-    surface: wgpu::Surface,
     queue: wgpu::Queue,
     render_pipeline: wgpu::RenderPipeline,
 }

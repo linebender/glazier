@@ -14,17 +14,16 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 use unicode_segmentation::GraphemeCursor;
+use vello::fello::raw::FontRef;
+use vello::fello::Setting;
 use vello::util::{RenderContext, RenderSurface};
-use vello::Renderer;
 use vello::{
-    glyph::{
-        pinot::{types::Tag, FontRef},
-        GlyphContext,
-    },
+    glyph::GlyphContext,
     kurbo::{Affine, Point, Rect},
     peniko::{Brush, Color, Fill},
     Scene, SceneBuilder,
 };
+use vello::{RenderParams, Renderer, RendererOptions};
 
 const WIDTH: usize = 2048;
 const HEIGHT: usize = 1536;
@@ -149,8 +148,26 @@ impl WindowState {
             let device = &self.render.devices[dev_id].device;
             let queue = &self.render.devices[dev_id].queue;
             self.renderer
-                .get_or_insert_with(|| Renderer::new(device).unwrap())
-                .render_to_surface(device, queue, &self.scene, &surface_texture, width, height)
+                .get_or_insert_with(|| {
+                    Renderer::new(
+                        device,
+                        &RendererOptions {
+                            surface_format: Some(surface_texture.texture.format()),
+                        },
+                    )
+                    .unwrap()
+                })
+                .render_to_surface(
+                    device,
+                    queue,
+                    &self.scene,
+                    &surface_texture,
+                    &RenderParams {
+                        height,
+                        width,
+                        base_color: Color::WHITE_SMOKE,
+                    },
+                )
                 .unwrap();
             surface_texture.present();
         }
@@ -293,12 +310,10 @@ pub fn render_text(builder: &mut SceneBuilder, transform: Affine, layout: &Layou
         let run = glyph_run.run();
         let font = run.font().as_ref();
         let font_size = run.font_size();
-        let font_ref = FontRef {
-            data: font.data,
-            offset: font.offset,
-        };
+        let font_ref = FontRef::new(&font.data).unwrap();
+
         let style = glyph_run.style();
-        let vars: [(Tag, f32); 0] = [];
+        let vars: [Setting<f32>; 0] = [];
         let mut gp = gcx.new_provider(&font_ref, None, font_size, false, vars);
         for glyph in glyph_run.glyphs() {
             if let Some(fragment) = gp.get(glyph.id, Some(&style.brush.0)) {
