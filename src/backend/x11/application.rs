@@ -593,15 +593,14 @@ impl AppInner {
             }
             Event::XkbStateNotify(ev) => {
                 let mut state = borrow_mut!(self.state)?;
-                let mods = &mut state.xkb_state.keyboard_state;
-                mods.base_mods = ev.base_mods.into();
-                mods.latched_mods = ev.latched_mods.into();
-                mods.locked_mods = ev.locked_mods.into();
-
-                mods.base_layout = ev.base_group as u32;
-                mods.latched_layout = ev.latched_group as u32;
-                mods.locked_layout = ev.locked_group.into();
-                state.xkb_state.update_xkb_state();
+                state.xkb_state.update_xkb_state(xkb::ActiveModifiers {
+                    base_mods: ev.base_mods.into(),
+                    latched_mods: ev.latched_mods.into(),
+                    locked_mods: ev.locked_mods.into(),
+                    base_layout: ev.base_group as u32,
+                    latched_layout: ev.latched_group as u32,
+                    locked_layout: ev.locked_group.into(),
+                });
             }
             Event::KeyRelease(ev) => {
                 let w = self

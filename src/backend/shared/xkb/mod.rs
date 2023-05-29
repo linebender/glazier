@@ -180,7 +180,6 @@ impl Drop for Keymap {
 pub struct State {
     state: *mut xkb_state,
     mods: ModsIndices,
-    pub keyboard_state: ActiveModifiers,
 }
 
 #[derive(Clone, Copy)]
@@ -219,19 +218,10 @@ impl State {
                 caps_lock: mod_idx(XKB_MOD_NAME_CAPS),
                 num_lock: mod_idx(XKB_MOD_NAME_NUM),
             },
-            keyboard_state: ActiveModifiers {
-                base_mods: 0,
-                latched_mods: 0,
-                locked_mods: 0,
-                base_layout: 0,
-                latched_layout: 0,
-                locked_layout: 0,
-            },
         }
     }
 
-    pub fn update_xkb_state(&mut self) {
-        let mods = self.keyboard_state;
+    pub fn update_xkb_state(&mut self, mods: ActiveModifiers) {
         unsafe {
             xkb_state_update_mask(
                 self.state,
@@ -303,7 +293,7 @@ impl State {
     // TODO `keyboard_types` forces us to return a String, but it would be nicer if we could stay
     // on the stack, especially since we know all results will only contain 1 unicode codepoint
     fn key_get_utf8(&mut self, keysym: u32) -> Option<String> {
-        // We convert the symbol to text here rather than using X11's interpretation of
+        // We convert the XKB 'symbol' to a string directly, rather than using the XKB 'string'
         // because (experimentally) [UI Events Keyboard Events](https://www.w3.org/TR/uievents-key/#key-attribute-value)
         // use the symbol rather than the x11 string (which includes the ctrl KeySym transformation)
         // If we used the KeySym transformation, it would not be possible to use keyboard shortcuts containing the
@@ -323,7 +313,6 @@ impl Clone for State {
         Self {
             state: unsafe { xkb_state_ref(self.state) },
             mods: self.mods,
-            keyboard_state: self.keyboard_state,
         }
     }
 }

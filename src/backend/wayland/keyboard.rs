@@ -197,14 +197,15 @@ impl Keyboard {
             } => {
                 let mut state = self.xkb_state.borrow_mut();
                 let state = state.as_mut().unwrap();
-                state.keyboard_state.base_mods = mods_depressed;
-                state.keyboard_state.latched_mods = mods_latched;
-                state.keyboard_state.locked_mods = mods_locked;
-                state.keyboard_state.base_layout = group;
-                // See https://gitlab.gnome.org/GNOME/gtk/-/blob/cffa45d5ff97b3b6107bb9d563a84a529014342a/gdk/wayland/gdkdevice-wayland.c#L2163-2177
-                state.keyboard_state.latched_layout = 0;
-                state.keyboard_state.locked_layout = 0;
-                state.update_xkb_state();
+                state.update_xkb_state(xkb::ActiveModifiers {
+                    base_mods: mods_depressed,
+                    latched_mods: mods_latched,
+                    locked_mods: mods_locked,
+                    base_layout: group,
+                    // See https://gitlab.gnome.org/GNOME/gtk/-/blob/cffa45d5ff97b3b6107bb9d563a84a529014342a/gdk/wayland/gdkdevice-wayland.c#L2163-2177
+                    latched_layout: 0,
+                    locked_layout: 0,
+                });
             }
             wl_keyboard::Event::RepeatInfo { rate, delay } => {
                 tracing::trace!("keyboard repeat info received {:?} {:?}", rate, delay);
