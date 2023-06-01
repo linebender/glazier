@@ -25,6 +25,7 @@ use anyhow::{anyhow, Context, Error};
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::render::{self, ConnectionExt as _, Pictformat};
 use x11rb::protocol::xinput::ChangeReason;
+use x11rb::protocol::xkb::{EventType, MapPart, SelectEventsAux};
 use x11rb::protocol::xproto::{
     self, ConnectionExt as _, CreateWindowAux, EventMask, Timestamp, Visualtype, WindowClass,
 };
@@ -299,10 +300,22 @@ impl AppInner {
             .context("get core keyboard device id")?;
 
         let keymap = xkb_context
-            .keymap_from_device(&connection, device_id)
+            .keymap_from_device(&connection, &device_id)
             .context("key map from device")?;
 
-        let xkb_state = keymap.state();
+        connection
+            .xkb_select_events(
+                device_id.0 as u16,
+                EventType::default(),
+                EventType::STATE_NOTIFY,
+                MapPart::default(),
+                MapPart::default(),
+                &SelectEventsAux::default(),
+            )
+            .context("Subscribing to State notify events")?;
+        let xkb_state = xkb_context
+            .state_from_keymap(&keymap, &connection, &device_id)
+            .context("State from keymap and device")?;
         let window_id = AppInner::create_event_window(&connection, screen_num)?;
         let state = RefCell::new(State {
             quitting: false,
@@ -577,6 +590,17 @@ impl AppInner {
                 );
 
                 w.handle_key_event(key_event);
+            }
+            Event::XkbStateNotify(ev) => {
+                let mut state = borrow_mut!(self.state)?;
+                state.xkb_state.update_xkb_state(xkb::ActiveModifiers {
+                    base_mods: ev.base_mods.into(),
+                    latched_mods: ev.latched_mods.into(),
+                    locked_mods: ev.locked_mods.into(),
+                    base_layout: ev.base_group as u32,
+                    latched_layout: ev.latched_group as u32,
+                    locked_layout: ev.locked_group.into(),
+                });
             }
             Event::KeyRelease(ev) => {
                 let w = self

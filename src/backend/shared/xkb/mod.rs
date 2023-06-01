@@ -23,14 +23,13 @@ use crate::{
 use keyboard_types::{Code, Key};
 use std::convert::TryFrom;
 use std::os::raw::c_char;
-use std::ptr;
 use xkbcommon_sys::*;
 
 #[cfg(feature = "x11")]
 use x11rb::xcb_ffi::XCBConnection;
 
 #[cfg(feature = "x11")]
-pub struct DeviceId(std::os::raw::c_int);
+pub struct DeviceId(pub std::os::raw::c_int);
 
 /// A global xkb context object.
 ///
@@ -61,7 +60,7 @@ impl Context {
     }
 
     #[cfg(feature = "x11")]
-    pub fn keymap_from_device(&self, conn: &XCBConnection, device: DeviceId) -> Option<Keymap> {
+    pub fn keymap_from_device(&self, conn: &XCBConnection, device: &DeviceId) -> Option<Keymap> {
         let key_map = unsafe {
             xkb_x11_keymap_new_from_device(
                 self.0,
@@ -76,6 +75,34 @@ impl Context {
         Some(Keymap(key_map))
     }
 
+    #[cfg(feature = "x11")]
+    pub fn state_from_keymap(
+        &self,
+        keymap: &Keymap,
+        conn: &XCBConnection,
+        device: &DeviceId,
+    ) -> Option<State> {
+        let state = unsafe {
+            xkb_x11_state_new_from_device(
+                keymap.0,
+                conn.get_raw_xcb_connection() as *mut xcb_connection_t,
+                device.0,
+            )
+        };
+        if state.is_null() {
+            return None;
+        }
+        Some(State::new(keymap, state))
+    }
+
+    #[cfg(feature = "wayland")]
+    pub fn state_from_keymap(&self, keymap: &Keymap) -> Option<State> {
+        let state = unsafe { xkb_state_new(keymap.0) };
+        if state.is_null() {
+            return None;
+        }
+        Some(State::new(keymap, state))
+    }
     /// Create a keymap from some given data.
     ///
     /// Uses `xkb_keymap_new_from_buffer` under the hood.
@@ -136,12 +163,6 @@ impl Drop for Context {
 
 pub struct Keymap(*mut xkb_keymap);
 
-impl Keymap {
-    pub fn state(&self) -> State {
-        State::new(self)
-    }
-}
-
 impl Clone for Keymap {
     fn clone(&self) -> Self {
         Self(unsafe { xkb_keymap_ref(self.0) })
@@ -171,10 +192,19 @@ pub struct ModsIndices {
     num_lock: xkb_mod_index_t,
 }
 
+#[derive(Clone, Copy)]
+pub struct ActiveModifiers {
+    pub base_mods: xkb_mod_mask_t,
+    pub latched_mods: xkb_mod_mask_t,
+    pub locked_mods: xkb_mod_mask_t,
+    pub base_layout: xkb_layout_index_t,
+    pub latched_layout: xkb_layout_index_t,
+    pub locked_layout: xkb_layout_index_t,
+}
+
 impl State {
-    pub fn new(keymap: &Keymap) -> Self {
+    pub fn new(keymap: &Keymap, state: *mut xkb_state) -> Self {
         let keymap = keymap.0;
-        let state = unsafe { xkb_state_new(keymap) };
         let mod_idx = |str: &'static [u8]| unsafe {
             xkb_keymap_mod_get_index(keymap, str.as_ptr() as *mut c_char)
         };
@@ -191,6 +221,20 @@ impl State {
         }
     }
 
+    pub fn update_xkb_state(&mut self, mods: ActiveModifiers) {
+        unsafe {
+            xkb_state_update_mask(
+                self.state,
+                mods.base_mods,
+                mods.latched_mods,
+                mods.locked_mods,
+                mods.base_layout,
+                mods.latched_layout,
+                mods.locked_layout,
+            )
+        };
+    }
+
     pub fn key_event(&mut self, scancode: u32, state: KeyState, repeat: bool) -> KeyEvent {
         let code = u16::try_from(scancode)
             .map(hardware_keycode_to_code)
@@ -205,18 +249,7 @@ impl State {
         let mut mods = Modifiers::empty();
         // Update xkb's state (e.g. return capitals if we've pressed shift)
         unsafe {
-            if !repeat {
-                xkb_state_update_key(
-                    self.state,
-                    scancode,
-                    match state {
-                        KeyState::Down => XKB_KEY_DOWN,
-                        KeyState::Up => XKB_KEY_UP,
-                    },
-                );
-            }
             // compiler will unroll this loop
-            // FIXME(msrv): remove .iter().cloned() when msrv is >= 1.53
             for (idx, mod_) in [
                 (self.mods.control, Modifiers::CONTROL),
                 (self.mods.shift, Modifiers::SHIFT),
@@ -224,10 +257,7 @@ impl State {
                 (self.mods.alt, Modifiers::ALT),
                 (self.mods.caps_lock, Modifiers::CAPS_LOCK),
                 (self.mods.num_lock, Modifiers::NUM_LOCK),
-            ]
-            .iter()
-            .cloned()
-            {
+            ] {
                 if xkb_state_mod_index_is_active(self.state, idx, XKB_STATE_MODS_EFFECTIVE) != 0 {
                     mods |= mod_;
                 }
@@ -245,9 +275,10 @@ impl State {
     }
 
     fn get_logical_key(&mut self, scancode: u32) -> Key {
-        let mut key = keycodes::map_key(self.key_get_one_sym(scancode));
+        let keysym = self.key_get_one_sym(scancode);
+        let mut key = keycodes::map_key(keysym);
         if matches!(key, Key::Unidentified) {
-            if let Some(s) = self.key_get_utf8(scancode) {
+            if let Some(s) = self.key_get_utf8(keysym) {
                 key = Key::Character(s);
             }
         }
@@ -260,23 +291,20 @@ impl State {
 
     /// Get the string representation of a key.
     // TODO `keyboard_types` forces us to return a String, but it would be nicer if we could stay
-    // on the stack, especially since we expect most results to be pretty small.
-    fn key_get_utf8(&mut self, scancode: u32) -> Option<String> {
-        unsafe {
-            // First get the size we will need
-            let len = xkb_state_key_get_utf8(self.state, scancode, ptr::null_mut(), 0);
-            if len == 0 {
-                return None;
-            }
-            // add 1 because we will get a null-terminated string.
-            let len = usize::try_from(len).unwrap() + 1;
-            let mut buf: Vec<u8> = Vec::new();
-            buf.resize(len, 0);
-            xkb_state_key_get_utf8(self.state, scancode, buf.as_mut_ptr() as *mut c_char, len);
-            assert!(buf[buf.len() - 1] == 0);
-            buf.pop();
-            Some(String::from_utf8(buf).unwrap())
+    // on the stack, especially since we know all results will only contain 1 unicode codepoint
+    fn key_get_utf8(&mut self, keysym: u32) -> Option<String> {
+        // We convert the XKB 'symbol' to a string directly, rather than using the XKB 'string'
+        // because (experimentally) [UI Events Keyboard Events](https://www.w3.org/TR/uievents-key/#key-attribute-value)
+        // use the symbol rather than the x11 string (which includes the ctrl KeySym transformation)
+        // If we used the KeySym transformation, it would not be possible to use keyboard shortcuts containing the
+        // control key, for example
+        let chr = unsafe { xkb_keysym_to_utf32(keysym) };
+        if chr == 0 {
+            // There is no unicode representation of this symbol
+            return None;
         }
+        let chr = char::from_u32(chr).expect("xkb should give valid UTF-32 char");
+        Some(String::from(chr))
     }
 }
 

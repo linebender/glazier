@@ -154,10 +154,10 @@ impl Keyboard {
 
                 // keymap data is '\0' terminated.
                 let keymap = self.xkb_context.keymap_from_slice(&keymap_data);
-                let keymapstate = keymap.state();
+                let keymapstate = self.xkb_context.state_from_keymap(&keymap);
 
                 self.xkb_keymap.replace(Some(keymap));
-                self.xkb_state.replace(Some(keymapstate));
+                self.xkb_state.replace(keymapstate);
             }
             wl_keyboard::Event::Enter { .. } => {
                 self.focused(true);
@@ -188,8 +188,24 @@ impl Keyboard {
                     queue: keyqueue,
                 })
             }
-            wl_keyboard::Event::Modifiers { .. } => {
-                self.xkb_mods.replace(event_to_mods(event));
+            wl_keyboard::Event::Modifiers {
+                mods_depressed,
+                mods_latched,
+                mods_locked,
+                group,
+                ..
+            } => {
+                let mut state = self.xkb_state.borrow_mut();
+                let state = state.as_mut().unwrap();
+                state.update_xkb_state(xkb::ActiveModifiers {
+                    base_mods: mods_depressed,
+                    latched_mods: mods_latched,
+                    locked_mods: mods_locked,
+                    base_layout: group,
+                    // See https://gitlab.gnome.org/GNOME/gtk/-/blob/cffa45d5ff97b3b6107bb9d563a84a529014342a/gdk/wayland/gdkdevice-wayland.c#L2163-2177
+                    latched_layout: 0,
+                    locked_layout: 0,
+                });
             }
             wl_keyboard::Event::RepeatInfo { rate, delay } => {
                 tracing::trace!("keyboard repeat info received {:?} {:?}", rate, delay);
@@ -278,45 +294,6 @@ impl Default for State {
         });
 
         state
-    }
-}
-
-struct ModMap(u32, Modifiers);
-
-impl ModMap {
-    fn merge(self, m: Modifiers, mods: u32, locked: u32) -> Modifiers {
-        if self.0 & mods == 0 && self.0 & locked == 0 {
-            return m;
-        }
-
-        m | self.1
-    }
-}
-
-const MOD_SHIFT: ModMap = ModMap(1, Modifiers::SHIFT);
-const MOD_CAP_LOCK: ModMap = ModMap(2, Modifiers::CAPS_LOCK);
-const MOD_CTRL: ModMap = ModMap(4, Modifiers::CONTROL);
-const MOD_ALT: ModMap = ModMap(8, Modifiers::ALT);
-const MOD_NUM_LOCK: ModMap = ModMap(16, Modifiers::NUM_LOCK);
-const MOD_META: ModMap = ModMap(64, Modifiers::META);
-
-pub fn event_to_mods(event: wl_keyboard::Event) -> Modifiers {
-    match event {
-        wl_keyboard::Event::Modifiers {
-            mods_depressed,
-            mods_locked,
-            ..
-        } => {
-            let mods = Modifiers::empty();
-            let mods = MOD_SHIFT.merge(mods, mods_depressed, mods_locked);
-            let mods = MOD_CAP_LOCK.merge(mods, mods_depressed, mods_locked);
-            let mods = MOD_CTRL.merge(mods, mods_depressed, mods_locked);
-            let mods = MOD_ALT.merge(mods, mods_depressed, mods_locked);
-            let mods = MOD_NUM_LOCK.merge(mods, mods_depressed, mods_locked);
-
-            MOD_META.merge(mods, mods_depressed, mods_locked)
-        }
-        _ => Modifiers::empty(),
     }
 }
 
