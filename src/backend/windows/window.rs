@@ -573,7 +573,19 @@ impl MyWndProc {
                         unsafe {
                             // Save the current window state.
                             let style = GetWindowLongA(hwnd, GWL_STYLE) as DWORD;
+                            if style == 0 {
+                                warn!(
+                                    "failed to get GWL_STYLE: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
                             let ex_style = GetWindowLongA(hwnd, GWL_EXSTYLE) as DWORD;
+                            if ex_style == 0 {
+                                warn!(
+                                    "failed to get GWL_EXSTYLE: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
                             let mut window_rect: RECT = mem::zeroed();
                             if GetWindowRect(hwnd, &mut window_rect) == 0 {
                                 warn!(
@@ -603,12 +615,18 @@ impl MyWndProc {
                             let monitor_area: RECT = monitor_info.rcMonitor;
 
                             // Remove window decorations and spread across screen
-                            SetWindowLongA(
+                            let result = SetWindowLongA(
                                 hwnd,
                                 GWL_STYLE,
                                 (style & !(WS_CAPTION | WS_THICKFRAME)) as i32,
                             );
-                            SetWindowLongA(
+                            if result == 0 {
+                                warn!(
+                                    "failed to set GWL_STYLE: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
+                            let result = SetWindowLongA(
                                 hwnd,
                                 GWL_EXSTYLE,
                                 (ex_style
@@ -617,7 +635,13 @@ impl MyWndProc {
                                         | WS_EX_CLIENTEDGE
                                         | WS_EX_STATICEDGE)) as i32,
                             );
-                            SetWindowPos(
+                            if result == 0 {
+                                warn!(
+                                    "failed to set GWL_EXSTYLE: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
+                            let result = SetWindowPos(
                                 hwnd,
                                 HWND_TOP,
                                 monitor_area.left,
@@ -626,6 +650,12 @@ impl MyWndProc {
                                 monitor_area.bottom,
                                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
                             );
+                            if result == 0 {
+                                warn!(
+                                    "failed to set window pos: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
                         }
                     } else if val == window::WindowState::Minimized {
                         // Minimize the window, leaving other state unchanged
@@ -645,12 +675,41 @@ impl MyWndProc {
 
                         unsafe {
                             // If the window is fullscreen, try to restore it to a saved state
-                            if (GetWindowLongPtrW(hwnd, GWL_STYLE) as DWORD & !WS_CAPTION) != 0 {
+                            let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as DWORD;
+                            if style == 0 {
+                                warn!(
+                                    "failed to get GWL_STYLE: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
+                            if (style & !WS_CAPTION) != 0 {
                                 if let Some(p) = self.with_window_state(|s| s.saved_plat.take()) {
                                     let area = p.area;
-                                    SetWindowLongA(hwnd, GWL_STYLE, p.style as i32);
-                                    SetWindowLongA(hwnd, GWL_EXSTYLE, p.ex_style as i32);
-                                    SetWindowPos(
+                                    if area.left == 0
+                                        && area.top == 0
+                                        && area.right == 0
+                                        && area.bottom == 0
+                                    {
+                                        // If the saved area is empty, just show the window normally
+                                        ShowWindow(hwnd, new_state);
+                                        return;
+                                    }
+                                    let result = SetWindowLongA(hwnd, GWL_STYLE, p.style as i32);
+                                    if result == 0 {
+                                        warn!(
+                                            "failed to set GWL_STYLE: {}",
+                                            Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                        );
+                                    };
+                                    let result =
+                                        SetWindowLongA(hwnd, GWL_EXSTYLE, p.ex_style as i32);
+                                    if result == 0 {
+                                        warn!(
+                                            "failed to set GWL_EXSTYLE: {}",
+                                            Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                        );
+                                    };
+                                    let result = SetWindowPos(
                                         hwnd,
                                         HWND_TOPMOST,
                                         area.left,
@@ -659,6 +718,12 @@ impl MyWndProc {
                                         area.bottom - area.top,
                                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
                                     );
+                                    if result == 0 {
+                                        warn!(
+                                            "failed to set window pos: {}",
+                                            Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                        );
+                                    };
                                     return;
                                 }
                             }
