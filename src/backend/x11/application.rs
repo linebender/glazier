@@ -107,6 +107,8 @@ x11rb::atom_manager! {
         _NET_WM_WINDOW_TYPE_DROPDOWN_MENU,
         _NET_WM_WINDOW_TYPE_TOOLTIP,
         _NET_WM_WINDOW_TYPE_DIALOG,
+        _NET_WM_STATE,
+        _NET_WM_STATE_FULLSCREEN,
         CLIPBOARD,
         PRIMARY,
         TARGETS,

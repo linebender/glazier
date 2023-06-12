@@ -1004,6 +1004,10 @@ impl WindowHandle {
         }
     }
 
+    pub fn set_fullscreen(&self, _fullscreen: bool) {
+        warn!("set_fullscreen unimplemented on gtk");
+    }
+
     pub fn set_position(&self, mut position: Point) {
         if let Some(state) = self.state.upgrade() {
             if let Some(parent_state) = &state.parent {
@@ -1094,6 +1098,8 @@ impl WindowHandle {
                 (Minimized, _) => state.window.iconify(),
                 (Restored, Maximized) => state.window.unmaximize(),
                 (Restored, Minimized) => state.window.deiconify(),
+                (Fullscreen, _) => (), // Fullscreen not yet supported,
+                (_, Fullscreen) => (),
                 (Restored, Restored) => (), // Unreachable
             }
         }

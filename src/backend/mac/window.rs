@@ -1327,6 +1327,9 @@ impl WindowHandle {
     // TODO: Implement this
     pub fn show_titlebar(&self, _show_titlebar: bool) {}
 
+    // TODO: Implement this
+    pub fn set_fullscreen(&self, _fullscreen: bool) {}
+
     // Need to translate mac y coords, as they start from bottom left
     pub fn set_position(&self, mut position: Point) {
         // TODO: Maybe @cmyr can get this into a state where modal windows follow the parent?
@@ -1451,6 +1454,8 @@ impl WindowHandle {
                 (WindowState::Restored, WindowState::Minimized) => {
                     let () = msg_send![window, deminiaturize: self];
                 }
+                (WindowState::Fullscreen, _) => {} // Fullscreen not yet implemented
+                (_, WindowState::Fullscreen) => {}
                 (WindowState::Restored, WindowState::Restored) => {} // Can't be reached
             }
         }
