@@ -110,6 +110,10 @@ impl WindowHandle {
         tracing::warn!("show_titlebar is unimplemented on wayland");
     }
 
+    pub fn set_fullscreen(&self, _fullscreen: bool) {
+        tracing::warn!("set_fullscreen unimplemented on wayland");
+    }
+
     pub fn set_position(&self, _position: Point) {
         tracing::warn!("set_position is unimplemented on wayland");
     }

@@ -168,6 +168,7 @@ pub enum WindowState {
     Maximized,
     Minimized,
     Restored,
+    Fullscreen,
 }
 
 /// A handle to a platform window object.
@@ -306,6 +307,11 @@ impl WindowHandle {
     /// Set the title for this menu.
     pub fn set_title(&self, title: &str) {
         self.0.set_title(title)
+    }
+
+    /// Sets / restores borderless fullscreen for the window on the current monitor.
+    pub fn set_fullscreen(&self, fullscreen: bool) {
+        self.0.set_fullscreen(fullscreen)
     }
 
     /// Set the top-level menu for this window.

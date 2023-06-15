@@ -398,6 +398,7 @@ impl WindowBuilder {
                 window::WindowState::Maximized => WmHintsState::Normal,
                 window::WindowState::Minimized => WmHintsState::Iconic,
                 window::WindowState::Restored => WmHintsState::Normal,
+                window::WindowState::Fullscreen => WmHintsState::Normal, // TODO: handle fullscreen builder
             });
         }
         log_x11!(hints.set(conn, id).context("set wm hints"));
@@ -608,6 +609,36 @@ impl Window {
     /// Set whether the window should show titlebar
     fn show_titlebar(&self, _show_titlebar: bool) {
         warn!("Window::show_titlebar is currently unimplemented for X11 backend.");
+    }
+
+    /// Toggles borderless fullscreen
+    fn set_fullscreen(&self, fullscreen: bool) {
+        let event = xproto::ClientMessageEvent {
+            response_type: xproto::CLIENT_MESSAGE_EVENT,
+            format: 32,
+            sequence: 0,
+            window: self.id,
+            type_: self.app.atoms()._NET_WM_STATE,
+            data: [
+                fullscreen as u32,
+                self.app.atoms()._NET_WM_STATE_FULLSCREEN,
+                0,
+                0,
+                0,
+            ]
+            .into(),
+        };
+
+        log_x11!(self
+            .app
+            .connection()
+            .send_event(
+                true,
+                self.id,
+                EventMask::SUBSTRUCTURE_NOTIFY | EventMask::SUBSTRUCTURE_REDIRECT,
+                event
+            )
+            .context("set fullscreen"));
     }
 
     fn parent_origin(&self) -> Vec2 {
@@ -1237,6 +1268,14 @@ impl WindowHandle {
     pub fn show_titlebar(&self, show_titlebar: bool) {
         if let Some(w) = self.window.upgrade() {
             w.show_titlebar(show_titlebar);
+        } else {
+            error!("Window {} has already been dropped", self.id);
+        }
+    }
+
+    pub fn set_fullscreen(&self, fullscreen: bool) {
+        if let Some(w) = self.window.upgrade() {
+            w.set_fullscreen(fullscreen);
         } else {
             error!("Window {} has already been dropped", self.id);
         }

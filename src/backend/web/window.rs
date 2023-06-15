@@ -514,6 +514,10 @@ impl WindowHandle {
         warn!("show_titlebar unimplemented for web");
     }
 
+    pub fn set_fullscreen(&self, _fullscreen: bool) {
+        warn!("WindowHandle::set_fullscreen unimplemented for web");
+    }
+
     pub fn set_position(&self, _position: Point) {
         warn!("WindowHandle::set_position unimplemented for web");
     }

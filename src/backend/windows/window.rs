@@ -216,6 +216,15 @@ struct AccessKitActionHandler {
     idle_handle: IdleHandle,
 }
 
+/// Stored state to allow for restoring from fullscreen.
+#[derive(Copy, Clone)]
+struct WindowPlat {
+    maximized: bool,
+    area: RECT,
+    style: DWORD,
+    ex_style: DWORD,
+}
+
 /// This is the low level window state. All mutable contents are protected
 /// by interior mutability, so we can handle reentrant calls.
 struct WindowState {
@@ -233,6 +242,7 @@ struct WindowState {
     // For resizable borders, window can still be resized with code.
     is_resizable: Cell<bool>,
     handle_titlebar: Cell<bool>,
+    saved_plat: Cell<Option<WindowPlat>>,
     active_text_input: Cell<Option<TextFieldToken>>,
     // Is the window focusable ("activatable" in Win32 terminology)?
     // False for tooltips, to prevent stealing focus from owner window.
@@ -552,17 +562,175 @@ impl MyWndProc {
                     set_style(hwnd, resizable, self.has_titlebar());
                 }
                 DeferredOp::SetWindowState(val) => {
-                    let show = if self.handle.borrow().is_focusable() {
-                        match val {
-                            window::WindowState::Maximized => SW_MAXIMIZE,
-                            window::WindowState::Minimized => SW_MINIMIZE,
-                            window::WindowState::Restored => SW_RESTORE,
+                    if !self.handle.borrow().is_focusable() {
+                        // Tooltip or similar window
+                        unsafe {
+                            ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                        }
+                    } else if val == window::WindowState::Fullscreen {
+                        println!("set window state: {:?}", val);
+                        // Manually set the window to fullscreen
+                        unsafe {
+                            // Save the current window state.
+                            let style = GetWindowLongA(hwnd, GWL_STYLE) as DWORD;
+                            if style == 0 {
+                                warn!(
+                                    "failed to get GWL_STYLE: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
+                            let ex_style = GetWindowLongA(hwnd, GWL_EXSTYLE) as DWORD;
+                            if ex_style == 0 {
+                                warn!(
+                                    "failed to get GWL_EXSTYLE: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
+                            let mut window_rect: RECT = mem::zeroed();
+                            if GetWindowRect(hwnd, &mut window_rect) == 0 {
+                                warn!(
+                                    "failed to get window rect: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
+                            let plat = WindowPlat {
+                                maximized: style & WS_MAXIMIZE != 0,
+                                area: window_rect,
+                                style,
+                                ex_style,
+                            };
+                            self.with_window_state(|s| s.saved_plat.set(Some(plat)));
+
+                            // Retrieve the area of the current monitor
+                            let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+                            let mut monitor_info: MONITORINFO = mem::zeroed();
+                            monitor_info.cbSize = mem::size_of::<MONITORINFO>() as DWORD;
+                            if GetMonitorInfoW(monitor, &mut monitor_info) == 0 {
+                                warn!(
+                                    "failed to get monitor info: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                                return;
+                            };
+                            let monitor_area: RECT = monitor_info.rcMonitor;
+
+                            // Remove window decorations and spread across screen
+                            let result = SetWindowLongA(
+                                hwnd,
+                                GWL_STYLE,
+                                (style & !(WS_CAPTION | WS_THICKFRAME)) as i32,
+                            );
+                            if result == 0 {
+                                warn!(
+                                    "failed to set GWL_STYLE: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
+                            let result = SetWindowLongA(
+                                hwnd,
+                                GWL_EXSTYLE,
+                                (ex_style
+                                    & !(WS_EX_DLGMODALFRAME
+                                        | WS_EX_WINDOWEDGE
+                                        | WS_EX_CLIENTEDGE
+                                        | WS_EX_STATICEDGE)) as i32,
+                            );
+                            if result == 0 {
+                                warn!(
+                                    "failed to set GWL_EXSTYLE: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
+                            let result = SetWindowPos(
+                                hwnd,
+                                HWND_TOP,
+                                monitor_area.left,
+                                monitor_area.top,
+                                monitor_area.right,
+                                monitor_area.bottom,
+                                SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                            );
+                            if result == 0 {
+                                warn!(
+                                    "failed to set window pos: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
+                        }
+                    } else if val == window::WindowState::Minimized {
+                        // Minimize the window, leaving other state unchanged
+                        unsafe {
+                            ShowWindow(hwnd, SW_MINIMIZE);
                         }
                     } else {
-                        SW_SHOWNOACTIVATE
-                    };
-                    unsafe {
-                        ShowWindow(hwnd, show);
+                        // Maximize or restore the window
+                        let new_state = match val {
+                            window::WindowState::Maximized => SW_MAXIMIZE,
+                            window::WindowState::Restored => SW_RESTORE,
+                            _ => {
+                                warn!("arrived at unreachable state");
+                                return;
+                            }
+                        };
+
+                        unsafe {
+                            // If the window is fullscreen, try to restore it to a saved state
+                            let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as DWORD;
+                            if style == 0 {
+                                warn!(
+                                    "failed to get GWL_STYLE: {}",
+                                    Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                );
+                            };
+                            if (style & !WS_CAPTION) != 0 {
+                                if let Some(p) = self.with_window_state(|s| s.saved_plat.take()) {
+                                    let area = p.area;
+                                    if area.left == 0
+                                        && area.top == 0
+                                        && area.right == 0
+                                        && area.bottom == 0
+                                    {
+                                        // If the saved area is empty, just show the window normally
+                                        ShowWindow(hwnd, new_state);
+                                        return;
+                                    }
+                                    let result = SetWindowLongA(hwnd, GWL_STYLE, p.style as i32);
+                                    if result == 0 {
+                                        warn!(
+                                            "failed to set GWL_STYLE: {}",
+                                            Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                        );
+                                    };
+                                    let result =
+                                        SetWindowLongA(hwnd, GWL_EXSTYLE, p.ex_style as i32);
+                                    if result == 0 {
+                                        warn!(
+                                            "failed to set GWL_EXSTYLE: {}",
+                                            Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                        );
+                                    };
+                                    let result = SetWindowPos(
+                                        hwnd,
+                                        HWND_TOPMOST,
+                                        area.left,
+                                        area.top,
+                                        area.right - area.left,
+                                        area.bottom - area.top,
+                                        SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+                                    );
+                                    if result == 0 {
+                                        warn!(
+                                            "failed to set window pos: {}",
+                                            Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
+                                        );
+                                    };
+                                    return;
+                                }
+                            }
+
+                            // Otherwise, or if retrieving the saved state failed, set the window state normally
+                            ShowWindow(hwnd, new_state);
+                        }
                     }
                 }
                 DeferredOp::SaveAs(options, token) => {
@@ -1373,6 +1541,7 @@ impl WindowBuilder {
                 is_resizable: Cell::new(self.resizable),
                 is_transparent: Cell::new(self.transparent),
                 handle_titlebar: Cell::new(false),
+                saved_plat: Cell::new(None),
                 active_text_input: Cell::new(None),
                 is_focusable: focusable,
                 window_level,
@@ -1679,6 +1848,23 @@ impl WindowHandle {
         self.defer(DeferredOp::ShowTitlebar(show_titlebar));
     }
 
+    pub fn set_fullscreen(&self, fullscreen: bool) {
+        if fullscreen {
+            self.defer(DeferredOp::SetWindowState(window::WindowState::Fullscreen));
+        } else {
+            let previously_maximized: bool = self
+                .state
+                .upgrade()
+                .map_or(false, |w| w.saved_plat.get().map_or(false, |p| p.maximized));
+
+            if previously_maximized {
+                self.defer(DeferredOp::SetWindowState(window::WindowState::Maximized));
+            } else {
+                self.defer(DeferredOp::SetWindowState(window::WindowState::Restored));
+            }
+        }
+    }
+
     pub fn set_position(&self, position: Point) {
         self.defer(DeferredOp::SetWindowState(window::WindowState::Restored));
         if let Some(w) = self.state.upgrade() {
@@ -1803,7 +1989,9 @@ impl WindowHandle {
                         Error::Hr(HRESULT_FROM_WIN32(GetLastError()))
                     );
                 }
-                if (style & WS_MAXIMIZE) != 0 {
+                if (style & !WS_CAPTION) != 0 {
+                    window::WindowState::Fullscreen
+                } else if (style & WS_MAXIMIZE) != 0 {
                     window::WindowState::Maximized
                 } else if (style & WS_MINIMIZE) != 0 {
                     window::WindowState::Minimized
