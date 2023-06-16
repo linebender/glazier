@@ -314,7 +314,7 @@ impl AppInner {
             )
             .context("Subscribing to State notify events")?;
         let xkb_state = xkb_context
-            .state_from_keymap(&keymap, &connection, &device_id)
+            .state_from_x11_keymap(&keymap, &connection, &device_id)
             .context("State from keymap and device")?;
         let window_id = AppInner::create_event_window(&connection, screen_num)?;
         let state = RefCell::new(State {

@@ -28,8 +28,15 @@ pub use mac::*;
 #[cfg(target_os = "macos")]
 pub(crate) mod shared;
 
-#[cfg(any(target_os = "freebsd", target_os = "linux", target_os = "openbsd"))]
+#[cfg(all(
+    any(target_os = "freebsd", target_os = "linux", target_os = "openbsd"),
+    any(feature = "x11", feature = "wayland")
+))]
 pub mod linux;
+#[cfg(all(
+    any(target_os = "freebsd", target_os = "linux", target_os = "openbsd"),
+    any(feature = "x11", feature = "wayland")
+))]
 pub use linux::*;
 
 #[cfg(all(

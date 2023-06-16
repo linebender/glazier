@@ -31,9 +31,11 @@ impl Application {
 
     pub fn quit(&self) {
         match self {
+            #[cfg(feature = "x11")]
             Application::X11(app) => {
                 app.quit();
             }
+            #[cfg(feature = "wayland")]
             Application::Wayland(app) => {
                 app.quit();
             }
@@ -42,7 +44,9 @@ impl Application {
 
     pub fn clipboard(&self) -> Clipboard {
         match self {
+            #[cfg(feature = "x11")]
             Application::X11(app) => Clipboard::X11(app.clipboard()),
+            #[cfg(feature = "wayland")]
             Application::Wayland(app) => Clipboard::Wayland(app.clipboard()),
         }
     }
@@ -50,16 +54,20 @@ impl Application {
     pub fn get_locale() -> String {
         let app = crate::Application::try_global().unwrap();
         match &app.backend_app {
+            #[cfg(feature = "x11")]
             Application::X11(_app) => x11::application::Application::get_locale(),
+            #[cfg(feature = "wayland")]
             Application::Wayland(_app) => wayland::application::Application::get_locale(),
         }
     }
 
     pub fn run(self, handler: Option<Box<dyn AppHandler>>) {
         match self {
+            #[cfg(feature = "x11")]
             Application::X11(app) => {
                 app.run(handler);
             }
+            #[cfg(feature = "wayland")]
             Application::Wayland(app) => {
                 app.run(handler);
             }
@@ -67,7 +75,9 @@ impl Application {
     }
     pub fn get_handle(&self) -> Option<AppHandle> {
         match self {
+            #[cfg(feature = "x11")]
             Application::X11(app) => app.get_handle().map(AppHandle::X11),
+            #[cfg(feature = "wayland")]
             Application::Wayland(app) => app.get_handle().map(AppHandle::Wayland),
         }
     }
@@ -87,7 +97,9 @@ impl AppHandle {
         F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
     {
         match self {
+            #[cfg(feature = "x11")]
             AppHandle::X11(app) => app.run_on_main(callback),
+            #[cfg(feature = "wayland")]
             AppHandle::Wayland(app) => app.run_on_main(callback),
         }
     }
@@ -96,7 +108,9 @@ impl AppHandle {
 impl crate::platform::linux::ApplicationExt for crate::Application {
     fn primary_clipboard(&self) -> crate::Clipboard {
         match &self.backend_app {
+            #[cfg(feature = "x11")]
             Application::X11(it) => crate::Clipboard(Clipboard::X11(it.primary.clone())),
+            #[cfg(feature = "wayland")]
             Application::Wayland(_) => unimplemented!(),
         }
     }

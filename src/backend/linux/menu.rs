@@ -15,7 +15,9 @@ impl Menu {
     pub fn new() -> Self {
         let app = crate::Application::try_global().unwrap();
         match &app.backend_app {
+            #[cfg(feature = "x11")]
             super::application::Application::X11(_) => Self::X11(x11::menu::Menu::new()),
+            #[cfg(feature = "wayland")]
             super::application::Application::Wayland(_) => {
                 Self::Wayland(wayland::menu::Menu::new())
             }
@@ -25,7 +27,9 @@ impl Menu {
     pub fn new_for_popup() -> Menu {
         let app = crate::Application::try_global().unwrap();
         match &app.backend_app {
+            #[cfg(feature = "x11")]
             super::application::Application::X11(_) => Self::X11(x11::menu::Menu::new_for_popup()),
+            #[cfg(feature = "wayland")]
             super::application::Application::Wayland(_) => {
                 Self::Wayland(wayland::menu::Menu::new_for_popup())
             }
@@ -34,16 +38,20 @@ impl Menu {
 
     pub fn add_dropdown(&mut self, menu: Menu, text: &str, enabled: bool) {
         match self {
+            #[cfg(feature = "x11")]
             Menu::X11(m) => {
                 match menu {
                     Menu::X11(menu) => {
                         m.add_dropdown(menu, text, enabled);
                     }
+                    #[cfg(feature = "wayland")]
                     Menu::Wayland(_) => {}
                 };
             }
+            #[cfg(feature = "wayland")]
             Menu::Wayland(m) => {
                 match menu {
+                    #[cfg(feature = "x11")]
                     Menu::X11(_) => {}
                     Menu::Wayland(menu) => {
                         m.add_dropdown(menu, text, enabled);
@@ -62,9 +70,11 @@ impl Menu {
         enabled: bool,
     ) {
         match self {
+            #[cfg(feature = "x11")]
             Menu::X11(menu) => {
                 menu.add_item(id, text, key, selected, enabled);
             }
+            #[cfg(feature = "wayland")]
             Menu::Wayland(menu) => {
                 menu.add_item(id, text, key, selected, enabled);
             }
@@ -73,9 +83,11 @@ impl Menu {
 
     pub fn add_separator(&mut self) {
         match self {
+            #[cfg(feature = "x11")]
             Menu::X11(menu) => {
                 menu.add_separator();
             }
+            #[cfg(feature = "wayland")]
             Menu::Wayland(menu) => {
                 menu.add_separator();
             }

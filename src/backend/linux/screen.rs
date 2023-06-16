@@ -8,7 +8,9 @@ pub fn get_monitors() -> Vec<Monitor> {
     // TODO: Is there any reason to not just have this be a method on Application?
     let app = crate::Application::try_global().expect("Cannot get monitors without an app on X11");
     match &app.backend_app {
+        #[cfg(feature = "x11")]
         super::application::Application::X11(app) => x11::screen::get_monitors(app),
+        #[cfg(feature = "wayland")]
         super::application::Application::Wayland(_) => wayland::screen::get_monitors(),
     }
 }

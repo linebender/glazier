@@ -501,7 +501,7 @@ impl WindowBuilder {
         tracing::debug!("popup {:?}", config);
 
         popup::create(
-            &parent.0.unwrap_wayland(),
+            parent.0.unwrap_wayland(),
             &config,
             self.appdata,
             self.handler,
