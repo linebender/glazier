@@ -463,9 +463,9 @@ impl WindowBuilder {
             .insert(handle.id(), handle.clone())
             .is_some()
         {
-            return Err(ShellError::Platform(Error::string(
-                "wayland should use a unique id",
-            )));
+            return Err(ShellError::Platform(
+                Error::string("wayland should use a unique id").into(),
+            ));
         }
 
         appdata
@@ -475,7 +475,10 @@ impl WindowBuilder {
 
         surface.with_handler({
             let handle = handle.clone();
-            move |winhandle| winhandle.connect(&handle.into())
+            move |winhandle| {
+                winhandle
+                    .connect(&crate::backend::linux::window::WindowHandle::Wayland(handle).into())
+            }
         });
 
         Ok(handle)
@@ -497,12 +500,18 @@ impl WindowBuilder {
 
         tracing::debug!("popup {:?}", config);
 
-        popup::create(&parent.0, &config, self.appdata, self.handler)
+        popup::create(
+            &parent.0.unwrap_wayland(),
+            &config,
+            self.appdata,
+            self.handler,
+        )
     }
 }
 
 #[allow(unused)]
 pub mod layershell {
+    use crate::backend::error::Error::Wayland as WaylandError;
     use crate::error::Error as ShellError;
     use crate::window::WinHandler;
 
@@ -540,9 +549,9 @@ pub mod layershell {
             let winhandle = match self.winhandle {
                 Some(winhandle) => winhandle,
                 None => {
-                    return Err(ShellError::Platform(Error::string(
+                    return Err(ShellError::Platform(WaylandError(Error::string(
                         "window handler required",
-                    )))
+                    ))))
                 }
             };
 
@@ -605,9 +614,9 @@ pub mod popup {
         let winhandle = match winhandle {
             Some(winhandle) => winhandle,
             None => {
-                return Err(ShellError::Platform(Error::string(
-                    "window handler required",
-                )))
+                return Err(ShellError::Platform(
+                    Error::string("window handler required").into(),
+                ))
             }
         };
 
@@ -615,7 +624,7 @@ pub mod popup {
         let updated = config.clone();
         let surface =
             match surfaces::popup::Surface::new(appdata.clone(), winhandle, updated, parent) {
-                Err(cause) => return Err(ShellError::Platform(cause)),
+                Err(cause) => return Err(ShellError::Platform(cause.into())),
                 Ok(s) => s,
             };
 

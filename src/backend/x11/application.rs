@@ -185,7 +185,7 @@ pub(crate) struct AppInner {
     /// The clipboard implementation
     clipboard: Clipboard,
     /// The clipboard implementation for the primary selection
-    primary: Clipboard,
+    pub(crate) primary: Clipboard,
     /// The X11 window id of this `Application`.
     ///
     /// This is an input-only non-visual X11 window that is created first during initialization,
@@ -863,12 +863,6 @@ impl AppInner {
 
     pub(crate) fn idle_pipe(&self) -> RawFd {
         self.idle_write
-    }
-}
-
-impl crate::platform::linux::ApplicationExt for crate::Application {
-    fn primary_clipboard(&self) -> crate::Clipboard {
-        self.backend_app.inner.primary.clone().into()
     }
 }
 
