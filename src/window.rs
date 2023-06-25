@@ -171,8 +171,18 @@ pub enum WindowState {
 }
 
 /// A handle to a platform window object.
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct WindowHandle(pub(crate) backend::WindowHandle);
+
+impl Default for WindowHandle {
+    /// Create a default `WindowHandle`
+    ///
+    /// This is invalid to use, and operations using this handle
+    /// may panic or do nothing
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 
 impl WindowHandle {
     /// Make this window visible.

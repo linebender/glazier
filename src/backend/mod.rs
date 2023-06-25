@@ -29,26 +29,27 @@ pub use mac::*;
 pub(crate) mod shared;
 
 #[cfg(all(
-    feature = "x11",
-    any(target_os = "freebsd", target_os = "linux", target_os = "openbsd")
+    any(target_os = "freebsd", target_os = "linux", target_os = "openbsd"),
+    any(feature = "x11", feature = "wayland")
 ))]
-mod x11;
+pub mod linux;
+#[cfg(all(
+    any(target_os = "freebsd", target_os = "linux", target_os = "openbsd"),
+    any(feature = "x11", feature = "wayland")
+))]
+pub use linux::*;
+
 #[cfg(all(
     feature = "x11",
     any(target_os = "freebsd", target_os = "linux", target_os = "openbsd")
 ))]
-pub use x11::*;
+pub(crate) mod x11;
 
 #[cfg(all(
     feature = "wayland",
     any(target_os = "freebsd", target_os = "linux", target_os = "openbsd")
 ))]
-mod wayland;
-#[cfg(all(
-    feature = "wayland",
-    any(target_os = "freebsd", target_os = "linux", target_os = "openbsd")
-))]
-pub use wayland::*;
+pub(crate) mod wayland;
 
 #[cfg(all(
     any(feature = "wayland", feature = "x11"),

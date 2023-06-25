@@ -22,6 +22,8 @@ use x11rb::protocol::xproto::{Screen, Timestamp};
 use crate::kurbo::Rect;
 use crate::screen::Monitor;
 
+use super::application::Application;
+
 fn monitor<Pos>(primary: bool, (x, y): (Pos, Pos), (width, height): (u16, u16)) -> Monitor
 where
     Pos: Into<i32>,
@@ -34,20 +36,16 @@ where
     Monitor::new(primary, rect, rect)
 }
 
-pub(crate) fn get_monitors() -> Vec<Monitor> {
-    let result = if let Some(app) = crate::Application::try_global() {
-        let app = app.backend_app;
-        get_monitors_impl(app.connection(), app.screen_num())
-    } else {
-        let (conn, screen_num) = match x11rb::connect(None) {
-            Ok(res) => res,
-            Err(err) => {
-                tracing::error!("Error in Screen::get_monitors(): {:?}", err);
-                return Vec::new();
-            }
-        };
-        get_monitors_impl(&conn, screen_num)
-    };
+pub(crate) fn get_monitors(app: &Application) -> Vec<Monitor> {
+    // let (conn, screen_num) = match x11rb::connect(None) {
+    //     Ok(res) => res,
+    //     Err(err) => {
+    //         tracing::error!("Error in Screen::get_monitors(): {:?}", err);
+    //         return Vec::new();
+    //     }
+    // };
+    let result = get_monitors_impl(app.connection(), app.screen_num());
+
     match result {
         Ok(monitors) => monitors,
         Err(err) => {

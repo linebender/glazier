@@ -76,7 +76,7 @@ impl Context {
     }
 
     #[cfg(feature = "x11")]
-    pub fn state_from_keymap(
+    pub fn state_from_x11_keymap(
         &self,
         keymap: &Keymap,
         conn: &XCBConnection,
