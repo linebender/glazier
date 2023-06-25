@@ -282,7 +282,10 @@ impl Data {
         if self.logical_size.get() != dim {
             self.logical_size.set(dim);
             match self.handler.try_borrow_mut() {
-                Ok(mut handler) => handler.size(dim),
+                Ok(mut handler) => {
+                    handler.size(dim);
+                    self.invalidate();
+                }
                 Err(cause) => tracing::warn!("unhable to borrow handler {:?}", cause),
             };
         }

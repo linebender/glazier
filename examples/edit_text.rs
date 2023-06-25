@@ -243,7 +243,6 @@ impl WinHandler for WindowState {
 
     fn size(&mut self, size: Size) {
         self.size = size;
-        self.schedule_render();
     }
 
     fn request_close(&mut self) {
