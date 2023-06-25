@@ -400,23 +400,20 @@ impl Data {
 
     pub fn run_deferred_tasks(&self) {
         tracing::trace!("run_deferred_tasks initiated");
-        while let Some(task) = self.next_deferred_task() {
-            self.run_deferred_task(task);
+        let tasks = std::mem::take(&mut *self.deferred_tasks.borrow_mut());
+        let mut should_paint = false;
+        for task in tasks {
+            match task {
+                DeferredTask::Paint => {
+                    should_paint = true;
+                }
+                DeferredTask::AnimationClear => {
+                    self.anim_frame_requested.set(false);
+                }
+            }
         }
-    }
-
-    fn next_deferred_task(&self) -> Option<DeferredTask> {
-        self.deferred_tasks.borrow_mut().pop_front()
-    }
-
-    fn run_deferred_task(&self, task: DeferredTask) {
-        match task {
-            DeferredTask::Paint => {
-                self.paint();
-            }
-            DeferredTask::AnimationClear => {
-                self.anim_frame_requested.set(false);
-            }
+        if should_paint {
+            self.paint();
         }
     }
 

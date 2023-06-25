@@ -238,7 +238,7 @@ impl WinHandler for WindowState {
 
     fn paint(&mut self, _: &Region) {
         self.render();
-        // self.schedule_render();
+        self.schedule_render();
     }
 
     fn size(&mut self, size: Size) {
