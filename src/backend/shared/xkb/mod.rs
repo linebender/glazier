@@ -182,7 +182,7 @@ pub struct State {
     mods: ModsIndices,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct ModsIndices {
     control: xkb_mod_index_t,
     shift: xkb_mod_index_t,

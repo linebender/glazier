@@ -317,15 +317,17 @@ impl Default for WindowHandle {
 
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
-        tracing::error!("HasRawWindowHandle trait not implemented for wasm.");
-        RawWindowHandle::Wayland(WaylandWindowHandle::empty())
+        let mut handle = WaylandWindowHandle::empty();
+        handle.surface = self.inner.surface.data().unwrap().get_surface();
+        RawWindowHandle::Wayland(handle)
     }
 }
 
 unsafe impl HasRawDisplayHandle for WindowHandle {
     fn raw_display_handle(&self) -> RawDisplayHandle {
-        tracing::error!("HasDisplayHandle trait not implemented for wayland.");
-        RawDisplayHandle::Wayland(WaylandDisplayHandle::empty())
+        let mut handle = WaylandDisplayHandle::empty();
+        handle.display = self.inner.surface.data().unwrap().get_display();
+        RawDisplayHandle::Wayland(handle)
     }
 }
 

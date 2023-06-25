@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
+use std::ffi::c_void;
 use wayland_client as wlc;
 use wayland_client::protocol::wl_surface;
 use wayland_protocols::xdg_shell::client::xdg_popup;
@@ -48,10 +48,9 @@ impl Surface {
         };
 
         let current = std::sync::Arc::new(Data {
-            compositor: compositor.clone(),
+            compositor,
             wl_surface: RefCell::new(wl_surface),
             outputs: RefCell::new(std::collections::HashSet::new()),
-            buffers: buffers::Buffers::new(compositor.shared_mem(), initial_size.into()),
             logical_size: Cell::new(initial_size),
             scale: Cell::new(1),
             anim_frame_requested: Cell::new(false),
@@ -73,15 +72,11 @@ impl Surface {
     }
 
     pub(super) fn request_paint(&self) {
-        self.inner.buffers.request_paint(&self.inner);
+        self.inner.paint();
     }
 
     pub(super) fn update_dimensions(&self, dim: impl Into<kurbo::Size>) -> kurbo::Size {
         self.inner.update_dimensions(dim)
-    }
-
-    pub(super) fn resize(&self, dim: kurbo::Size) -> kurbo::Size {
-        self.inner.resize(dim)
     }
 
     pub(super) fn commit(&self) {
@@ -134,11 +129,6 @@ impl Surface {
         {
             let new_scale = current.recompute_scale();
             if current.set_scale(new_scale).is_changed() {
-                current.wl_surface.borrow().set_buffer_scale(new_scale);
-                // We also need to change the physical size to match the new scale
-                current
-                    .buffers
-                    .set_size(buffers::RawSize::from(current.logical_size.get()).scale(new_scale));
                 // always repaint, because the scale changed.
                 current.schedule_deferred_task(DeferredTask::Paint);
             }
@@ -161,8 +151,8 @@ impl Handle for Surface {
         self.inner.get_size()
     }
 
-    fn set_size(&self, dim: kurbo::Size) {
-        self.inner.resize(dim);
+    fn set_size(&self, _: kurbo::Size) {
+        todo!("Wayland doesn't allow setting surface size");
     }
 
     fn request_anim_frame(&self) {
@@ -225,10 +215,6 @@ pub struct Data {
     /// The outputs that our surface is present on (we should get the first enter event early).
     pub(super) outputs: RefCell<std::collections::HashSet<u32>>,
 
-    /// Buffers in our shared memory.
-    // Buffers sometimes need to move references to themselves into closures, so must be behind a
-    // reference counter.
-    pub(super) buffers: Rc<buffers::Buffers<{ buffers::NUM_FRAMES as usize }>>,
     /// The logical size of the next frame.
     pub(crate) logical_size: Cell<kurbo::Size>,
     /// The scale we are rendering to (defaults to 1)
@@ -293,7 +279,8 @@ impl Data {
 
     pub(super) fn update_dimensions(&self, dim: impl Into<kurbo::Size>) -> kurbo::Size {
         let dim = dim.into();
-        if self.logical_size.get() != self.resize(dim) {
+        if self.logical_size.get() != dim {
+            self.logical_size.set(dim);
             match self.handler.try_borrow_mut() {
                 Ok(mut handler) => handler.size(dim),
                 Err(cause) => tracing::warn!("unhable to borrow handler {:?}", cause),
@@ -301,35 +288,6 @@ impl Data {
         }
 
         dim
-    }
-
-    // client initiated resizing.
-    pub(super) fn resize(&self, dim: kurbo::Size) -> kurbo::Size {
-        // The size here is the logical size
-        let scale = self.scale.get();
-        let raw_logical_size = buffers::RawSize {
-            width: dim.width as i32,
-            height: dim.height as i32,
-        };
-        let previous_logical_size = self.logical_size.replace(dim);
-        if previous_logical_size != dim {
-            self.buffers.set_size(raw_logical_size.scale(scale));
-        }
-
-        dim
-    }
-
-    /// Assert that the physical size = logical size * scale
-    #[allow(unused)]
-    fn assert_size(&self) {
-        assert_eq!(
-            self.buffers.size(),
-            buffers::RawSize::from(self.logical_size.get()).scale(self.scale.get()),
-            "phy {:?} == logic {:?} * {}",
-            self.buffers.size(),
-            self.logical_size.get(),
-            self.scale.get()
-        );
     }
 
     /// Recompute the scale to use (the maximum of all the scales for the different outputs this
@@ -361,24 +319,19 @@ impl Data {
     /// The buffers object is responsible for calling this function after we called
     /// `request_paint`.
     ///
-    /// - `buf` is what we draw the frame into
     /// - `size` is the physical size in pixels we are drawing.
     /// - `force` means draw the whole frame, even if it wasn't all invalidated.
-    pub(super) fn paint(&self, physical_size: buffers::RawSize, _buf: &mut [u8], force: bool) {
-        tracing::trace!(
-            "paint initiated {:?} - {:?} {:?}",
-            self.get_size(),
-            physical_size,
-            force
-        );
-
+    ///
+    /// This calls into user code. To avoid re-entrancy, ensure that we are not already in user
+    /// code (defer this call if necessary).
+    pub(super) fn paint(&self) {
         // We don't care about obscure pre version 4 compositors
         // and just damage the whole surface instead of
         // translating from buffer coordinates to surface coordinates
         let damage_buffer_supported =
             self.wl_surface.borrow().as_ref().version() >= wl_surface::REQ_DAMAGE_BUFFER_SINCE;
 
-        if force || !damage_buffer_supported {
+        if !damage_buffer_supported {
             self.invalidate();
             self.wl_surface.borrow().damage(0, 0, i32::MAX, i32::MAX);
         } else {
@@ -399,10 +352,14 @@ impl Data {
                 return;
             }
         }
+        let mut swap_region = Region::EMPTY;
+        {
+            let mut region = self.damaged_region.borrow_mut();
+            // reset damage ready for next frame.
+            std::mem::swap(&mut *region, &mut swap_region);
+        }
 
-        // reset damage ready for next frame.
-        self.damaged_region.borrow_mut().clear();
-        self.buffers.attach(self);
+        self.handler.borrow_mut().paint(&swap_region);
         self.wl_surface.borrow().commit();
     }
 
@@ -455,7 +412,7 @@ impl Data {
     fn run_deferred_task(&self, task: DeferredTask) {
         match task {
             DeferredTask::Paint => {
-                self.buffers.request_paint(self);
+                self.paint();
             }
             DeferredTask::AnimationClear => {
                 self.anim_frame_requested.set(false);
@@ -511,6 +468,13 @@ impl Data {
 
     pub(super) fn release(&self) {
         self.wl_surface.borrow().destroy();
+    }
+
+    pub(crate) fn get_surface(&self) -> *mut c_void {
+        self.wl_surface.borrow().as_ref().c_ptr().cast::<c_void>()
+    }
+    pub(crate) fn get_display(&self) -> *mut c_void {
+        self.compositor.display_as_ptr()
     }
 }
 

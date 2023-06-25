@@ -83,7 +83,7 @@ impl Application {
         let backend_app = backend::Application::new()?;
         let state = Rc::new(RefCell::new(State { running: false }));
         let app = Application { backend_app, state };
-        GLOBAL_APP.with(|global_app| {
+        GLOBAL_APP.with(|global_app: &RefCell<Option<Application>>| {
             *global_app.borrow_mut() = Some(app.clone());
         });
         Ok(app)

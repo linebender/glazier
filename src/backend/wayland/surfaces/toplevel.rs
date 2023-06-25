@@ -52,7 +52,6 @@ impl Surface {
                 match event {
                     xdg_surface::Event::Configure { serial } => {
                         xdg_surface.ack_configure(serial);
-                        wl_surface.resize(wl_surface.get_size());
                         wl_surface.request_paint();
                     }
                     _ => tracing::warn!("unhandled xdg_surface event {:?}", event),

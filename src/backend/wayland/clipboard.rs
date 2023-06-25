@@ -238,11 +238,12 @@ impl Clipboard {
     pub fn put_string(&mut self, s: impl AsRef<str>) {
         let _s = s.as_ref().to_string();
         self.inner.inner.wdsobj.offer(Clipboard::UTF8.to_string());
+        tracing::warn!("clipboard copy not implemented on wayland")
     }
 
     /// Put multi-format data on the system clipboard.
     pub fn put_formats(&mut self, _formats: &[ClipboardFormat]) {
-        tracing::warn!("clipboard copy not implemented");
+        tracing::warn!("clipboard copy not implemented on wayland");
     }
 
     /// Get a string from the system clipboard, if one is available.
