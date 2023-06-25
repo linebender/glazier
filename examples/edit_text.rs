@@ -13,6 +13,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
+use tracing_subscriber::EnvFilter;
 use unicode_segmentation::GraphemeCursor;
 use vello::util::{RenderContext, RenderSurface};
 use vello::Renderer;
@@ -33,6 +34,9 @@ const TEXT_X: f64 = 100.0;
 const TEXT_Y: f64 = 100.0;
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
     let app = Application::new().unwrap();
     let window = glazier::WindowBuilder::new(app.clone())
         .resizable(true)
@@ -177,6 +181,7 @@ impl WindowState {
                 .render_to_surface(device, queue, &self.scene, &surface_texture, width, height)
                 .unwrap();
             surface_texture.present();
+            device.poll(wgpu::Maintain::Poll);
         }
     }
 
@@ -266,6 +271,7 @@ impl WinHandler for WindowState {
     }
 
     fn key_down(&mut self, event: KeyEvent) -> bool {
+        self.schedule_render();
         if self.hotkeys.copy.matches(&event) {
             let doc = self.document.borrow_mut();
             let text = &doc.text[doc.selection.range()];

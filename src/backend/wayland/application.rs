@@ -26,6 +26,7 @@ use calloop;
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeMap, BinaryHeap},
+    ffi::c_void,
     rc::Rc,
     time::{Duration, Instant},
 };
@@ -437,6 +438,10 @@ impl surfaces::Compositor for Data {
 
     fn zwlr_layershell_v1(&self) -> Option<wl::Main<ZwlrLayerShellV1>> {
         self.zwlr_layershell_v1.clone()
+    }
+
+    fn display_as_ptr(&self) -> *mut c_void {
+        self.wayland.display.c_ptr().cast::<c_void>()
     }
 }
 

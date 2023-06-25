@@ -189,10 +189,6 @@ impl Handle for Surface {
         self.inner.wl_surface.get_size()
     }
 
-    fn set_size(&self, dim: kurbo::Size) {
-        self.inner.wl_surface.set_size(dim);
-    }
-
     fn request_anim_frame(&self) {
         self.inner.wl_surface.request_anim_frame()
     }
@@ -231,6 +227,10 @@ impl Handle for Surface {
 
     fn data(&self) -> Option<std::sync::Arc<surface::Data>> {
         self.inner.wl_surface.data()
+    }
+
+    fn set_size(&self, _: kurbo::Size) {
+        todo!()
     }
 }
 

@@ -1,3 +1,5 @@
+use std::ffi::c_void;
+
 use wayland_client::protocol::wl_shm::WlShm;
 use wayland_client::{self as wlc, protocol::wl_surface::WlSurface};
 use wayland_protocols::wlr::unstable::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLayerShellV1;
@@ -29,6 +31,7 @@ pub trait Compositor {
         -> wlc::Main<xdg_surface::XdgSurface>;
     fn get_xdg_positioner(&self) -> wlc::Main<xdg_positioner::XdgPositioner>;
     fn zwlr_layershell_v1(&self) -> Option<wlc::Main<ZwlrLayerShellV1>>;
+    fn display_as_ptr(&self) -> *mut c_void;
 }
 
 pub trait Decor {
@@ -164,6 +167,13 @@ impl Compositor for CompositorHandle {
                 None
             }
             Some(c) => c.zwlr_layershell_v1(),
+        }
+    }
+
+    fn display_as_ptr(&self) -> *mut c_void {
+        match self.inner.upgrade() {
+            Some(it) => it.display_as_ptr(),
+            None => panic!("unable to acquire underyling compositor to access the display"),
         }
     }
 }

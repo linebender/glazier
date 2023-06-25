@@ -363,10 +363,6 @@ impl Handle for Surface {
         return self.inner.wl_surface.borrow().get_size();
     }
 
-    fn set_size(&self, dim: kurbo::Size) {
-        return self.inner.wl_surface.borrow().set_size(dim);
-    }
-
     fn request_anim_frame(&self) {
         if *self.inner.available.borrow() {
             self.inner.wl_surface.borrow().request_anim_frame()
@@ -413,6 +409,10 @@ impl Handle for Surface {
 
     fn data(&self) -> Option<std::sync::Arc<surface::Data>> {
         self.inner.wl_surface.borrow().data()
+    }
+
+    fn set_size(&self, _: kurbo::Size) {
+        todo!()
     }
 }
 

@@ -6,7 +6,6 @@ use wayland_client::protocol::wl_seat;
 use crate::keyboard_types::KeyState;
 use crate::text;
 use crate::KeyEvent;
-use crate::Modifiers;
 
 use super::application::Data;
 use super::surfaces::buffers;
@@ -55,7 +54,6 @@ struct Keyboard {
     xkb_context: xkb::Context,
     xkb_keymap: std::cell::RefCell<Option<xkb::Keymap>>,
     xkb_state: std::cell::RefCell<Option<xkb::State>>,
-    xkb_mods: std::cell::Cell<Modifiers>,
 }
 
 impl Default for Keyboard {
@@ -67,7 +65,6 @@ impl Default for Keyboard {
             xkb_context: xkb::Context::new(),
             xkb_keymap: std::cell::RefCell::new(None),
             xkb_state: std::cell::RefCell::new(None),
-            xkb_mods: std::cell::Cell::new(Modifiers::empty()),
         }
     }
 }
@@ -113,12 +110,11 @@ impl Keyboard {
             _ => panic!("unrecognised key event"),
         };
 
-        let mut event = self.xkb_state.borrow_mut().as_mut().unwrap().key_event(
+        let event = self.xkb_state.borrow_mut().as_mut().unwrap().key_event(
             keystroke.key,
             keystate,
             keystroke.repeat,
         );
-        event.mods = self.xkb_mods.get();
 
         if let Err(cause) = keystroke.queue.send(event) {
             tracing::error!("failed to send druid key event: {:?}", cause);
