@@ -176,9 +176,12 @@ impl WindowHandle {
     /// Request a new paint, but without invalidating anything.
     pub fn request_anim_frame(&self) {
         let props = self.properties();
-        let props = props.borrow();
-        let surface = props.wayland_window.wl_surface();
-        surface.frame(&props.wayland_queue, surface.clone());
+        let mut props = props.borrow_mut();
+        props.will_repaint = true;
+        if !props.pending_frame_callback {
+            drop(props);
+            self.defer(WindowAction::AnimationRequested);
+        }
     }
 
     /// Request invalidation of the entire window contents.
@@ -486,6 +489,9 @@ impl WindowBuilder {
             current_scale: Scale::new(1., 1.), // TODO: NaN? - these values should (must?) not be used
             wayland_window,
             wayland_queue: self.wayland_queue.clone(),
+            will_repaint: false,
+            pending_frame_callback: false,
+            configured: false,
         };
         let properties_strong = Rc::new(RefCell::new(properties));
 
@@ -548,6 +554,67 @@ struct WindowProperties {
     // We make this the only handle, so we can definitely drop it
     wayland_window: Window,
     wayland_queue: QueueHandle<WaylandState>,
+
+    /// Wayland requires frame (throttling) callbacks be requested *before* running commit.
+    /// However, user code controls when commit is called (generally through wgpu's
+    /// `present` in `paint`).
+    /// To allow using the frame throttling hints properly we:
+    /// - Always request a throttling hint before `paint`ing
+    /// - Only action that hint if a request_anim_frame (or equivalent) was called
+    /// - If there is no running hint, manually run this process when calling request_anim_frame
+    will_repaint: bool,
+    /// Whether a `frame` callback has been skipped
+    /// If this is false, and painting is requested, we need to manually run our own painting
+    pending_frame_callback: bool,
+    // We can't draw before being configured
+    configured: bool,
+}
+
+/// The context do_paint is called in
+enum PaintContext {
+    /// Painting occurs during a `frame` callback and finished, we know that there are no more frame callbacks
+    Frame,
+    Requested,
+    Configure,
+}
+
+impl WindowState {
+    fn do_paint(&mut self, force: bool, context: PaintContext) {
+        {
+            let mut props = self.properties.borrow_mut();
+            if matches!(context, PaintContext::Frame) {
+                props.pending_frame_callback = false;
+            }
+            if !props.configured || (!props.will_repaint && !force) {
+                return;
+            }
+            props.will_repaint = false;
+            // If there is not a frame callback in flight, we request it here
+            // This branch could be skipped e.g. on `configure`, which ignores frame throttling hints and
+            // always paints eagerly, even if there is a frame callback running
+            // TODO: Is that the semantics we want?
+            if !props.pending_frame_callback {
+                props.pending_frame_callback = true;
+                let surface = props.wayland_window.wl_surface();
+                surface.frame(&props.wayland_queue.clone(), surface.clone());
+            }
+        }
+        self.handler.prepare_paint();
+        // TODO: Apply invalid properly
+        // When forcing, should mark the entire region as damaged
+        let mut region = Region::EMPTY;
+        {
+            let props = self.properties.borrow();
+            let size = props.current_size.to_dp(props.current_scale);
+            region.add_rect(Rect {
+                x0: 0.0,
+                y0: 0.0,
+                x1: size.width,
+                y1: size.height,
+            });
+        }
+        self.handler.paint(&region);
+    }
 }
 
 delegate_xdg_shell!(WaylandState);
@@ -574,7 +641,7 @@ impl CompositorHandler for WaylandState {
             let mut props = window.properties.borrow_mut();
             // TODO: Effectively, we need to re-evaluate the size calculation
             // That means we need to cache the WindowConfigure or (mostly) equivalent
-            let cur_size_raw = props.current_size.to_px(props.current_scale);
+            let cur_size_raw: Size = props.current_size.to_px(props.current_scale);
             new_size = cur_size_raw.to_dp(scale);
             props.current_scale = scale;
             props.current_size = new_size;
@@ -590,23 +657,10 @@ impl CompositorHandler for WaylandState {
         _: &Connection,
         _: &QueueHandle<Self>,
         surface: &protocol::wl_surface::WlSurface,
-        _: u32,
+        _time: u32,
     ) {
         let Some(window) = self.windows.get_mut(&WindowId::of_surface(surface)) else { return };
-        window.handler.prepare_paint();
-        // TODO: Apply invalid properly
-        let mut region = Region::EMPTY;
-        {
-            let props = window.properties.borrow();
-            let size = props.current_size.to_dp(props.current_scale);
-            region.add_rect(Rect {
-                x0: 0.0,
-                y0: 0.0,
-                x1: size.width,
-                y1: size.height,
-            });
-        }
-        window.handler.paint(&region);
+        window.do_paint(false, PaintContext::Frame);
     }
 }
 
@@ -637,7 +691,6 @@ impl WindowHandler for WaylandState {
             return;
         };
         // TODO: Actually use the suggestions in the configure event
-        let mut region = Region::EMPTY;
         let new_width = configure.new_size.0.map_or(256, |it| it.get());
         let new_height = configure.new_size.1.map_or(256, |it| it.get());
         let new_size_absolute = Size {
@@ -649,17 +702,10 @@ impl WindowHandler for WaylandState {
             let mut props = window.properties.borrow_mut();
             display_size = new_size_absolute.to_dp(props.current_scale);
             props.current_size = display_size;
-            region.add_rect(Rect {
-                x0: 0.0,
-                y0: 0.0,
-                x1: display_size.width,
-                y1: display_size.height,
-            });
+            props.configured = true;
         };
         window.handler.size(display_size);
-        // TODO: Should we defer this (to reuse the same logic?)
-        window.handler.prepare_paint();
-        window.handler.paint(&region);
+        window.do_paint(true, PaintContext::Configure);
     }
 }
 
@@ -671,6 +717,7 @@ pub(super) enum WindowAction {
     /// Close the Window
     Close,
     Create(WindowState, WindowHandle),
+    AnimationRequested,
 }
 
 impl WindowAction {
@@ -678,21 +725,19 @@ impl WindowAction {
         match self {
             WindowAction::ResizeRequested => {
                 let Some(window) = state.windows.get_mut(&window_id) else { return };
-                let (size, surface) = {
+                let size = {
                     let mut props = window.properties.borrow_mut();
                     // TODO: Should this requested_size be taken?
                     // Reason to suspect it should be would be resizes (if enabled)
                     let size = props.requested_size.expect("Can't unset requested size");
                     props.current_size = size;
-                    let surface = props.wayland_window.wl_surface().clone();
-                    (size, surface)
+                    size
                 };
                 // TODO: Ensure we follow the rules laid out by the compositor in `configure`
                 window.handler.size(size);
-                // TODO: Don't stack up frame callbacks - need to ensure only one per `paint` call?
-                // Request a redraw now that the size has changed (?) - should the application do this/
-                // should this be synchronous(?)
-                surface.frame(&state.wayland_queue.clone(), surface.clone());
+                // Force repainting now that the size has changed.
+                // TODO: Should this only happen if the size is actually different?
+                window.do_paint(true, PaintContext::Requested);
             }
             WindowAction::Close => {
                 // Remove the window from tracking
@@ -705,12 +750,16 @@ impl WindowAction {
                     state.loop_signal.stop();
                 }
             }
-            Self::Create(win_state, handle) => {
+            WindowAction::Create(win_state, handle) => {
                 let res = state.windows.entry(window_id);
                 let win_state = res.or_insert(win_state);
                 win_state.handler.connect(&crate::WindowHandle(
                     crate::backend::window::WindowHandle::Wayland(handle),
                 ));
+            }
+            WindowAction::AnimationRequested => {
+                let Some(window) = state.windows.get_mut(&window_id) else { return };
+                window.do_paint(false, PaintContext::Requested);
             }
         }
     }

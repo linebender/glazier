@@ -5,6 +5,7 @@ use glazier::{
 };
 use parley::{FontContext, Layout};
 use std::any::Any;
+use tracing_subscriber::EnvFilter;
 use vello::util::{RenderContext, RenderSurface};
 use vello::Renderer;
 use vello::{
@@ -21,6 +22,9 @@ const WIDTH: usize = 2048;
 const HEIGHT: usize = 1536;
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
     let app = Application::new().unwrap();
     let window = glazier::WindowBuilder::new(app.clone())
         .size((WIDTH as f64 / 2., HEIGHT as f64 / 2.).into())
