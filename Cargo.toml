@@ -14,20 +14,15 @@ rustdoc-args = ["--cfg", "docsrs"]
 default-target = "x86_64-pc-windows-msvc"
 
 [features]
-default = ["x11", "wayland"]
+default = ["wayland"]
 x11 = ["ashpd", "bindgen", "futures", "nix", "pkg-config", "x11rb"]
 wayland = [
-    "wayland-client",
-    "wayland-protocols/client",
-    "wayland-protocols/unstable_protocols",
-    "nix",
-    "rand",
-    "calloop",
-    "wayland-cursor",
-    "log",
-    "im",
-    "bindgen",
+    # Required for XKBCommon
     "pkg-config",
+    "bindgen",
+    "nix",
+    "smithay-client-toolkit",
+    "wayland-backend",
 ]
 
 # passing on all the image features. AVIF is not supported because it does not
@@ -119,6 +114,7 @@ ashpd = { version = "0.4", optional = true }
 futures = { version = "0.3.24", optional = true, features = ["executor"] }
 
 nix = { version = "0.25.0", optional = true }
+
 x11rb = { version = "0.11.1", features = [
     "allow-unsafe-code",
     "present",
@@ -130,15 +126,20 @@ x11rb = { version = "0.11.1", features = [
     "cursor",
     "xinput",
 ], optional = true }
-wayland-client = { version = "0.29.5", optional = true, features = [
-    "use_system_lib",
-] }
+wayland-client = { version = "0.29.5", optional = true }
 wayland-protocols = { version = "0.29.5", optional = true }
 wayland-cursor = { version = "0.29.5", optional = true }
 rand = { version = "0.8.0", optional = true }
 calloop = { version = "0.7.1", optional = true }
 log = { version = "0.4.14", optional = true }
 im = { version = "15.0.0", optional = true }
+
+# Wayland dependencies
+smithay-client-toolkit = { version = "0.17.0", optional = true }
+# Needed for supporting RawWindowHandle
+wayland-backend = { version = "0.1.0", default_features = false, features = [
+    "client_system",
+], optional = true }
 
 [target.'cfg(target_arch="wasm32")'.dependencies]
 wasm-bindgen = "0.2.67"

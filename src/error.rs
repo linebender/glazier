@@ -20,7 +20,7 @@ use std::sync::Arc;
 use crate::backend::error as backend;
 
 /// Shell errors.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Error {
     /// The Application instance has already been created.
     ApplicationAlreadyExists,

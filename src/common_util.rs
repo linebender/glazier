@@ -24,7 +24,6 @@ use std::time::Duration;
 use instant::Instant;
 
 use crate::kurbo::Point;
-use crate::WinHandler;
 
 // This is the default timing on windows.
 const MULTI_CLICK_INTERVAL: Duration = Duration::from_millis(500);
@@ -51,8 +50,6 @@ pub fn strip_access_key(raw_menu_text: &str) -> String {
     }
     result
 }
-
-pub(crate) type IdleCallback = Box<dyn for<'a> FnOnce(&'a mut dyn WinHandler) + Send>;
 
 /// A sharable queue. Similar to a `std::sync::mpsc` channel, this queue is implmented as two types:
 /// [`SharedEnqueuer`] and [`SharedDequeuer`].

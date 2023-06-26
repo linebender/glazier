@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum Error {
     #[cfg(feature = "wayland")]
     Wayland(crate::backend::wayland::error::Error),

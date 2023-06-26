@@ -83,7 +83,7 @@ impl Application {
         let backend_app = backend::Application::new()?;
         let state = Rc::new(RefCell::new(State { running: false }));
         let app = Application { backend_app, state };
-        GLOBAL_APP.with(|global_app: &RefCell<Option<Application>>| {
+        GLOBAL_APP.with(|global_app| {
             *global_app.borrow_mut() = Some(app.clone());
         });
         Ok(app)
@@ -201,7 +201,7 @@ impl AppHandle {
     where
         F: FnOnce(Option<&mut dyn AppHandler>) + Send + 'static,
     {
-        self.0.run_on_main(callback)
+        self.0.run_on_main(callback);
     }
 }
 
@@ -213,4 +213,6 @@ mod test {
 
     sa::assert_not_impl_any!(Application: Send, Sync);
     sa::assert_impl_all!(AppHandle: Send);
+    // TODO: sa::assert_not_impl_all!(AppHandle: Sync);
+    // and same for IdleHandle
 }

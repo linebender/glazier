@@ -1,4 +1,4 @@
-// Copyright 2019 The Druid Authors.
+// Copyright 2020 The Druid Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,107 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! wayland platform errors.
+//! Wayland errors
 
-use std::{error::Error as StdError, fmt, sync::Arc};
-use wayland_client as wl;
+use std::fmt;
 
-#[derive(Debug, Clone)]
+use smithay_client_toolkit::reexports::{
+    calloop,
+    client::{globals::BindError, ConnectError},
+};
+
+#[derive(Debug)]
 pub enum Error {
-    /// Error connecting to wayland server.
-    Connect(Arc<wl::ConnectError>),
-    /// A wayland global either doesn't exist, or doesn't support the version we need.
-    Global {
-        name: String,
-        version: u32,
-        inner: Arc<wl::GlobalError>,
-    },
-    /// An unexpected error occurred. It's not handled by glazier/wayland, so you should
-    /// terminate the app.
-    Fatal(Arc<dyn StdError + 'static>),
-    String(ErrorString),
-    InvalidParent(u32),
-    /// general error.
-    Err(Arc<dyn StdError + 'static>),
-}
-
-impl Error {
-    #[allow(clippy::self_named_constructors)]
-    pub fn error(e: impl StdError + 'static) -> Self {
-        Self::Err(Arc::new(e))
-    }
-
-    pub fn fatal(e: impl StdError + 'static) -> Self {
-        Self::Fatal(Arc::new(e))
-    }
-
-    pub fn global(name: impl Into<String>, version: u32, inner: wl::GlobalError) -> Self {
-        Error::Global {
-            name: name.into(),
-            version,
-            inner: Arc::new(inner),
-        }
-    }
-
-    pub fn string(s: impl Into<String>) -> Self {
-        Error::String(ErrorString::from(s))
-    }
+    Connect(ConnectError),
+    Bind(BindError),
+    Calloop(calloop::Error),
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         match self {
-            Self::Connect(e) => write!(f, "could not connect to the wayland server: {e:?}"),
-            Self::Global { name, version, .. } => write!(
-                f,
-                "a required wayland global ({name}@{version}) was unavailable"
-            ),
-            Self::Fatal(e) => write!(f, "an unhandled error occurred: {e:?}"),
-            Self::Err(e) => write!(f, "an unhandled error occurred: {e:?}"),
-            Self::String(e) => e.fmt(f),
-            Self::InvalidParent(id) => write!(f, "invalid parent window for popup: {id:?}"),
+            Error::Connect(e) => write!(f, "could not connect to the wayland server: {e:}"),
+            Error::Bind(e) => write!(f, "could not bind a wayland global: {e:}"),
+            Error::Calloop(e) => write!(f, "calloop failed: {e:}"),
         }
     }
 }
 
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        match self {
-            Self::Connect(e) => Some(&**e),
-            Self::Global { inner, .. } => Some(&**inner),
-            Self::Fatal(e) => Some(&**e),
-            Self::Err(e) => Some(&**e),
-            Self::String(e) => Some(e),
-            Self::InvalidParent(_) => None,
-        }
+impl std::error::Error for Error {}
+
+impl From<ConnectError> for Error {
+    fn from(value: ConnectError) -> Self {
+        Self::Connect(value)
     }
 }
 
-impl From<wl::ConnectError> for Error {
-    fn from(err: wl::ConnectError) -> Self {
-        Self::Connect(Arc::new(err))
+impl From<BindError> for Error {
+    fn from(value: BindError) -> Self {
+        Self::Bind(value)
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ErrorString {
-    details: String,
-}
-
-impl ErrorString {
-    pub fn from(s: impl Into<String>) -> Self {
-        Self { details: s.into() }
-    }
-}
-
-impl std::fmt::Display for ErrorString {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.details)
-    }
-}
-
-impl std::error::Error for ErrorString {
-    fn description(&self) -> &str {
-        &self.details
+impl From<calloop::Error> for Error {
+    fn from(value: calloop::Error) -> Self {
+        Self::Calloop(value)
     }
 }
