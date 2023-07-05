@@ -157,14 +157,14 @@ features = [
 ]
 
 [dev-dependencies]
-pretty_env_logger = "0.4"
+pretty_env_logger = "0.5"
 static_assertions = "1.1.0"
 test-log = { version = "0.2.5", features = ["trace"], default-features = false }
 tracing-subscriber = { version = "0.3.2", features = ["env-filter"] }
 unicode-segmentation = "1.7.0"
 vello = { git = "https://github.com/linebender/vello", rev = "5f59a2e8181a7d01f8753680676dd150b965728b" }
 parley = { git = "https://github.com/dfrg/parley", rev = "e4276b4d1001a050c07121f95ca255c771e9a641" }
-pollster = "0.2.5"
+pollster = "0.3.0"
 wgpu = "0.15.0"
 
 [target.'cfg(any(target_os = "freebsd", target_os="linux", target_os="openbsd"))'.build-dependencies]
