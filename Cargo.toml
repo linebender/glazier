@@ -111,7 +111,6 @@ block = "0.1.6"
 cocoa = "0.24.0"
 objc = "0.2.7"
 core-graphics = "0.22.0"
-foreign-types = "0.3.2"
 bitflags = "1.2.1"
 accesskit_macos = { version = "0.7.0", optional = true }
 
