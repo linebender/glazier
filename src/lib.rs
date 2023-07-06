@@ -74,7 +74,8 @@ pub use keyboard::{Code, IntoKey, KbKey, KeyEvent, KeyState, Location, Modifiers
 pub use menu::Menu;
 pub use mouse::{Cursor, CursorDesc, MouseButton, MouseButtons, MouseEvent};
 pub use pointer::{
-    PenInclination, PointerButton, PointerButtons, PointerEvent, PointerId, PointerType,
+    MouseInfo, PenInclination, PenInfo, PointerButton, PointerButtons, PointerEvent, PointerId,
+    PointerType, TouchInfo,
 };
 pub use region::Region;
 pub use scale::{Scalable, Scale, ScaledArea};
