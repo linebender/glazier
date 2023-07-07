@@ -42,7 +42,7 @@ jobs:
           components: clippy
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: cargo clippy glazier
         run: cargo clippy --all-targets --features=x11 --no-default-features -- -D warnings
@@ -69,7 +69,7 @@ jobs:
           components: clippy
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: cargo clippy glazier
         run: cargo clippy --all-targets --features=wayland --no-default-features -- -D warnings
@@ -96,7 +96,7 @@ jobs:
 #          components: clippy
 #
 #      - name: restore cache
-#        uses: Swatinem/rust-cache@v1
+#        uses: Swatinem/rust-cache@v2
 #
 #      - name: cargo clippy glazier (wasm)
 #        run: cargo clippy --all-targets --target wasm32-unknown-unknown -- -D warnings
@@ -117,7 +117,7 @@ jobs:
           toolchain: "1.68"
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: cargo test glazier --doc
         run: cargo test --doc --no-default-features --features=image,im
@@ -140,7 +140,7 @@ jobs:
           components: clippy
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: cargo clippy glazier
         run: cargo clippy --all-targets -- -D warnings
@@ -162,7 +162,7 @@ jobs:
           toolchain: "beta"
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: cargo test glazier --doc
         run: cargo test --doc --features=image,im
@@ -188,7 +188,7 @@ jobs:
           toolchain: "1.68"
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: cargo doc glazier
         run: cargo doc --no-deps --document-private-items
