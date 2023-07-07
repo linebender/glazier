@@ -44,13 +44,11 @@ jobs:
       - name: restore cache
         uses: Swatinem/rust-cache@v1
 
-      # Clippy packages in deeper-to-higher dependency order
       - name: cargo clippy glazier
-        run: cargo clippy --manifest-path=Cargo.toml --all-targets --features=x11 --no-default-features -- -D warnings
+        run: cargo clippy --all-targets --features=x11 --no-default-features -- -D warnings
 
-      # Test packages in deeper-to-higher dependency order
       - name: cargo test glazier
-        run: cargo test --manifest-path=Cargo.toml --no-default-features --features=x11
+        run: cargo test --no-default-features --features=x11
 
   # we test the wayland backend as a separate job
   test-stable-wayland:
@@ -74,10 +72,10 @@ jobs:
         uses: Swatinem/rust-cache@v1
 
       - name: cargo clippy glazier
-        run: cargo clippy --manifest-path=Cargo.toml --all-targets --features=wayland --no-default-features -- -D warnings
+        run: cargo clippy --all-targets --features=wayland --no-default-features -- -D warnings
 
       - name: cargo test glazier
-        run: cargo test --manifest-path=Cargo.toml --features wayland --no-default-features
+        run: cargo test --features wayland --no-default-features
 
 #  test-stable-wasm:
 #    runs-on: macOS-latest
@@ -101,12 +99,11 @@ jobs:
 #        uses: Swatinem/rust-cache@v1
 #
 #      - name: cargo clippy glazier (wasm)
-#        run: cargo clippy --manifest-path=Cargo.toml --all-targets --target wasm32-unknown-unknown -- -D warnings
+#        run: cargo clippy --all-targets --target wasm32-unknown-unknown -- -D warnings
 #
-#      # Test wasm32 relevant packages in deeper-to-higher dependency order
 #      # TODO: Find a way to make tests work. Until then the tests are merely compiled.
 #      - name: cargo test compile glazier
-#        run: cargo test --manifest-path=Cargo.toml --no-run --target wasm32-unknown-unknown
+#        run: cargo test --no-run --target wasm32-unknown-unknown
 
   doctest-stable:
     runs-on: macOS-latest
@@ -123,7 +120,7 @@ jobs:
         uses: Swatinem/rust-cache@v1
 
       - name: cargo test glazier --doc
-        run: cargo test --manifest-path=Cargo.toml --doc --no-default-features --features=image,im
+        run: cargo test --doc --no-default-features --features=image,im
 
   # This tests the future rust compiler to catch errors ahead of time without
   # breaking CI
@@ -145,14 +142,12 @@ jobs:
       - name: restore cache
         uses: Swatinem/rust-cache@v1
 
-      # Clippy packages in deeper-to-higher dependency order
       - name: cargo clippy glazier
-        run: cargo clippy --manifest-path=Cargo.toml --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
         continue-on-error: true
 
-      # Test packages in deeper-to-higher dependency order
       - name: cargo test glazier
-        run: cargo test --manifest-path=Cargo.toml --no-default-features --features=x11
+        run: cargo test --no-default-features --features=x11
         continue-on-error: true
 
   doctest-beta:
@@ -170,7 +165,7 @@ jobs:
         uses: Swatinem/rust-cache@v1
 
       - name: cargo test glazier --doc
-        run: cargo test --manifest-path=Cargo.toml --doc --features=image,im
+        run: cargo test --doc --features=image,im
 
   check-docs:
     name: Docs
@@ -195,11 +190,10 @@ jobs:
       - name: restore cache
         uses: Swatinem/rust-cache@v1
 
-      # Doc packages in deeper-to-higher dependency order
       - name: cargo doc glazier
-        run: cargo doc --manifest-path=Cargo.toml --no-deps --document-private-items
+        run: cargo doc --no-deps --document-private-items
 
       # On Linux also attempt docs for X11.
       - name: cargo doc glazier (X11)
-        run: cargo doc --manifest-path=Cargo.toml --features=x11 --no-deps --document-private-items
+        run: cargo doc --features=x11 --no-deps --document-private-items
         if: contains(matrix.os, 'ubuntu')
