@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     name: cargo fmt
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install stable toolchain
         uses: actions-rs/toolchain@v1
@@ -32,7 +32,7 @@ jobs:
         os: [macOS-latest, windows-2019, ubuntu-latest]
     name: cargo clippy+test
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install libx11-dev
         run: |
@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     name: cargo clippy+test (wayland)
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install wayland
         run: |
@@ -104,7 +104,7 @@ jobs:
 #    runs-on: macOS-latest
 #    name: cargo test (wasm32)
 #    steps:
-#      - uses: actions/checkout@v2
+#      - uses: actions/checkout@v3
 #
 #      - name: install wasm-pack
 #        uses: jetli/wasm-pack-action@v0.3.0
@@ -141,7 +141,7 @@ jobs:
     runs-on: macOS-latest
     name: glazier doctests
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install stable toolchain
         uses: actions-rs/toolchain@v1
@@ -168,7 +168,7 @@ jobs:
     runs-on: macOS-latest
     name: cargo clippy+test beta
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install beta toolchain
         uses: actions-rs/toolchain@v1
@@ -201,7 +201,7 @@ jobs:
     runs-on: macOS-latest
     name: glazier doctests beta
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install beta toolchain
         uses: actions-rs/toolchain@v1
@@ -226,7 +226,7 @@ jobs:
       matrix:
         os: [macOS-latest, windows-2019]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install dependencies
         run: |

@@ -11,7 +11,7 @@ jobs:
     if: (!startsWith(github.event_name, 'issue_comment') || startsWith(github.event.comment.body, '/bloat'))
     steps:
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: get revisions
         id: get_revs
@@ -25,7 +25,7 @@ jobs:
         if: steps.get_revs.outputs.fetch != ''
 
       - name: checkout base
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           ref: ${{ steps.get_revs.outputs.base }}
 
@@ -54,7 +54,7 @@ jobs:
             target/release/examples/quit.rs
             target/release/examples/shello.rs
       - name: checkout head
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           clean: false # avoid rebuilding artifacts unnecessarily
           ref: ${{ steps.get_revs.outputs.head }}
