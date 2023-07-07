@@ -50,6 +50,10 @@ jobs:
       - name: cargo test glazier
         run: cargo test --no-default-features --features=x11
 
+      - name: cargo build accesskit example
+        run: cargo build --features accesskit --example accesskit
+        if: contains(matrix.os, 'macos') || contains(matrix.os, 'windows')
+
   # we test the wayland backend as a separate job
   test-stable-wayland:
     runs-on: ubuntu-latest
