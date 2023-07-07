@@ -9,21 +9,16 @@ jobs:
     runs-on: ubuntu-latest
     name: cargo fmt
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.68
-          profile: minimal
+          toolchain: "1.68"
           components: rustfmt
-          override: true
 
       - name: cargo fmt
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        run: cargo fmt --all -- --check
 
   test-stable:
     runs-on: ${{ matrix.os }}
@@ -32,7 +27,7 @@ jobs:
         os: [macOS-latest, windows-2019, ubuntu-latest]
     name: cargo clippy+test
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install libx11-dev
         run: |
@@ -41,36 +36,30 @@ jobs:
         if: contains(matrix.os, 'ubuntu')
 
       - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.68
+          toolchain: "1.68"
           components: clippy
-          profile: minimal
-          override: true
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
-      # Clippy packages in deeper-to-higher dependency order
       - name: cargo clippy glazier
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --manifest-path=Cargo.toml --all-targets --features=x11 --no-default-features -- -D warnings
+        run: cargo clippy --all-targets --features=x11 --no-default-features -- -D warnings
 
-      # Test packages in deeper-to-higher dependency order
       - name: cargo test glazier
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path=Cargo.toml --no-default-features --features=x11
+        run: cargo test --no-default-features --features=x11
+
+      - name: cargo build accesskit example
+        run: cargo build --features accesskit --example accesskit
+        if: contains(matrix.os, 'macos') || contains(matrix.os, 'windows')
 
   # we test the wayland backend as a separate job
   test-stable-wayland:
     runs-on: ubuntu-latest
     name: cargo clippy+test (wayland)
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install wayland
         run: |
@@ -78,33 +67,25 @@ jobs:
           sudo apt install libwayland-dev libpango1.0-dev libxkbcommon-dev
 
       - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.68
+          toolchain: "1.68"
           components: clippy
-          profile: minimal
-          override: true
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: cargo clippy glazier
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --manifest-path=Cargo.toml --all-targets --features=wayland --no-default-features -- -D warnings
+        run: cargo clippy --all-targets --features=wayland --no-default-features -- -D warnings
 
       - name: cargo test glazier
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path=Cargo.toml --features wayland --no-default-features
+        run: cargo test --features wayland --no-default-features
 
 #  test-stable-wasm:
 #    runs-on: macOS-latest
 #    name: cargo test (wasm32)
 #    steps:
-#      - uses: actions/checkout@v2
+#      - uses: actions/checkout@v3
 #
 #      - name: install wasm-pack
 #        uses: jetli/wasm-pack-action@v0.3.0
@@ -112,52 +93,38 @@ jobs:
 #          version: latest
 #
 #      - name: install stable toolchain
-#        uses: actions-rs/toolchain@v1
+#        uses: dtolnay/rust-toolchain@master
 #        with:
-#          toolchain: 1.68
+#          toolchain: "1.68"
 #          target: wasm32-unknown-unknown
 #          components: clippy
-#          profile: minimal
-#          override: true
 #
 #      - name: restore cache
-#        uses: Swatinem/rust-cache@v1
+#        uses: Swatinem/rust-cache@v2
 #
 #      - name: cargo clippy glazier (wasm)
-#        uses: actions-rs/cargo@v1
-#        with:
-#          command: clippy
-#          args: --manifest-path=Cargo.toml --all-targets --target wasm32-unknown-unknown -- -D warnings
+#        run: cargo clippy --all-targets --target wasm32-unknown-unknown -- -D warnings
 #
-#      # Test wasm32 relevant packages in deeper-to-higher dependency order
 #      # TODO: Find a way to make tests work. Until then the tests are merely compiled.
 #      - name: cargo test compile glazier
-#        uses: actions-rs/cargo@v1
-#        with:
-#          command: test
-#          args: --manifest-path=Cargo.toml --no-run --target wasm32-unknown-unknown
+#        run: cargo test --no-run --target wasm32-unknown-unknown
 
   doctest-stable:
     runs-on: macOS-latest
     name: glazier doctests
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.68
-          profile: minimal
-          override: true
+          toolchain: "1.68"
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: cargo test glazier --doc
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path=Cargo.toml --doc --no-default-features --features=image,im
+        run: cargo test --doc --no-default-features --features=image,im
 
   # This tests the future rust compiler to catch errors ahead of time without
   # breaking CI
@@ -168,56 +135,41 @@ jobs:
     runs-on: macOS-latest
     name: cargo clippy+test beta
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install beta toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: beta
+          toolchain: "beta"
           components: clippy
-          profile: minimal
-          override: true
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
-      # Clippy packages in deeper-to-higher dependency order
       - name: cargo clippy glazier
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --manifest-path=Cargo.toml --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
         continue-on-error: true
 
-      # Test packages in deeper-to-higher dependency order
       - name: cargo test glazier
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path=Cargo.toml --no-default-features --features=x11
+        run: cargo test --no-default-features --features=x11
         continue-on-error: true
 
   doctest-beta:
     runs-on: macOS-latest
     name: glazier doctests beta
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install beta toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: beta
-          profile: minimal
-          override: true
+          toolchain: "beta"
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
       - name: cargo test glazier --doc
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --manifest-path=Cargo.toml --doc --features=image,im
+        run: cargo test --doc --features=image,im
 
   check-docs:
     name: Docs
@@ -226,7 +178,7 @@ jobs:
       matrix:
         os: [macOS-latest, windows-2019]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: install dependencies
         run: |
@@ -235,26 +187,17 @@ jobs:
         if: contains(matrix.os, 'ubuntu')
 
       - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.68
-          profile: minimal
-          override: true
+          toolchain: "1.68"
 
       - name: restore cache
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
-      # Doc packages in deeper-to-higher dependency order
       - name: cargo doc glazier
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --manifest-path=Cargo.toml --no-deps --document-private-items
+        run: cargo doc --no-deps --document-private-items
 
       # On Linux also attempt docs for X11.
       - name: cargo doc glazier (X11)
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --manifest-path=Cargo.toml --features=x11 --no-deps --document-private-items
+        run: cargo doc --features=x11 --no-deps --document-private-items
         if: contains(matrix.os, 'ubuntu')
