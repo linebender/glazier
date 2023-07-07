@@ -36,10 +36,7 @@ jobs:
 
       - name: build base
         if: steps.get_revs.outputs.base != steps.get_revs.outputs.head
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --examples
+        run: cargo build --release --examples
 
       - name: get old sizes
         if: steps.get_revs.outputs.base != steps.get_revs.outputs.head
@@ -60,10 +57,7 @@ jobs:
 
       - name: build head
         if: steps.get_revs.outputs.base != steps.get_revs.outputs.head
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --examples
+        run: cargo build --release --examples
 
       - name: get new sizes
         if: steps.get_revs.outputs.base != steps.get_revs.outputs.head
