@@ -27,6 +27,7 @@ extern "C" {
 }
 
 bitflags! {
+    #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
     pub struct NSTrackingAreaOptions: i32 {
         const MouseEnteredAndExited = 1;
         const MouseMoved = 1 << 1;
