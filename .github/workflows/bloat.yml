@@ -30,10 +30,9 @@ jobs:
           ref: ${{ steps.get_revs.outputs.base }}
 
       - name: setup stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable
-          override: true
+          toolchain: "stable"
 
       - name: build base
         if: steps.get_revs.outputs.base != steps.get_revs.outputs.head

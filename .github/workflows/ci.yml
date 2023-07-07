@@ -12,12 +12,10 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.68
-          profile: minimal
+          toolchain: "1.68"
           components: rustfmt
-          override: true
 
       - name: cargo fmt
         uses: actions-rs/cargo@v1
@@ -41,12 +39,10 @@ jobs:
         if: contains(matrix.os, 'ubuntu')
 
       - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.68
+          toolchain: "1.68"
           components: clippy
-          profile: minimal
-          override: true
 
       - name: restore cache
         uses: Swatinem/rust-cache@v1
@@ -78,12 +74,10 @@ jobs:
           sudo apt install libwayland-dev libpango1.0-dev libxkbcommon-dev
 
       - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.68
+          toolchain: "1.68"
           components: clippy
-          profile: minimal
-          override: true
 
       - name: restore cache
         uses: Swatinem/rust-cache@v1
@@ -112,13 +106,11 @@ jobs:
 #          version: latest
 #
 #      - name: install stable toolchain
-#        uses: actions-rs/toolchain@v1
+#        uses: dtolnay/rust-toolchain@master
 #        with:
-#          toolchain: 1.68
+#          toolchain: "1.68"
 #          target: wasm32-unknown-unknown
 #          components: clippy
-#          profile: minimal
-#          override: true
 #
 #      - name: restore cache
 #        uses: Swatinem/rust-cache@v1
@@ -144,11 +136,9 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.68
-          profile: minimal
-          override: true
+          toolchain: "1.68"
 
       - name: restore cache
         uses: Swatinem/rust-cache@v1
@@ -171,12 +161,10 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: install beta toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: beta
+          toolchain: "beta"
           components: clippy
-          profile: minimal
-          override: true
 
       - name: restore cache
         uses: Swatinem/rust-cache@v1
@@ -204,11 +192,9 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: install beta toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: beta
-          profile: minimal
-          override: true
+          toolchain: "beta"
 
       - name: restore cache
         uses: Swatinem/rust-cache@v1
@@ -235,11 +221,9 @@ jobs:
         if: contains(matrix.os, 'ubuntu')
 
       - name: install stable toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.68
-          profile: minimal
-          override: true
+          toolchain: "1.68"
 
       - name: restore cache
         uses: Swatinem/rust-cache@v1
