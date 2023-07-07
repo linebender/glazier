@@ -153,6 +153,12 @@ pub struct PenInfo {
 
 impl PenInfo {}
 
+/// Various properties of a touch event.
+///
+/// These follow the web [PointerEvents] specification fairly closely, so see those
+/// documents for more context and nice pictures.
+///
+/// [PointerEvents]: (https://www.w3.org/TR/pointerevents3)
 #[derive(Debug, Clone, PartialEq)]
 pub struct TouchInfo {
     pub contact_geometry: Size,
@@ -160,6 +166,7 @@ pub struct TouchInfo {
     // TODO: Phase?
 }
 
+/// Various properties of a mouse event.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MouseInfo {
     pub wheel_delta: Vec2,
