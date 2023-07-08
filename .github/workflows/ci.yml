@@ -1,8 +1,16 @@
+# We aim to always test with the latest stable Rust toolchain, however we pin to a specific version
+# like 1.70. Note that we only specify MAJOR.MINOR and not PATCH so that bugfixes still come
+# automatically. If the version specified here is no longer the latest stable version,
+# then please feel free to submit a PR that adjusts it along with the potential clippy fixes.
+env:
+  RUST_STABLE_VER: "1.68" # In quotes because otherwise 1.70 would be interpreted as 1.7
+
 on:
   push:
     branches:
       - main
   pull_request:
+  merge_group:
 
 jobs:
   rustfmt:
@@ -14,7 +22,7 @@ jobs:
       - name: install stable toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.68"
+          toolchain: ${{ env.RUST_STABLE_VER }}
           components: rustfmt
 
       - name: cargo fmt
@@ -38,7 +46,7 @@ jobs:
       - name: install stable toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.68"
+          toolchain: ${{ env.RUST_STABLE_VER }}
           components: clippy
 
       - name: restore cache
@@ -69,7 +77,7 @@ jobs:
       - name: install stable toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.68"
+          toolchain: ${{ env.RUST_STABLE_VER }}
           components: clippy
 
       - name: restore cache
@@ -95,8 +103,8 @@ jobs:
 #      - name: install stable toolchain
 #        uses: dtolnay/rust-toolchain@master
 #        with:
-#          toolchain: "1.68"
-#          target: wasm32-unknown-unknown
+#          toolchain: ${{ env.RUST_STABLE_VER }}
+#          targets: wasm32-unknown-unknown
 #          components: clippy
 #
 #      - name: restore cache
@@ -118,7 +126,7 @@ jobs:
       - name: install stable toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.68"
+          toolchain: ${{ env.RUST_STABLE_VER }}
 
       - name: restore cache
         uses: Swatinem/rust-cache@v2
@@ -189,7 +197,7 @@ jobs:
       - name: install stable toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: "1.68"
+          toolchain: ${{ env.RUST_STABLE_VER }}
 
       - name: restore cache
         uses: Swatinem/rust-cache@v2
