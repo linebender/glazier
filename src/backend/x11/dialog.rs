@@ -1,7 +1,8 @@
 //! This module contains functions for opening file dialogs using DBus.
 
-use ashpd::desktop::file_chooser;
-use ashpd::{zbus, WindowIdentifier};
+use std::path::PathBuf;
+
+use ashpd::{desktop::file_chooser, WindowIdentifier};
 use futures::executor::block_on;
 use tracing::warn;
 
@@ -35,8 +36,6 @@ fn dialog(
 
     std::thread::spawn(move || {
         if let Err(e) = block_on(async {
-            let conn = zbus::Connection::session().await?;
-            let proxy = file_chooser::FileChooserProxy::new(&conn).await?;
             let id = WindowIdentifier::from_xid(window as u64);
             let multi = options.multi_selection;
 
@@ -47,29 +46,54 @@ fn dialog(
                 (false, _) => "Save File",
             };
             let title = title_owned.as_deref().unwrap_or(title);
-            let open_result;
-            let save_result;
-            let uris = if open {
-                open_result = proxy.open_file(&id, title, options.into()).await?;
-                open_result.uris()
+            let response = if open {
+                file_chooser::OpenFileRequest::default()
+                    .identifier(id)
+                    .title(title)
+                    .modal(true)
+                    .multiple(options.multi_selection)
+                    .directory(options.select_directories)
+                    .accept_label(options.button_text.as_deref())
+                    .filters(
+                        options
+                            .allowed_types
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(From::from),
+                    )
+                    .current_filter(options.default_type.map(From::from))
+                    .send()
+                    .await?
+                    .response()?
             } else {
-                save_result = proxy.save_file(&id, title, options.into()).await?;
-                save_result.uris()
+                file_chooser::SaveFileRequest::default()
+                    .identifier(id)
+                    .title(title)
+                    .modal(true)
+                    .current_name(options.default_name.as_deref())
+                    .current_folder::<PathBuf>(options.starting_directory)?
+                    .accept_label(options.button_text.as_deref())
+                    .filters(
+                        options
+                            .allowed_types
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(From::from),
+                    )
+                    .current_filter(options.default_type.map(From::from))
+                    .send()
+                    .await?
+                    .response()?
             };
-
+            let uris = response.uris();
             let mut paths = uris.iter().filter_map(|s| {
-                s.strip_prefix("file://").or_else(|| {
-                    warn!("expected path '{}' to start with 'file://'", s);
+                s.to_file_path().ok().or_else(|| {
+                    warn!("Invalid file path '{s}'");
                     None
                 })
             });
             if multi && open {
-                let infos = paths
-                    .map(|p| FileInfo {
-                        path: p.into(),
-                        format: None,
-                    })
-                    .collect();
+                let infos = paths.map(|path| FileInfo { path, format: None }).collect();
                 idle.add_idle_callback(move |handler| handler.open_files(tok, infos));
             } else if !multi {
                 if uris.len() > 2 {
@@ -78,10 +102,7 @@ fn dialog(
                         uris.len()
                     );
                 }
-                let info = paths.next().map(|p| FileInfo {
-                    path: p.into(),
-                    format: None,
-                });
+                let info = paths.next().map(|path| FileInfo { path, format: None });
                 if open {
                     idle.add_idle_callback(move |handler| handler.open_file(tok, info));
                 } else {
@@ -91,7 +112,7 @@ fn dialog(
                 warn!("cannot save multiple paths");
             }
 
-            Ok(()) as ashpd::Result<()>
+            ashpd::Result::Ok(())
         }) {
             warn!("error while opening file dialog: {}", e);
         }
@@ -107,60 +128,5 @@ impl From<crate::FileSpec> for file_chooser::FileFilter {
             filter = filter.glob(&format!("*.{ext}"));
         }
         filter
-    }
-}
-
-impl From<crate::FileDialogOptions> for file_chooser::OpenFileOptions {
-    fn from(opts: crate::FileDialogOptions) -> file_chooser::OpenFileOptions {
-        let mut fc = file_chooser::OpenFileOptions::default()
-            .modal(true)
-            .multiple(opts.multi_selection)
-            .directory(opts.select_directories);
-
-        if let Some(label) = &opts.button_text {
-            fc = fc.accept_label(label);
-        }
-
-        if let Some(filters) = opts.allowed_types {
-            for f in filters {
-                fc = fc.add_filter(f.into());
-            }
-        }
-
-        if let Some(filter) = opts.default_type {
-            fc = fc.current_filter(filter.into());
-        }
-
-        fc
-    }
-}
-
-impl From<crate::FileDialogOptions> for file_chooser::SaveFileOptions {
-    fn from(opts: crate::FileDialogOptions) -> file_chooser::SaveFileOptions {
-        let mut fc = file_chooser::SaveFileOptions::default().modal(true);
-
-        if let Some(name) = &opts.default_name {
-            fc = fc.current_name(name);
-        }
-
-        if let Some(label) = &opts.button_text {
-            fc = fc.accept_label(label);
-        }
-
-        if let Some(filters) = opts.allowed_types {
-            for f in filters {
-                fc = fc.add_filter(f.into());
-            }
-        }
-
-        if let Some(filter) = opts.default_type {
-            fc = fc.current_filter(filter.into());
-        }
-
-        if let Some(dir) = &opts.starting_directory {
-            fc = fc.current_folder(dir);
-        }
-
-        fc
     }
 }
