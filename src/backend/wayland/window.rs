@@ -14,7 +14,6 @@
 #![allow(clippy::single_match)]
 
 use std::cell::RefCell;
-use std::marker::PhantomData;
 use std::os::raw::c_void;
 use std::rc::{Rc, Weak};
 use std::sync::mpsc::{self, Sender};
@@ -41,6 +40,7 @@ use super::application::{self};
 use super::menu::Menu;
 use super::{ActiveAction, IdleAction, WaylandState};
 
+use crate::text::simulate_input;
 use crate::{
     dialog::FileDialogOptions,
     error::Error as ShellError,
@@ -51,7 +51,7 @@ use crate::{
     window::{self, FileDialogToken, TimerToken, WinHandler, WindowLevel},
     TextFieldToken,
 };
-use crate::{IdleToken, Region, Scalable};
+use crate::{IdleToken, KeyEvent, Region, Scalable};
 
 #[derive(Clone)]
 pub struct WindowHandle {
@@ -154,7 +154,7 @@ impl WindowHandle {
     }
 
     pub fn get_window_state(&self) -> window::WindowState {
-        // We can know if we're maximised
+        // We can know if we're maximised or restored, but not if minimised
         tracing::warn!("get_window_state is unimplemented on wayland");
         window::WindowState::Maximized
     }
@@ -196,16 +196,23 @@ impl WindowHandle {
     }
 
     pub fn add_text_field(&self) -> TextFieldToken {
-        tracing::error!("Don't have text fields yet");
-        TextFieldToken::INVALID
+        TextFieldToken::next()
     }
 
-    pub fn remove_text_field(&self, _token: TextFieldToken) {
-        todo!()
+    pub fn remove_text_field(&self, token: TextFieldToken) {
+        let props = self.properties();
+        let mut props = props.borrow_mut();
+        if props.focused_text_field.is_some_and(|it| it == token) {
+            props.focused_text_field = None;
+        }
     }
 
-    pub fn set_focused_text_field(&self, _active_field: Option<TextFieldToken>) {
+    pub fn set_focused_text_field(&self, active_field: Option<TextFieldToken>) {
         tracing::error!("Don't have text fields yet");
+        let props = self.properties();
+        let mut props = props.borrow_mut();
+        // TODO: Clear pending state?
+        props.focused_text_field = active_field;
     }
 
     pub fn update_text_field(&self, _token: TextFieldToken, _update: Event) {
@@ -492,6 +499,7 @@ impl WindowBuilder {
             will_repaint: false,
             pending_frame_callback: false,
             configured: false,
+            focused_text_field: None,
         };
         let properties_strong = Rc::new(RefCell::new(properties));
 
@@ -520,7 +528,7 @@ impl WindowBuilder {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 // TODO: According to https://github.com/linebender/druid/pull/2033, this should not be
 // synced with the ID of the surface
 pub(super) struct WindowId(ObjectId);
@@ -530,7 +538,7 @@ impl WindowId {
         Self::of_surface(surface.wl_surface())
     }
     pub fn of_surface(surface: &WlSurface) -> Self {
-        Self(surface.id().clone())
+        Self(surface.id())
     }
 }
 
@@ -568,6 +576,9 @@ struct WindowProperties {
     pending_frame_callback: bool,
     // We can't draw before being configured
     configured: bool,
+
+    // We need to properly handle text input, but for now just do it the lazy way using simulate_input
+    focused_text_field: Option<TextFieldToken>,
 }
 
 /// The context do_paint is called in
@@ -614,6 +625,19 @@ impl WindowState {
             });
         }
         self.handler.paint(&region);
+    }
+
+    pub(super) fn handle_key_event(&mut self, event: KeyEvent) {
+        let focused_text_field = {
+            let props = self.properties.borrow();
+            props.focused_text_field
+        };
+        match event.state {
+            keyboard_types::KeyState::Down => {
+                simulate_input(&mut *self.handler, focused_text_field, event);
+            }
+            keyboard_types::KeyState::Up => self.handler.key_up(event),
+        }
     }
 }
 

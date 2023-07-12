@@ -33,11 +33,15 @@ use smithay_client_toolkit::{
         },
     },
     registry::RegistryState,
+    seat::SeatState,
     shell::xdg::XdgShell,
 };
 
 use super::{clipboard, error::Error, ActiveAction, IdleAction, WaylandState};
-use crate::{backend::shared::linux, AppHandler};
+use crate::{
+    backend::shared::{linux, xkb::Context},
+    AppHandler,
+};
 
 #[derive(Clone)]
 pub struct Application {
@@ -94,7 +98,7 @@ impl Application {
         let (idle_sender, idle_actions) = std::sync::mpsc::channel();
         let shell = Rc::new(XdgShell::bind(&globals, &qh)?);
         let shell_ref = Rc::downgrade(&shell);
-        let state = WaylandState {
+        let mut state = WaylandState {
             registry_state: RegistryState::new(&globals),
             output_state: OutputState::new(&globals, &qh),
             compositor_state,
@@ -107,7 +111,11 @@ impl Application {
             wayland_queue: qh.clone(),
             loop_sender: loop_sender.clone(),
             loop_signal: loop_signal.clone(),
+            input_states: vec![],
+            seats: SeatState::new(&globals, &qh),
+            xkb_context: Context::new(),
         };
+        state.initial_seats();
         Ok(Application {
             state: Rc::new(RefCell::new(Some(state))),
             compositor,
@@ -150,7 +158,7 @@ impl Application {
     }
 
     pub fn quit(&self) {
-        // Stopping the event loop appears to be the only way to do this?
+        // Stopping the event loop should be sufficient, as our state is dropped upon `run` finishing
         self.loop_signal.stop();
     }
 

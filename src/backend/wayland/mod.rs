@@ -30,16 +30,23 @@ use smithay_client_toolkit::{
     },
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
+    seat::SeatState,
     shell::xdg::XdgShell,
 };
 
 use crate::{AppHandler, IdleToken};
 
-use self::window::{WindowAction, WindowId, WindowState};
+use self::{
+    input::SeatInfo,
+    window::{WindowAction, WindowId, WindowState},
+};
+
+use super::shared::xkb::Context;
 
 pub mod application;
 pub mod clipboard;
 pub mod error;
+mod input;
 pub mod menu;
 pub mod screen;
 pub mod window;
@@ -77,6 +84,10 @@ struct WaylandState {
     pub loop_sender: channel::Sender<ActiveAction>,
 
     pub windows: HashMap<WindowId, WindowState>,
+
+    pub seats: SeatState,
+    pub input_states: Vec<SeatInfo>,
+    pub xkb_context: Context,
 }
 
 delegate_registry!(WaylandState);
@@ -85,5 +96,5 @@ impl ProvidesRegistryState for WaylandState {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry_state
     }
-    registry_handlers![OutputState];
+    registry_handlers![OutputState, SeatState];
 }
