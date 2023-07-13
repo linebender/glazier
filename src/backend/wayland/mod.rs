@@ -27,6 +27,7 @@ use smithay_client_toolkit::{
     reexports::{
         calloop::{channel, EventLoop, LoopSignal},
         client::QueueHandle,
+        protocols::wp::text_input::zv3::client::zwp_text_input_manager_v3::ZwpTextInputManagerV3,
     },
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
@@ -88,6 +89,7 @@ struct WaylandState {
     pub seats: SeatState,
     pub input_states: Vec<SeatInfo>,
     pub xkb_context: Context,
+    pub text_input: Option<ZwpTextInputManagerV3>,
 }
 
 delegate_registry!(WaylandState);

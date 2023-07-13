@@ -163,6 +163,12 @@ impl Drop for Context {
 
 pub struct Keymap(*mut xkb_keymap);
 
+impl Keymap {
+    pub fn repeats(&mut self, key: u32) -> bool {
+        unsafe { xkb_keymap_key_repeats(self.0, key) == 1 }
+    }
+}
+
 impl Clone for Keymap {
     fn clone(&self) -> Self {
         Self(unsafe { xkb_keymap_ref(self.0) })

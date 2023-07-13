@@ -28,18 +28,23 @@ use smithay_client_toolkit::{
     reexports::{
         calloop::{channel, EventLoop, LoopHandle, LoopSignal},
         client::{
-            globals::registry_queue_init, protocol::wl_compositor, Connection, QueueHandle,
-            WaylandSource,
+            globals::{registry_queue_init, BindError},
+            protocol::wl_compositor,
+            Connection, QueueHandle, WaylandSource,
         },
+        protocols::wp::text_input::zv3::client::zwp_text_input_manager_v3::ZwpTextInputManagerV3,
     },
-    registry::RegistryState,
+    registry::{RegistryState, SimpleGlobal},
     seat::SeatState,
     shell::xdg::XdgShell,
 };
 
 use super::{clipboard, error::Error, ActiveAction, IdleAction, WaylandState};
 use crate::{
-    backend::shared::{linux, xkb::Context},
+    backend::{
+        shared::{linux, xkb::Context},
+        wayland::input::TextInputManagerData,
+    },
     AppHandler,
 };
 
@@ -98,6 +103,14 @@ impl Application {
         let (idle_sender, idle_actions) = std::sync::mpsc::channel();
         let shell = Rc::new(XdgShell::bind(&globals, &qh)?);
         let shell_ref = Rc::downgrade(&shell);
+        let text_input_global = globals.bind(&qh, 1..=1, TextInputManagerData).map_or_else(
+            |err| match err {
+                e @ BindError::UnsupportedVersion => Err(e),
+                BindError::NotPresent => Ok(None),
+            },
+            |it| Ok(Some(it)),
+        )?;
+
         let mut state = WaylandState {
             registry_state: RegistryState::new(&globals),
             output_state: OutputState::new(&globals, &qh),
@@ -114,6 +127,7 @@ impl Application {
             input_states: vec![],
             seats: SeatState::new(&globals, &qh),
             xkb_context: Context::new(),
+            text_input: text_input_global,
         };
         state.initial_seats();
         Ok(Application {

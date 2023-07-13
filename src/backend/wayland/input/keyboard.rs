@@ -2,23 +2,27 @@ use std::os::fd::AsRawFd;
 
 use crate::{
     backend::{
-        shared::xkb::{ActiveModifiers, State},
+        shared::xkb::{ActiveModifiers, Keymap, State},
         wayland::window::WindowId,
     },
     text::simulate_input,
+    KeyEvent,
 };
 
 use super::{SeatName, WaylandState};
 use keyboard_types::KeyState;
 use smithay_client_toolkit::{
-    reexports::client::{
-        protocol::{
-            wl_keyboard::{self, KeymapFormat},
-            wl_seat, wl_surface,
+    reexports::{
+        calloop::RegistrationToken,
+        client::{
+            protocol::{
+                wl_keyboard::{self, KeymapFormat},
+                wl_seat, wl_surface,
+            },
+            Connection, Dispatch, Proxy, QueueHandle, WEnum,
         },
-        Connection, Dispatch, Proxy, QueueHandle, WEnum,
     },
-    seat::SeatHandler,
+    seat::{keyboard::RepeatInfo, SeatHandler},
 };
 
 mod mmap;
@@ -27,9 +31,16 @@ mod mmap;
 struct KeyboardUserData(SeatName);
 
 pub(super) struct KeyboardState {
-    xkb_state: Option<State>,
+    xkb_state: Option<(State, Keymap)>,
     keyboard: wl_keyboard::WlKeyboard,
     focused_window: Option<WindowId>,
+
+    repeat_settings: RepeatInfo,
+    repeat_token: Option<RegistrationToken>,
+    /// A single key press can result in multiple keysyms
+    ///
+    /// TODO: How does this handle composing?
+    cached_keys: Vec<KeyEvent>,
 }
 
 impl KeyboardState {
@@ -42,6 +53,9 @@ impl KeyboardState {
             xkb_state: None,
             keyboard: seat.get_keyboard(qh, KeyboardUserData(name)),
             focused_window: None,
+            repeat_settings: RepeatInfo::Disable,
+            repeat_token: None,
+            cached_keys: vec![],
         }
     }
 }
@@ -77,6 +91,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
         match event {
             wl_keyboard::Event::Keymap { format, fd, size } => match format {
                 WEnum::Value(KeymapFormat::XkbV1) => {
+                    tracing::info!("Recieved new keymap");
                     let contents = unsafe {
                         mmap::Mmap::from_raw_private(
                             fd.as_raw_fd(),
@@ -94,7 +109,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                     let keymapstate = context.state_from_keymap(&keymap).unwrap();
 
                     let keyboard = state.keyboard(data);
-                    keyboard.xkb_state = Some(keymapstate);
+                    keyboard.xkb_state = Some((keymapstate, keymap));
 
                     // TODO: Access the keymap. Will do so when changing to rust-x-bindings bindings
                 }
@@ -145,6 +160,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                     &WindowId::of_surface(&surface)
                 );
                 keyboard.focused_window = None;
+                keyboard.cached_keys.clear();
             }
             wl_keyboard::Event::Modifiers {
                 serial: _,
@@ -158,7 +174,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                     tracing::error!(keyboard = ?proxy, "got Modifiers event before keymap");
                     return;
                 };
-                xkb_state.update_xkb_state(ActiveModifiers {
+                xkb_state.0.update_xkb_state(ActiveModifiers {
                     base_mods: mods_depressed,
                     latched_mods: mods_latched,
                     locked_mods: mods_locked,
@@ -176,12 +192,14 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
             } => {
                 let window_id;
                 let event;
+                let repeats;
 
                 {
                     let keyboard = state.keyboard(data);
-                    let xkb_state = keyboard.xkb_state.as_mut().unwrap();
+                    let (xkb_state, xkb_keymap) = keyboard.xkb_state.as_mut().unwrap();
                     // Need to add 8 as per wayland spec
                     // TODO: Point to canonical link here
+                    let scancode = key + 8;
                     let key_state = match key_state {
                         WEnum::Value(it) => match it {
                             wl_keyboard::KeyState::Pressed => KeyState::Down,
@@ -191,15 +209,32 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                         WEnum::Unknown(_) => todo!(),
                     };
 
-                    event = xkb_state.key_event(key + 8, key_state, false);
+                    event = xkb_state.key_event(scancode, key_state, false);
                     window_id = keyboard.focused_window.as_ref().unwrap().clone();
+                    repeats = xkb_keymap.repeats(scancode);
                 }
                 let window = state.windows.get_mut(&window_id).unwrap();
-                // TODO: Support multiple key events from one press, somehow
-                window.handle_key_event(event);
+                window.handle_key_event(event.clone());
+                match &event.state {
+                    KeyState::Down => {}
+                    KeyState::Up => {}
+                }
             }
             wl_keyboard::Event::RepeatInfo { rate, delay } => {
-                tracing::warn!(rate, delay, "repeat current unimplemented")
+                let keyboard = state.keyboard(data);
+                if rate != 0 {
+                    let rate: u32 = rate
+                        .try_into()
+                        .expect("Negative rate is invalid in wayland protocol");
+                    let delay: u32 = delay
+                        .try_into()
+                        .expect("Negative delay is invalid in wayland protocol");
+                    keyboard.repeat_settings = RepeatInfo::Repeat {
+                        // We confirmed non-zero above
+                        rate: rate.try_into().unwrap(),
+                        delay,
+                    }
+                }
             }
             _ => todo!(),
         }

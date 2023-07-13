@@ -37,10 +37,11 @@ use tracing;
 use wayland_backend::client::ObjectId;
 
 use super::application::{self};
+use super::input::SeatName;
 use super::menu::Menu;
 use super::{ActiveAction, IdleAction, WaylandState};
 
-use crate::text::simulate_input;
+use crate::text::{simulate_input, InputHandler};
 use crate::{
     dialog::FileDialogOptions,
     error::Error as ShellError,
@@ -518,6 +519,7 @@ impl WindowBuilder {
                     WindowState {
                         handler: self.handler.unwrap(),
                         properties: properties_strong,
+                        text_input_seat: None,
                     },
                     handle.clone(),
                 ),
@@ -547,6 +549,7 @@ pub(super) struct WindowState {
     pub handler: Box<dyn WinHandler>,
     // TODO: Rc<RefCell>?
     properties: Rc<RefCell<WindowProperties>>,
+    text_input_seat: Option<SeatName>,
 }
 
 struct WindowProperties {
@@ -638,6 +641,32 @@ impl WindowState {
             }
             keyboard_types::KeyState::Up => self.handler.key_up(event),
         }
+    }
+
+    pub(super) fn set_input_seat(&mut self, seat: SeatName) {
+        assert!(self.text_input_seat.is_none());
+        self.text_input_seat = Some(seat);
+    }
+    pub(super) fn remove_input_seat(&mut self, seat: SeatName) {
+        assert_eq!(self.text_input_seat, Some(seat));
+        self.text_input_seat = None;
+    }
+
+    pub(super) fn get_input_lock(
+        &mut self,
+        mutable: bool,
+    ) -> Option<(Box<dyn InputHandler + 'static>, TextFieldToken)> {
+        let focused_field = {
+            let props = self.properties.borrow();
+            props.focused_text_field?
+        };
+        Some((
+            self.handler.acquire_input_lock(focused_field, mutable),
+            focused_field,
+        ))
+    }
+    pub(super) fn release_input_lock(&mut self, token: TextFieldToken) {
+        self.handler.release_input_lock(token)
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::{backend::shared::xkb::State, Counter};
 
-use self::keyboard::KeyboardState;
+use self::{keyboard::KeyboardState, text_input::InputState};
 
 use super::WaylandState;
 use smithay_client_toolkit::{
@@ -16,6 +16,9 @@ use smithay_client_toolkit::{
 };
 
 mod keyboard;
+mod text_input;
+
+pub(super) use text_input::TextInputManagerData;
 
 /// The state we need to store about each seat
 /// Each wayland seat may have a single:
@@ -33,11 +36,12 @@ pub(super) struct SeatInfo {
     id: SeatName,
     seat: wl_seat::WlSeat,
     keyboard_state: Option<KeyboardState>,
+    input_state: Option<InputState>,
 }
 
 /// Identifier for a seat
-#[derive(Copy, Clone, PartialEq, Eq)]
-struct SeatName(u64);
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(super) struct SeatName(u64);
 
 static SEAT_COUNTER: Counter = Counter::new();
 
@@ -68,6 +72,7 @@ impl WaylandState {
             id,
             seat,
             keyboard_state: None,
+            input_state: None,
         });
     }
 
