@@ -1,4 +1,15 @@
+<div align="center">
+
 # glazier
+
+[![Xi Zulip](https://img.shields.io/badge/Xi%20Zulip-%23glazier-blue?logo=Zulip)](https://xi.zulipchat.com/#narrow/stream/351333-glazier)
+[![dependency status](https://deps.rs/repo/github/linebender/glazier/status.svg)](https://deps.rs/repo/github/linebender/glazier)
+[![Apache 2.0](https://img.shields.io/badge/license-Apache-blue.svg)](#license)
+[![Build Status](https://github.com/linebender/glazier/actions/workflows/ci.yml/badge.svg)](https://github.com/linebender/glazier/actions)
+<!-- [![Crates.io](https://img.shields.io/crates/v/glazier.svg)](https://crates.io/crates/glazier) -->
+<!-- [![Docs](https://docs.rs/glazier/badge.svg)](https://docs.rs/glazier) -->
+
+</div>
 
 Glazier is an operating system integration layer infrastructure layer intended for
 high quality GUI toolkits in Rust. It is agnostic to the choice of drawing, so the
@@ -11,7 +22,11 @@ Other ports may happen if they are contributed.
 This library is currently work in progress and should be considered experimental.
 Contributions are welcome, see [CONTRIBUTING](./CONTRIBUTING.md) for more details.
 
-For discussion, please look at or join [the #glazier stream on our zulip instance](https://xi.zulipchat.com/#narrow/stream/351333-glazier).
+## Community
+
+[![Xi Zulip](https://img.shields.io/badge/Xi%20Zulip-%23glazier-blue?logo=Zulip)](https://xi.zulipchat.com/#narrow/stream/351333-glazier)
+
+Discussion of Xilem development happens in the [Xi Zulip](https://xi.zulipchat.com/), specifically the [#glazier stream](https://xi.zulipchat.com/#narrow/stream/351333-glazier). All public content can be read without logging in
 
 ## Scope
 
@@ -129,6 +144,18 @@ sudo apt-get install clang libxkbcommon-x11-dev pkg-config libvulkan-dev
 
 * [Text Editing Hates You Too](https://lord.io/text-editing-hates-you-too/)
 
+## License
+
+Licensed under the Apache License, Version 2.0
+([LICENSE](LICENSE) or <http://www.apache.org/licenses/LICENSE-2.0>)
+
+## Contribution
+
+Contributions are welcome by pull request. The [Rust code of conduct] applies.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+licensed as above, without any additional terms or conditions.
 
 [druid]: https://github.com/linebender/druid
 [winit]: https://github.com/rust-windowing/winit
@@ -138,3 +165,4 @@ sudo apt-get install clang libxkbcommon-x11-dev pkg-config libvulkan-dev
 [frame pacing]: https://raphlinus.github.io/ui/graphics/gpu/2021/10/22/swapchain-frame-pacing.html
 [CVDisplayLink]: https://developer.apple.com/documentation/corevideo/cvdisplaylink
 [Piet]: https://github.com/linebender/piet
+[rust code of conduct]: https://www.rust-lang.org/policies/code-of-conduct
