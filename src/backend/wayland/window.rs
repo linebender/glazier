@@ -37,7 +37,7 @@ use tracing;
 use wayland_backend::client::ObjectId;
 
 use super::application::{self};
-use super::input::SeatName;
+use super::input::{SeatName, TextFieldChange};
 use super::menu::Menu;
 use super::{ActiveAction, IdleAction, WaylandState};
 
@@ -88,7 +88,7 @@ impl WindowHandle {
         props.wayland_window.commit();
     }
 
-    pub fn resizable(&self, resizable: bool) {
+    pub fn resizable(&self, _resizable: bool) {
         tracing::warn!("resizable is unimplemented on wayland");
         // TODO: If we are using fallback decorations, we should be able to disable
         // dragging based resizing
@@ -205,6 +205,8 @@ impl WindowHandle {
         let mut props = props.borrow_mut();
         if props.focused_text_field.is_some_and(|it| it == token) {
             props.focused_text_field = None;
+            drop(props);
+            self.defer(WindowAction::TextField(TextFieldChange::Changed));
         }
     }
 
@@ -212,11 +214,15 @@ impl WindowHandle {
         tracing::error!("Don't have text fields yet");
         let props = self.properties();
         let mut props = props.borrow_mut();
-        // TODO: Clear pending state?
         props.focused_text_field = active_field;
+        drop(props);
+        self.defer(WindowAction::TextField(TextFieldChange::Changed));
     }
 
-    pub fn update_text_field(&self, _token: TextFieldToken, _update: Event) {
+    pub fn update_text_field(&self, token: TextFieldToken, update: Event) {
+        self.defer(WindowAction::TextField(TextFieldChange::Updated(
+            token, update,
+        )));
         // noop until we get a real text input implementation
     }
 
@@ -337,7 +343,7 @@ impl IdleHandle {
 
     fn add_idle_state_callback<F>(&self, callback: F)
     where
-        F: FnOnce(&mut WindowState) + Send + 'static,
+        F: FnOnce(&mut WaylandWindowState) + Send + 'static,
     {
         let window = self.window.clone();
         match self
@@ -516,7 +522,7 @@ impl WindowBuilder {
             .send(ActiveAction::Window(
                 window_id,
                 WindowAction::Create(
-                    WindowState {
+                    WaylandWindowState {
                         handler: self.handler.unwrap(),
                         properties: properties_strong,
                         text_input_seat: None,
@@ -545,7 +551,7 @@ impl WindowId {
 }
 
 /// The state associated with each window, stored in [`WaylandState`]
-pub(super) struct WindowState {
+pub(super) struct WaylandWindowState {
     pub handler: Box<dyn WinHandler>,
     // TODO: Rc<RefCell>?
     properties: Rc<RefCell<WindowProperties>>,
@@ -592,7 +598,7 @@ enum PaintContext {
     Configure,
 }
 
-impl WindowState {
+impl WaylandWindowState {
     fn do_paint(&mut self, force: bool, context: PaintContext) {
         {
             let mut props = self.properties.borrow_mut();
@@ -650,6 +656,10 @@ impl WindowState {
     pub(super) fn remove_input_seat(&mut self, seat: SeatName) {
         assert_eq!(self.text_input_seat, Some(seat));
         self.text_input_seat = None;
+    }
+    pub(super) fn get_text_field(&mut self) -> Option<TextFieldToken> {
+        let props = self.properties.borrow();
+        props.focused_text_field
     }
 
     pub(super) fn get_input_lock(
@@ -769,8 +779,9 @@ pub(super) enum WindowAction {
     ResizeRequested,
     /// Close the Window
     Close,
-    Create(WindowState, WindowHandle),
+    Create(WaylandWindowState, WindowHandle),
     AnimationRequested,
+    TextField(TextFieldChange),
 }
 
 impl WindowAction {
@@ -813,6 +824,13 @@ impl WindowAction {
             WindowAction::AnimationRequested => {
                 let Some(window) = state.windows.get_mut(&window_id) else { return };
                 window.do_paint(false, PaintContext::Requested);
+            }
+            WindowAction::TextField(change) => {
+                let Some(props) = state.windows.get_mut(&window_id) else {
+                    return;
+                };
+                let Some(seat) = props.text_input_seat else {return;};
+                change.apply(props, &mut state.input_states, seat);
             }
         }
     }

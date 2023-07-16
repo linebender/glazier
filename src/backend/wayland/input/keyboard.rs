@@ -62,13 +62,13 @@ impl KeyboardState {
 
 impl WaylandState {
     fn keyboard(&mut self, data: &KeyboardUserData) -> &mut KeyboardState {
-        self.seat(data.0).keyboard_state.as_mut().expect(
+        self.input_state(data.0).keyboard_state.as_mut().expect(
             "KeyboardUserData is only constructed when a new keyboard is created, so state exists",
         )
     }
     /// Stop receiving events for the given keyboard
     fn delete_keyboard(&mut self, data: &KeyboardUserData) {
-        let it = self.seat(data.0);
+        let it = self.input_state(data.0);
         it.keyboard_state = None;
     }
 }

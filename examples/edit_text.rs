@@ -221,6 +221,37 @@ impl WindowState {
             None,
             &rect,
         );
+        if let Some(composition) = &doc.composition {
+            let composition_start = parley::layout::Cursor::from_position(
+                &doc.layout,
+                composition.start,
+                true,
+            )
+            .offset() as f64
+                + TEXT_X;
+            let composition_end =
+                parley::layout::Cursor::from_position(&doc.layout, composition.end, true).offset()
+                    as f64
+                    + TEXT_X;
+            let rect = Rect::from_points(
+                Point::new(
+                    composition_start.min(composition_end - 1.0),
+                    TEXT_Y + FONT_SIZE as f64 + 2.0,
+                ),
+                Point::new(
+                    composition_start.max(composition_end + 1.0),
+                    TEXT_Y + FONT_SIZE as f64,
+                ),
+            );
+            sb.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                &Brush::Solid(Color::rgba8(0, 0, 255, 100)),
+                None,
+                &rect,
+            );
+        }
+
         sb.pop_layer();
     }
 }

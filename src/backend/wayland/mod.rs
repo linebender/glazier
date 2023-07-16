@@ -39,7 +39,7 @@ use crate::{AppHandler, IdleToken};
 
 use self::{
     input::SeatInfo,
-    window::{WindowAction, WindowId, WindowState},
+    window::{WaylandWindowState, WindowAction, WindowId},
 };
 
 use super::shared::xkb::Context;
@@ -84,7 +84,7 @@ struct WaylandState {
 
     pub loop_sender: channel::Sender<ActiveAction>,
 
-    pub windows: HashMap<WindowId, WindowState>,
+    pub windows: HashMap<WindowId, WaylandWindowState>,
 
     pub seats: SeatState,
     pub input_states: Vec<SeatInfo>,

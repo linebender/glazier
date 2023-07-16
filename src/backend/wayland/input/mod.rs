@@ -18,6 +18,7 @@ use smithay_client_toolkit::{
 mod keyboard;
 mod text_input;
 
+pub(super) use text_input::TextFieldChange;
 pub(super) use text_input::TextInputManagerData;
 
 /// The state we need to store about each seat
@@ -47,11 +48,8 @@ static SEAT_COUNTER: Counter = Counter::new();
 
 impl WaylandState {
     /// Access the state for the seat with the given name
-    fn seat(&mut self, name: SeatName) -> &mut SeatInfo {
-        self.input_states
-            .iter_mut()
-            .find(|it| it.id == name)
-            .expect("Glazier: Internal error, accessed deleted seat")
+    fn input_state(&mut self, name: SeatName) -> &mut SeatInfo {
+        input_state(&mut self.input_states, name)
     }
 
     #[track_caller]
@@ -65,15 +63,29 @@ impl WaylandState {
     // fn seat_ref(&self, name: SeatName) -> &SeatInfo;
 }
 
+fn input_state(seats: &mut [SeatInfo], name: SeatName) -> &mut SeatInfo {
+    seats
+        .iter_mut()
+        .find(|it| it.id == name)
+        .expect("Glazier: Internal error, accessed deleted seat")
+}
+
 impl WaylandState {
     fn handle_new_seat(&mut self, seat: wl_seat::WlSeat) {
         let id = SeatName(SEAT_COUNTER.next());
-        self.input_states.push(SeatInfo {
+        let new_info = SeatInfo {
             id,
             seat,
             keyboard_state: None,
             input_state: None,
-        });
+        };
+        let idx = self.input_states.len();
+        self.input_states.push(new_info);
+        let input = &mut self.input_states[idx];
+        input.input_state = self
+            .text_input
+            .as_ref()
+            .map(|text_input| InputState::new(&text_input, &input.seat, &self.wayland_queue, id));
     }
 
     pub(super) fn initial_seats(&mut self) {
