@@ -164,6 +164,7 @@ impl Drop for Context {
 pub struct Keymap(*mut xkb_keymap);
 
 impl Keymap {
+    #[cfg(feature = "wayland")]
     pub fn repeats(&mut self, key: u32) -> bool {
         unsafe { xkb_keymap_key_repeats(self.0, key) == 1 }
     }

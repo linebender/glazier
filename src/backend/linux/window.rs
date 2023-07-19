@@ -258,7 +258,7 @@ impl From<x11::window::WindowHandle> for crate::WindowHandle {
 }
 
 impl WindowHandle {
-    #[cfg(feature = "wayland")]
+    // #[cfg(feature = "wayland")]
     // /// Assume that this WindowHandle is from Wayland
     // pub(crate) fn unwrap_wayland(&self) -> &wayland::window::WindowHandle {
     //     match self {
