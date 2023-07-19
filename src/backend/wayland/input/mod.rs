@@ -1,17 +1,11 @@
-use crate::{backend::shared::xkb::State, Counter};
+use crate::Counter;
 
 use self::{keyboard::KeyboardState, text_input::InputState};
 
 use super::WaylandState;
 use smithay_client_toolkit::{
     delegate_seat,
-    reexports::client::{
-        protocol::{
-            wl_keyboard::{self, KeymapFormat},
-            wl_seat, wl_surface,
-        },
-        Connection, Dispatch, Proxy, QueueHandle, WEnum,
-    },
+    reexports::client::{protocol::wl_seat, Connection, QueueHandle},
     seat::SeatHandler,
 };
 
@@ -85,7 +79,7 @@ impl WaylandState {
         input.input_state = self
             .text_input
             .as_ref()
-            .map(|text_input| InputState::new(&text_input, &input.seat, &self.wayland_queue, id));
+            .map(|text_input| InputState::new(text_input, &input.seat, &self.wayland_queue, id));
     }
 
     pub(super) fn initial_seats(&mut self) {

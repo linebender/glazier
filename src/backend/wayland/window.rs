@@ -211,7 +211,6 @@ impl WindowHandle {
     }
 
     pub fn set_focused_text_field(&self, active_field: Option<TextFieldToken>) {
-        tracing::error!("Don't have text fields yet");
         let props = self.properties();
         let mut props = props.borrow_mut();
         props.focused_text_field = active_field;

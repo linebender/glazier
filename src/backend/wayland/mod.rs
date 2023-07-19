@@ -72,17 +72,22 @@ struct WaylandState {
     pub registry_state: RegistryState,
     // seat_state: SeatState,
     pub output_state: OutputState,
-    pub compositor_state: CompositorState,
-    pub xdg_shell_state: Rc<XdgShell>,
+    // TODO: Do we need to keep this around
+    // It is unused because(?) wgpu creates the surfaces through RawDisplayHandle(?)
+    pub _compositor_state: CompositorState,
+    // Is used: Keep the XdgShell alive, which is a Weak in all Handles
+    pub _xdg_shell_state: Rc<XdgShell>,
     pub wayland_queue: QueueHandle<Self>,
 
     pub event_loop: Option<EventLoop<'static, Self>>,
     pub handler: Option<Box<dyn AppHandler>>,
     pub idle_actions: Receiver<IdleAction>,
-    pub idle_sender: Sender<IdleAction>,
+    // TODO: Should we keep this around here?
+    pub _idle_sender: Sender<IdleAction>,
     pub loop_signal: LoopSignal,
 
-    pub loop_sender: channel::Sender<ActiveAction>,
+    // TODO: Should we keep this around here?
+    pub _loop_sender: channel::Sender<ActiveAction>,
 
     pub windows: HashMap<WindowId, WaylandWindowState>,
 

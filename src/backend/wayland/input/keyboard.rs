@@ -5,7 +5,6 @@ use crate::{
         shared::xkb::{ActiveModifiers, Keymap, State},
         wayland::window::WindowId,
     },
-    text::simulate_input,
     KeyEvent,
 };
 
@@ -17,12 +16,12 @@ use smithay_client_toolkit::{
         client::{
             protocol::{
                 wl_keyboard::{self, KeymapFormat},
-                wl_seat, wl_surface,
+                wl_seat,
             },
             Connection, Dispatch, Proxy, QueueHandle, WEnum,
         },
     },
-    seat::{keyboard::RepeatInfo, SeatHandler},
+    seat::keyboard::RepeatInfo,
 };
 
 mod mmap;
@@ -36,7 +35,7 @@ pub(super) struct KeyboardState {
     focused_window: Option<WindowId>,
 
     repeat_settings: RepeatInfo,
-    repeat_token: Option<RegistrationToken>,
+    _repeat_token: Option<RegistrationToken>,
     /// A single key press can result in multiple keysyms
     ///
     /// TODO: How does this handle composing?
@@ -54,7 +53,7 @@ impl KeyboardState {
             keyboard: seat.get_keyboard(qh, KeyboardUserData(name)),
             focused_window: None,
             repeat_settings: RepeatInfo::Disable,
-            repeat_token: None,
+            _repeat_token: None,
             cached_keys: vec![],
         }
     }
@@ -186,7 +185,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
             }
             wl_keyboard::Event::Key {
                 serial: _,
-                time,
+                time: _, // TODO: Report the time of the event to the keyboard
                 key,
                 state: key_state,
             } => {
@@ -215,9 +214,17 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                 }
                 let window = state.windows.get_mut(&window_id).unwrap();
                 window.handle_key_event(event.clone());
+                // Handle repeating
                 match &event.state {
-                    KeyState::Down => {}
-                    KeyState::Up => {}
+                    KeyState::Down => {
+                        if repeats {
+                            // Start repeating. Exact choice of repeating behaviour varies - see
+                            // discussion in #glazier > Key Repeat Behaviour
+                        }
+                    }
+                    KeyState::Up => {
+                        // Stop repeating
+                    }
                 }
             }
             wl_keyboard::Event::RepeatInfo { rate, delay } => {

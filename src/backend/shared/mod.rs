@@ -22,9 +22,14 @@ cfg_if::cfg_if! {
 }
 cfg_if::cfg_if! {
     if #[cfg(all(any(target_os = "freebsd", target_os = "linux"), any(feature = "x11", feature = "wayland")))] {
-        mod timer;
-        pub(crate) use timer::*;
         pub(crate) mod xkb;
         pub(crate) mod linux;
+    }
+}
+cfg_if::cfg_if! {
+    if #[cfg(all(any(target_os = "freebsd", target_os = "linux"), any(feature = "x11")))] {
+        // TODO: This might also be used in Wayland, but we don't implement timers there yet
+        mod timer;
+        pub(crate) use timer::*;
     }
 }

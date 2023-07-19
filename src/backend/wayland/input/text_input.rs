@@ -1,22 +1,17 @@
-use memchr::memmem::find;
 use smithay_client_toolkit::reexports::{
     client::{protocol::wl_seat, Dispatch, QueueHandle},
-    protocols::wp::text_input::{
-        zv1::client::zwp_text_input_v1::ContentHint,
-        zv3::client::{
-            zwp_text_input_manager_v3::ZwpTextInputManagerV3,
-            zwp_text_input_v3::{self, ZwpTextInputV3},
-        },
+    protocols::wp::text_input::zv3::client::{
+        zwp_text_input_manager_v3::ZwpTextInputManagerV3,
+        zwp_text_input_v3::{self, ZwpTextInputV3},
     },
 };
 
 use crate::{
     backend::wayland::{
-        input,
         window::{WaylandWindowState, WindowId},
         WaylandState,
     },
-    text::{self, Affinity, Event, InputHandler, Selection},
+    text::{Affinity, Event, InputHandler, Selection},
     TextFieldToken,
 };
 
@@ -311,7 +306,7 @@ impl InputState {
         // 3. Insert commit string with the cursor at its end.
         let commit_string = self.commit_string.take();
         let commit_string = if let Some(commit) = &commit_string {
-            &commit
+            commit
         } else {
             ""
         };
@@ -346,7 +341,7 @@ impl WaylandState {
 fn text_input<'a>(seats: &'a mut [SeatInfo], data: &InputUserData) -> &'a mut InputState {
     seat_text_input(seats, data.0)
 }
-fn seat_text_input<'a>(seats: &'a mut [SeatInfo], data: SeatName) -> &'a mut InputState {
+fn seat_text_input(seats: &mut [SeatInfo], data: SeatName) -> &mut InputState {
     input_state(seats, data)
         .input_state
         .as_mut()
@@ -356,11 +351,11 @@ fn seat_text_input<'a>(seats: &'a mut [SeatInfo], data: SeatName) -> &'a mut Inp
 impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
     fn event(
         state: &mut Self,
-        proxy: &ZwpTextInputV3,
+        _proxy: &ZwpTextInputV3,
         event: <ZwpTextInputV3 as smithay_client_toolkit::reexports::client::Proxy>::Event,
         data: &InputUserData,
-        conn: &smithay_client_toolkit::reexports::client::Connection,
-        qhandle: &QueueHandle<Self>,
+        _conn: &smithay_client_toolkit::reexports::client::Connection,
+        _qhandle: &QueueHandle<Self>,
     ) {
         match event {
             zwp_text_input_v3::Event::Enter { surface } => {
@@ -420,7 +415,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
             }
             zwp_text_input_v3::Event::Done { serial } => {
                 let input_state = text_input(&mut state.input_states, data);
-                let Some(win) = state.windows.get_mut(&input_state.active_window.as_ref().unwrap()) else {return;};
+                let Some(win) = state.windows.get_mut(input_state.active_window.as_ref().unwrap()) else {return;};
                 let input_lock = win.get_input_lock(true);
                 if let Some((mut handler, token)) = input_lock {
                     if Some(token) == input_state.token {

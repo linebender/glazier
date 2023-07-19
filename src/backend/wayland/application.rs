@@ -32,9 +32,8 @@ use smithay_client_toolkit::{
             protocol::wl_compositor,
             Connection, QueueHandle, WaylandSource,
         },
-        protocols::wp::text_input::zv3::client::zwp_text_input_manager_v3::ZwpTextInputManagerV3,
     },
-    registry::{RegistryState, SimpleGlobal},
+    registry::RegistryState,
     seat::SeatState,
     shell::xdg::XdgShell,
 };
@@ -57,6 +56,8 @@ pub struct Application {
     pub(super) compositor: wl_compositor::WlCompositor,
     pub(super) wayland_queue: QueueHandle<WaylandState>,
     pub(super) xdg_shell: Weak<XdgShell>,
+    // Used for timers and keyboard repeating - not yet implemented
+    #[allow(unused)]
     loop_handle: LoopHandle<'static, WaylandState>,
     loop_signal: LoopSignal,
     pub(super) idle_sender: Sender<IdleAction>,
@@ -114,15 +115,15 @@ impl Application {
         let mut state = WaylandState {
             registry_state: RegistryState::new(&globals),
             output_state: OutputState::new(&globals, &qh),
-            compositor_state,
-            xdg_shell_state: shell,
+            _compositor_state: compositor_state,
+            _xdg_shell_state: shell,
             event_loop: Some(event_loop),
             handler: None,
             idle_actions,
-            idle_sender: idle_sender.clone(),
+            _idle_sender: idle_sender.clone(),
             windows: HashMap::new(),
             wayland_queue: qh.clone(),
-            loop_sender: loop_sender.clone(),
+            _loop_sender: loop_sender.clone(),
             loop_signal: loop_signal.clone(),
             input_states: vec![],
             seats: SeatState::new(&globals, &qh),
@@ -174,6 +175,7 @@ impl Application {
     pub fn quit(&self) {
         // Stopping the event loop should be sufficient, as our state is dropped upon `run` finishing
         self.loop_signal.stop();
+        self.loop_signal.wakeup();
     }
 
     pub fn clipboard(&self) -> clipboard::Clipboard {
