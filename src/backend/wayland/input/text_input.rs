@@ -97,7 +97,7 @@ pub(super) struct InputState {
     /// active
     new_cursor_begin: i32,
     new_cursor_end: i32,
-    changed: bool,
+    state_might_have_changed: bool,
 
     // The bookkeeping state
     /// Used for sanity checking - the token we believe we're operating on,
@@ -133,7 +133,7 @@ impl InputState {
             preedit_string: None,
             new_cursor_begin: 0,
             new_cursor_end: 0,
-            changed: false,
+            state_might_have_changed: false,
 
             buffer_start: None,
             token: None,
@@ -159,6 +159,7 @@ impl InputState {
         handler: &mut dyn InputHandler,
         cause: zwp_text_input_v3::ChangeCause,
     ) {
+        tracing::trace!("Sending Text Input state to Wayland compositor");
         // input_state.text_input.set_content_type();
         let selection = handler.selection();
 
@@ -262,6 +263,14 @@ impl InputState {
         } else {
             selection.active..start_line.end
         };
+        self.sync_cursor_line(handler, active_line);
+    }
+
+    fn sync_cursor_line(
+        &mut self,
+        handler: &mut dyn InputHandler,
+        active_line: std::ops::Range<usize>,
+    ) {
         let range = handler.slice_bounding_box(active_line);
         if let Some(range) = range {
             let x = range.min_x();
@@ -304,22 +313,21 @@ impl InputState {
             handler.replace_range(delete_range, "");
         }
         // 3. Insert commit string with the cursor at its end.
-        let commit_string = self.commit_string.take();
-        let commit_string = if let Some(commit) = &commit_string {
-            commit
-        } else {
-            ""
-        };
-        handler.replace_range(selection.range(), commit_string);
+        if let Some(commit) = self.commit_string.take() {
+            handler.replace_range(selection.range(), &commit);
+            selection = handler.selection();
+        }
         // 4. Calculate surrounding text to send.
         // We skip this step, because we compute it in sync_state.
         // 5. Insert new preedit text in cursor position.
         if let Some(preedit) = self.preedit_string.take() {
-            let selection_start = selection.min();
-            handler.replace_range(selection_start..selection_start, &preedit);
-            // It's unclear if this needs to take into account the changes in the commit string. Maybe we just hope it won't come up?
+            let range = selection.range();
+
+            let selection_start = range.start;
+            handler.replace_range(range, &preedit);
             handler.set_composition_range(Some(selection_start..(selection_start + preedit.len())));
             let selection_start = selection_start as i32;
+            // 6. Place cursor inside preedit text.
             handler.set_selection(Selection::new(
                 (selection_start + self.new_cursor_begin) as usize,
                 (selection_start + self.new_cursor_end) as usize,
@@ -327,8 +335,10 @@ impl InputState {
         } else {
             handler.set_composition_range(None);
         }
-        // 6. Place cursor inside preedit text.
-        // unwrap_or_else(|| handler.selection().range());
+        selection = handler.selection();
+        // TODO: Confirm this affinity
+        let active_line = handler.line_range(selection.active, Affinity::Upstream);
+        self.sync_cursor_line(handler, active_line);
     }
 }
 
@@ -357,6 +367,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
         _conn: &smithay_client_toolkit::reexports::client::Connection,
         _qhandle: &QueueHandle<Self>,
     ) {
+        tracing::trace!("Handling text input event");
         match event {
             zwp_text_input_v3::Event::Enter { surface } => {
                 let window_id = WindowId::of_surface(&surface);
@@ -380,7 +391,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 let text_input = text_input(&mut state.input_states, data);
                 text_input.reset();
                 text_input.active_window = None;
-                text_input.changed = true;
+                text_input.state_might_have_changed = true;
                 // These seem to be invalid here, as the surface no longer exists
                 // text_input.text_input.disable();
                 // text_input.commit();
@@ -394,7 +405,6 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 input_state.preedit_string = text;
                 input_state.new_cursor_begin = cursor_begin;
                 input_state.new_cursor_end = cursor_end;
-                input_state.changed = true;
             }
             zwp_text_input_v3::Event::CommitString { text } => {
                 if text.is_none() {
@@ -402,7 +412,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 }
                 let input_state = state.text_input(data);
                 input_state.commit_string = text;
-                input_state.changed = true;
+                input_state.state_might_have_changed = true;
             }
             zwp_text_input_v3::Event::DeleteSurroundingText {
                 after_length,
@@ -411,7 +421,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 let input_state = state.text_input(data);
                 input_state.delete_surrounding_after = after_length;
                 input_state.delete_surrounding_before = before_length;
-                input_state.changed = true;
+                input_state.state_might_have_changed = true;
             }
             zwp_text_input_v3::Event::Done { serial } => {
                 let input_state = text_input(&mut state.input_states, data);
@@ -420,12 +430,14 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 if let Some((mut handler, token)) = input_lock {
                     if Some(token) == input_state.token {
                         input_state.done(&mut *handler);
-                        if serial == input_state.commit_count && input_state.changed {
+                        if serial == input_state.commit_count
+                            && input_state.state_might_have_changed
+                        {
                             input_state.sync_state(
                                 &mut *handler,
                                 zwp_text_input_v3::ChangeCause::InputMethod,
                             );
-                            input_state.changed = false;
+                            input_state.state_might_have_changed = false;
                         }
                     }
                 }

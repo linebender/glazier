@@ -497,6 +497,7 @@ impl WindowBuilder {
         // wayland_window.set_min_size(self.min_size);
         let window_id = WindowId::new(&wayland_window);
         let properties = WindowProperties {
+            window_id: window_id.clone(),
             requested_size: self.size,
             current_size: Size::new(0., 0.),
             current_scale: Scale::new(1., 1.), // TODO: NaN? - these values should (must?) not be used
@@ -525,6 +526,7 @@ impl WindowBuilder {
                         handler: self.handler.unwrap(),
                         properties: properties_strong,
                         text_input_seat: None,
+                        loop_sender: self.loop_sender.clone(),
                     },
                     handle.clone(),
                 ),
@@ -555,9 +557,11 @@ pub(super) struct WaylandWindowState {
     // TODO: Rc<RefCell>?
     properties: Rc<RefCell<WindowProperties>>,
     text_input_seat: Option<SeatName>,
+    loop_sender: channel::Sender<ActiveAction>,
 }
 
 struct WindowProperties {
+    window_id: WindowId,
     // Requested size is used in configure, if it's supported
     requested_size: Option<Size>,
     // The dimensions of the surface we reported to the handler, and so report in get_size()
@@ -585,7 +589,6 @@ struct WindowProperties {
     // We can't draw before being configured
     configured: bool,
 
-    // We need to properly handle text input, but for now just do it the lazy way using simulate_input
     focused_text_field: Option<TextFieldToken>,
 }
 
@@ -636,13 +639,26 @@ impl WaylandWindowState {
     }
 
     pub(super) fn handle_key_event(&mut self, event: KeyEvent) {
-        let focused_text_field = {
+        let (focused_text_field, window) = {
             let props = self.properties.borrow();
-            props.focused_text_field
+            (props.focused_text_field, props.window_id.clone())
         };
         match event.state {
             keyboard_types::KeyState::Down => {
-                simulate_input(&mut *self.handler, focused_text_field, event);
+                let handled = simulate_input(&mut *self.handler, focused_text_field, event);
+                if handled {
+                    if let Some(token) = focused_text_field {
+                        self.loop_sender
+                            .send(ActiveAction::Window(
+                                window,
+                                WindowAction::TextField(TextFieldChange::Updated(
+                                    token,
+                                    Event::Reset,
+                                )),
+                            ))
+                            .expect("Loop should still be running when key event recieved");
+                    }
+                }
             }
             keyboard_types::KeyState::Up => self.handler.key_up(event),
         }
