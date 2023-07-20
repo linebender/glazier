@@ -28,7 +28,7 @@ use smithay_client_toolkit::reexports::client::protocol::wl_compositor::WlCompos
 use smithay_client_toolkit::reexports::client::protocol::wl_surface::WlSurface;
 use smithay_client_toolkit::reexports::client::{protocol, Connection, Proxy, QueueHandle};
 use smithay_client_toolkit::shell::xdg::window::{
-    DecorationMode, Window, WindowDecorations, WindowHandler,
+    DecorationMode, Window, WindowConfigure, WindowDecorations, WindowHandler,
 };
 use smithay_client_toolkit::shell::xdg::XdgShell;
 use smithay_client_toolkit::shell::WaylandSurface;
@@ -498,8 +498,10 @@ impl WindowBuilder {
         let window_id = WindowId::new(&wayland_window);
         let properties = WindowProperties {
             window_id: window_id.clone(),
+            configure: None,
             requested_size: self.size,
-            current_size: Size::new(0., 0.),
+            // This is just used as the default sizes, as we don't call `size` until the requested size is used
+            current_size: Size::new(600., 800.),
             current_scale: Scale::new(1., 1.), // TODO: NaN? - these values should (must?) not be used
             wayland_window,
             wayland_queue: self.wayland_queue.clone(),
@@ -564,6 +566,8 @@ struct WindowProperties {
     window_id: WindowId,
     // Requested size is used in configure, if it's supported
     requested_size: Option<Size>,
+
+    configure: Option<WindowConfigure>,
     // The dimensions of the surface we reported to the handler, and so report in get_size()
     // Wayland gives strong deference to the application on surface size
     // so, for example an application using wgpu could have the surface configured to be a different size
@@ -590,6 +594,54 @@ struct WindowProperties {
     configured: bool,
 
     focused_text_field: Option<TextFieldToken>,
+}
+
+impl WindowProperties {
+    /// Calculate the size that this window should be, given the current configuration
+    /// Called in response to a configure event or a resize being requested
+    ///
+    /// Returns the size which should be passed to [`WinHandler::size`].
+    /// This is also set as self.current_size
+    fn calculate_size(&mut self) -> Size {
+        // We consume the requested size, as that is considered to be a one-shot affair
+        // Without doing so, the window would never be resizable
+        //
+        // TODO: Is this what we want?
+        let configure = self.configure.as_ref().unwrap();
+        let requested_size = self.requested_size.take();
+        if let Some(requested_size) = requested_size {
+            if !configure.is_maximized() && !configure.is_resizing() {
+                let requested_size_absolute = requested_size.to_px(self.current_scale);
+                if let Some((x, y)) = configure.suggested_bounds {
+                    if requested_size_absolute.width < x as f64
+                        && requested_size_absolute.height < y as f64
+                    {
+                        self.current_size = requested_size;
+                        return self.current_size;
+                    }
+                } else {
+                    self.current_size = requested_size;
+                    return self.current_size;
+                }
+            }
+        }
+        let current_size_absolute = self.current_size.to_dp(self.current_scale);
+        let new_width = configure
+            .new_size
+            .0
+            .map_or(current_size_absolute.width, |it| it.get() as f64);
+        let new_height = configure
+            .new_size
+            .1
+            .map_or(current_size_absolute.height, |it| it.get() as f64);
+        let new_size_absolute = Size {
+            height: new_height,
+            width: new_width,
+        };
+
+        self.current_size = new_size_absolute.to_dp(self.current_scale);
+        self.current_size
+    }
 }
 
 /// The context do_paint is called in
@@ -768,18 +820,12 @@ impl WindowHandler for WaylandState {
             tracing::warn!("Recieved configure event for unknown window");
             return;
         };
-        // TODO: Actually use the suggestions in the configure event
-        let new_width = configure.new_size.0.map_or(256, |it| it.get());
-        let new_height = configure.new_size.1.map_or(256, |it| it.get());
-        let new_size_absolute = Size {
-            height: new_height.into(),
-            width: new_width.into(),
-        };
+        // TODO: Actually use the suggestions from requested_size
         let display_size;
         {
             let mut props = window.properties.borrow_mut();
-            display_size = new_size_absolute.to_dp(props.current_scale);
-            props.current_size = display_size;
+            props.configure = Some(configure);
+            display_size = props.calculate_size();
             props.configured = true;
         };
         window.handler.size(display_size);
@@ -806,11 +852,7 @@ impl WindowAction {
                 let Some(window) = state.windows.get_mut(&window_id) else { return };
                 let size = {
                     let mut props = window.properties.borrow_mut();
-                    // TODO: Should this requested_size be taken?
-                    // Reason to suspect it should be would be resizes (if enabled)
-                    let size = props.requested_size.expect("Can't unset requested size");
-                    props.current_size = size;
-                    size
+                    props.calculate_size()
                 };
                 // TODO: Ensure we follow the rules laid out by the compositor in `configure`
                 window.handler.size(size);
