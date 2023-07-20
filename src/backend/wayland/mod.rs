@@ -70,7 +70,7 @@ type IdleCallback = Box<dyn FnOnce(&mut WaylandState) + Send>;
 // All fields are public, as this type is *not* exported above this module
 struct WaylandState {
     pub registry_state: RegistryState,
-    // seat_state: SeatState,
+
     pub output_state: OutputState,
     // TODO: Do we need to keep this around
     // It is unused because(?) wgpu creates the surfaces through RawDisplayHandle(?)
