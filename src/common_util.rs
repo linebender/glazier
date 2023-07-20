@@ -52,6 +52,7 @@ pub fn strip_access_key(raw_menu_text: &str) -> String {
     result
 }
 
+#[cfg_attr(feature = "wayland", allow(unused))]
 pub(crate) type IdleCallback = Box<dyn for<'a> FnOnce(&'a mut dyn WinHandler) + Send>;
 
 /// A sharable queue. Similar to a `std::sync::mpsc` channel, this queue is implmented as two types:

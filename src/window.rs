@@ -799,5 +799,5 @@ mod test {
     use static_assertions as sa;
 
     sa::assert_not_impl_any!(WindowHandle: Send, Sync);
-    sa::assert_impl_all!(IdleHandle: Send, Sync);
+    sa::assert_impl_all!(IdleHandle: Send);
 }

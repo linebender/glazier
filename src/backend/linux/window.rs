@@ -258,15 +258,14 @@ impl From<x11::window::WindowHandle> for crate::WindowHandle {
 }
 
 impl WindowHandle {
-    #[cfg(feature = "wayland")]
-    /// Assume that this WindowHandle is from Wayland
-    pub(crate) fn unwrap_wayland(&self) -> &wayland::window::WindowHandle {
-        match self {
-            WindowHandle::Wayland(it) => it,
-            _ => unreachable!("Must use a wayland window handle"),
-        }
-    }
-
+    // #[cfg(feature = "wayland")]
+    // /// Assume that this WindowHandle is from Wayland
+    // pub(crate) fn unwrap_wayland(&self) -> &wayland::window::WindowHandle {
+    //     match self {
+    //         WindowHandle::Wayland(it) => it,
+    //         _ => unreachable!("Must use a wayland window handle"),
+    //     }
+    // }
     #[cfg(feature = "x11")]
     /// Assume that this WindowHandle is from X11
     pub(crate) fn unwrap_x11(&self) -> &x11::window::WindowHandle {
