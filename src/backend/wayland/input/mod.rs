@@ -75,11 +75,11 @@ impl WaylandState {
         };
         let idx = self.input_states.len();
         self.input_states.push(new_info);
-        let input = &mut self.input_states[idx];
-        input.input_state = self
-            .text_input
-            .as_ref()
-            .map(|text_input| InputState::new(text_input, &input.seat, &self.wayland_queue, id));
+        // let input = &mut self.input_states[idx];
+        // input.input_state = self
+        //     .text_input
+        //     .as_ref()
+        //     .map(|text_input| InputState::new(text_input, &input.seat, &self.wayland_queue, id));
     }
 
     pub(super) fn initial_seats(&mut self) {

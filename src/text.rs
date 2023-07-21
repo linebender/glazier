@@ -101,7 +101,7 @@
 //! `InputHandler` calls are simulated from keypresses on other platforms, which
 //! doesn't allow for IME input, dead keys, etc.
 
-use keyboard_types::CompositionEvent;
+use keyboard_types::{CompositionEvent, CompositionState};
 
 use crate::keyboard::{KbKey, KeyEvent, ModifiersExt};
 use crate::kurbo::{Point, Rect};
@@ -471,6 +471,17 @@ pub(crate) fn simulate_input<H: WinHandler + ?Sized>(
         None => return false,
     };
     let mut input_handler = handler.acquire_input_lock(token, true);
+    match compose {
+        Some(it) => match it.state {
+            CompositionState::Start => todo!(),
+            CompositionState::Update => todo!(),
+            CompositionState::End => {
+                // The idiomatic behaviour here (slighty surprisingly)
+                // appears to be to
+            }
+        },
+        None => {}
+    }
     match event.key {
         KbKey::Character(c) if !event.mods.ctrl() && !event.mods.meta() && !event.mods.alt() => {
             let selection = input_handler.selection();

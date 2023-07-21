@@ -913,6 +913,7 @@ impl WndProc for MyWndProc {
                                             &mut *s.handler,
                                             window_state.active_text_input.get(),
                                             event,
+                                            None,
                                         )
                                     });
                                     if keydown_handled || handle_menu {

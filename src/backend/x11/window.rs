@@ -38,7 +38,7 @@ use x11rb::protocol::xinput::{self, DeviceType, ModifierInfo, TouchEventFlags};
 use x11rb::protocol::xproto::{
     self, AtomEnum, ChangeWindowAttributesAux, ColormapAlloc, ConfigureNotifyEvent,
     ConfigureWindowAux, ConnectionExt, EventMask, ImageOrder as X11ImageOrder, KeyButMask,
-    PropMode, Visualtype, WindowClass,
+    PropMode, WindowClass,
 };
 use x11rb::wrapper::ConnectionExt as _;
 use x11rb::xcb_ffi::XCBConnection;
@@ -66,41 +66,6 @@ use crate::{window, KeyEvent, PointerButton, PointerButtons, PointerEvent, Scale
 use super::application::Application;
 use super::dialog;
 use super::menu::Menu;
-
-/// A version of XCB's `xcb_visualtype_t` struct. This was copied from the [example] in x11rb; it
-/// is used to interoperate with cairo.
-///
-/// The official upstream reference for this struct definition is [here].
-///
-/// [example]: https://github.com/psychon/x11rb/blob/master/cairo-example/src/main.rs
-/// [here]: https://xcb.freedesktop.org/manual/structxcb__visualtype__t.html
-#[derive(Debug, Clone, Copy)]
-#[repr(C)]
-pub struct xcb_visualtype_t {
-    pub visual_id: u32,
-    pub class: u8,
-    pub bits_per_rgb_value: u8,
-    pub colormap_entries: u16,
-    pub red_mask: u32,
-    pub green_mask: u32,
-    pub blue_mask: u32,
-    pub pad0: [u8; 4],
-}
-
-impl From<Visualtype> for xcb_visualtype_t {
-    fn from(value: Visualtype) -> xcb_visualtype_t {
-        xcb_visualtype_t {
-            visual_id: value.visual_id,
-            class: value.class.into(),
-            bits_per_rgb_value: value.bits_per_rgb_value,
-            colormap_entries: value.colormap_entries,
-            red_mask: value.red_mask,
-            green_mask: value.green_mask,
-            blue_mask: value.blue_mask,
-            pad0: [0; 4],
-        }
-    }
-}
 
 fn size_hints(resizable: bool, size: Size, min_size: Size) -> WmSizeHints {
     let mut size_hints = WmSizeHints::new();

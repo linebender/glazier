@@ -500,7 +500,6 @@ impl WindowBuilder {
         // wayland_window.set_min_size(self.min_size);
         let window_id = WindowId::new(&wayland_window);
         let properties = WindowProperties {
-            window_id: window_id.clone(),
             configure: None,
             requested_size: self.size,
             // This is just used as the default sizes, as we don't call `size` until the requested size is used
@@ -566,7 +565,6 @@ pub(super) struct WaylandWindowState {
 }
 
 struct WindowProperties {
-    window_id: WindowId,
     // Requested size is used in configure, if it's supported
     requested_size: Option<Size>,
 

@@ -215,7 +215,7 @@ struct State {
     quitting: bool,
     /// A collection of all the `Application` windows.
     windows: HashMap<u32, Rc<Window>>,
-    xkb_state: xkb::XkbState,
+    xkb_state: xkb::KeyEventsState,
 }
 
 #[derive(Clone, Debug)]

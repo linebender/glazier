@@ -2,14 +2,14 @@ use std::{num::NonZeroU32, os::fd::AsRawFd};
 
 use crate::{
     backend::{
-        shared::xkb::{ActiveModifiers, ComposingContext, Keymap, XkbState},
+        shared::xkb::{ActiveModifiers, ComposingContext, KeyEventsState, Keymap},
         wayland::window::WindowId,
     },
     KeyEvent,
 };
 
 use super::{input_state, SeatInfo, SeatName, WaylandState};
-use keyboard_types::{CompositionState, KeyState};
+use keyboard_types::KeyState;
 use smithay_client_toolkit::reexports::{
     calloop::RegistrationToken,
     client::{
@@ -45,7 +45,7 @@ pub enum RepeatInfo {
 struct KeyboardUserData(SeatName);
 
 pub(super) struct KeyboardState {
-    xkb_state: Option<(XkbState, Keymap)>,
+    xkb_state: Option<(KeyEventsState, Keymap)>,
     keyboard: wl_keyboard::WlKeyboard,
     focused_window: Option<WindowId>,
 
@@ -106,7 +106,6 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
-        dbg!(&event);
         match event {
             wl_keyboard::Event::Keymap { format, fd, size } => match format {
                 WEnum::Value(KeymapFormat::XkbV1) => {
