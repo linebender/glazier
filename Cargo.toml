@@ -18,7 +18,7 @@ default-target = "x86_64-pc-windows-msvc"
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [features]
-default = ["x11"]
+default = ["x11", "wayland"]
 x11 = ["ashpd", "bindgen", "futures", "nix", "pkg-config", "x11rb"]
 wayland = [
     # Required for XKBCommon
@@ -116,8 +116,11 @@ x11rb = { version = "0.12", features = [
 rand = { version = "0.8.0", optional = true }
 log = { version = "0.4.14", optional = true }
 
+smithay-client-toolkit = { version = "0.17.0", optional = true, default-features = false, features = [
+    # Don't use the built-in xkb handling
+    "calloop",
+] }
 # Wayland dependencies
-smithay-client-toolkit = { version = "0.17.0", optional = true }
 # Needed for supporting RawWindowHandle
 wayland-backend = { version = "0.1.0", default_features = false, features = [
     "client_system",

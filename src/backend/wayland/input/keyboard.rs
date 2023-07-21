@@ -1,36 +1,51 @@
-use std::os::fd::AsRawFd;
+use std::{num::NonZeroU32, os::fd::AsRawFd};
 
 use crate::{
     backend::{
-        shared::xkb::{ActiveModifiers, Keymap, State},
+        shared::xkb::{ActiveModifiers, ComposingContext, Keymap, XkbState},
         wayland::window::WindowId,
     },
     KeyEvent,
 };
 
-use super::{SeatName, WaylandState};
-use keyboard_types::KeyState;
-use smithay_client_toolkit::{
-    reexports::{
-        calloop::RegistrationToken,
-        client::{
-            protocol::{
-                wl_keyboard::{self, KeymapFormat},
-                wl_seat,
-            },
-            Connection, Dispatch, Proxy, QueueHandle, WEnum,
+use super::{input_state, SeatInfo, SeatName, WaylandState};
+use keyboard_types::{CompositionState, KeyState};
+use smithay_client_toolkit::reexports::{
+    calloop::RegistrationToken,
+    client::{
+        protocol::{
+            wl_keyboard::{self, KeymapFormat},
+            wl_seat,
         },
+        Connection, Dispatch, Proxy, QueueHandle, WEnum,
     },
-    seat::keyboard::RepeatInfo,
 };
 
 mod mmap;
+
+/// The rate at which a pressed key is repeated.
+///
+/// Taken from smithay-client-toolkit's xkbcommon feature
+#[derive(Debug, Clone, Copy)]
+pub enum RepeatInfo {
+    /// Keys will be repeated at the specified rate and delay.
+    Repeat {
+        /// The number of repetitions per second that should occur.
+        rate: NonZeroU32,
+
+        /// Delay (in milliseconds) between a key press and the start of repetition.
+        delay: u32,
+    },
+
+    /// Keys should not be repeated.
+    Disable,
+}
 
 /// The seat identifier of this keyboard
 struct KeyboardUserData(SeatName);
 
 pub(super) struct KeyboardState {
-    xkb_state: Option<(State, Keymap)>,
+    xkb_state: Option<(XkbState, Keymap)>,
     keyboard: wl_keyboard::WlKeyboard,
     focused_window: Option<WindowId>,
 
@@ -61,15 +76,19 @@ impl KeyboardState {
 
 impl WaylandState {
     fn keyboard(&mut self, data: &KeyboardUserData) -> &mut KeyboardState {
-        self.input_state(data.0).keyboard_state.as_mut().expect(
-            "KeyboardUserData is only constructed when a new keyboard is created, so state exists",
-        )
+        keyboard(&mut self.input_states, data)
     }
     /// Stop receiving events for the given keyboard
     fn delete_keyboard(&mut self, data: &KeyboardUserData) {
         let it = self.input_state(data.0);
         it.keyboard_state = None;
     }
+}
+
+fn keyboard<'a>(seats: &'a mut [SeatInfo], data: &KeyboardUserData) -> &'a mut KeyboardState {
+    input_state(seats, data.0).keyboard_state.as_mut().expect(
+        "KeyboardUserData is only constructed when a new keyboard is created, so state exists",
+    )
 }
 
 impl Drop for KeyboardState {
@@ -87,6 +106,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+        dbg!(&event);
         match event {
             wl_keyboard::Event::Keymap { format, fd, size } => match format {
                 WEnum::Value(KeymapFormat::XkbV1) => {
@@ -102,7 +122,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                         .as_ref()
                         .to_vec()
                     };
-                    let context = &state.xkb_context;
+                    let context = &mut state.xkb_context;
                     // keymap data is '\0' terminated.
                     let keymap = context.keymap_from_slice(&contents);
                     let keymapstate = context.state_from_keymap(&keymap).unwrap();
@@ -189,33 +209,34 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                 key,
                 state: key_state,
             } => {
-                let window_id;
-                let event;
-                let repeats;
-
-                {
-                    let keyboard = state.keyboard(data);
-                    let (xkb_state, xkb_keymap) = keyboard.xkb_state.as_mut().unwrap();
-                    // Need to add 8 as per wayland spec
-                    // TODO: Point to canonical link here
-                    let scancode = key + 8;
-                    let key_state = match key_state {
-                        WEnum::Value(it) => match it {
-                            wl_keyboard::KeyState::Pressed => KeyState::Down,
-                            wl_keyboard::KeyState::Released => KeyState::Up,
-                            _ => todo!(),
-                        },
-                        WEnum::Unknown(_) => todo!(),
-                    };
-
-                    event = xkb_state.key_event(scancode, key_state, false);
-                    window_id = keyboard.focused_window.as_ref().unwrap().clone();
-                    repeats = xkb_keymap.repeats(scancode);
-                }
+                let keyboard = keyboard(&mut state.input_states, data);
+                let (xkb_state, xkb_keymap) = keyboard.xkb_state.as_mut().unwrap();
+                // Need to add 8 as per wayland spec
+                // TODO: Point to canonical link here
+                let scancode = key + 8;
+                let key_state = match key_state {
+                    WEnum::Value(it) => match it {
+                        wl_keyboard::KeyState::Pressed => KeyState::Down,
+                        wl_keyboard::KeyState::Released => KeyState::Up,
+                        _ => todo!(),
+                    },
+                    WEnum::Unknown(_) => todo!(),
+                };
+                let window_id = keyboard.focused_window.as_ref().unwrap().clone();
                 let window = state.windows.get_mut(&window_id).unwrap();
-                window.handle_key_event(event.clone());
+
+                let token = window.get_text_field();
+                let context = match token {
+                    Some(_) => ComposingContext::TextField,
+                    None => ComposingContext::NoTextField,
+                };
+                let (key_event, compose_event) =
+                    xkb_state.key_event(scancode, key_state, false, context);
+
+                window.handle_key_event(key_event.clone(), compose_event, token, &window_id);
+                let repeats = xkb_keymap.repeats(scancode);
                 // Handle repeating
-                match &event.state {
+                match &key_event.state {
                     KeyState::Down => {
                         if repeats {
                             // Start repeating. Exact choice of repeating behaviour varies - see

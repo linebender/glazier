@@ -28,6 +28,7 @@ use crate::pointer::{
 };
 use crate::scale::Scalable;
 use anyhow::{anyhow, Context, Error};
+use keyboard_types::CompositionEvent;
 use tracing::{error, warn};
 use x11rb::connection::Connection;
 use x11rb::errors::ReplyOrIdError;
@@ -793,10 +794,14 @@ impl Window {
         Ok(())
     }
 
-    pub fn handle_key_event(&self, event: KeyEvent) {
+    pub fn get_active_text_field(&self) -> Option<TextFieldToken> {
+        self.active_text_field.get()
+    }
+
+    pub fn handle_key_event(&self, event: KeyEvent, compose: Option<CompositionEvent>) {
         self.with_handler(|h| match event.state {
             KeyState::Down => {
-                simulate_input(h, self.active_text_field.get(), event);
+                simulate_input(h, self.active_text_field.get(), event, compose);
             }
             KeyState::Up => h.key_up(event),
         });

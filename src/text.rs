@@ -101,6 +101,8 @@
 //! `InputHandler` calls are simulated from keypresses on other platforms, which
 //! doesn't allow for IME input, dead keys, etc.
 
+use keyboard_types::CompositionEvent;
+
 use crate::keyboard::{KbKey, KeyEvent, ModifiersExt};
 use crate::kurbo::{Point, Rect};
 use crate::window::{TextFieldToken, WinHandler};
@@ -454,10 +456,11 @@ pub trait InputHandler {
 /// applications to start building on the new `InputHandler` interface
 /// immediately, with a hopefully seamless upgrade process as we implement IME
 /// input on more platforms.
-pub fn simulate_input<H: WinHandler + ?Sized>(
+pub(crate) fn simulate_input<H: WinHandler + ?Sized>(
     handler: &mut H,
     token: Option<TextFieldToken>,
     event: KeyEvent,
+    compose: Option<CompositionEvent>,
 ) -> bool {
     if handler.key_down(event.clone()) {
         return true;

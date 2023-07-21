@@ -18,6 +18,7 @@ use std::os::raw::c_void;
 use std::rc::{Rc, Weak};
 use std::sync::mpsc::{self, Sender};
 
+use keyboard_types::CompositionEvent;
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
     WaylandDisplayHandle, WaylandWindowHandle,
@@ -692,19 +693,23 @@ impl WaylandWindowState {
         self.handler.paint(&region);
     }
 
-    pub(super) fn handle_key_event(&mut self, event: KeyEvent) {
-        let (focused_text_field, window) = {
-            let props = self.properties.borrow();
-            (props.focused_text_field, props.window_id.clone())
-        };
+    pub(super) fn handle_key_event(
+        &mut self,
+        event: KeyEvent,
+        compose_event: Option<CompositionEvent>,
+        focused_text_field: Option<TextFieldToken>,
+        // TODO: Make WindowId Copy so that WaylandWindowState can just own it directly
+        my_id: &WindowId,
+    ) {
         match event.state {
             keyboard_types::KeyState::Down => {
-                let handled = simulate_input(&mut *self.handler, focused_text_field, event);
+                let handled =
+                    simulate_input(&mut *self.handler, focused_text_field, event, compose_event);
                 if handled {
                     if let Some(token) = focused_text_field {
                         self.loop_sender
                             .send(ActiveAction::Window(
-                                window,
+                                my_id.clone(),
                                 WindowAction::TextField(TextFieldChange::Updated(
                                     token,
                                     Event::Reset,

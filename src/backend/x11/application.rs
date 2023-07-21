@@ -22,6 +22,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Error};
+use tracing::Level;
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::render::{self, ConnectionExt as _, Pictformat};
 use x11rb::protocol::xinput::ChangeReason;
@@ -214,7 +215,7 @@ struct State {
     quitting: bool,
     /// A collection of all the `Application` windows.
     windows: HashMap<u32, Rc<Window>>,
-    xkb_state: xkb::State,
+    xkb_state: xkb::XkbState,
 }
 
 #[derive(Clone, Debug)]
@@ -288,8 +289,12 @@ impl AppInner {
         // https://github.com/linebender/druid/pull/1025#discussion_r442777892
         let (connection, screen_num) = XCBConnection::connect(None)?;
         let rdb = new_resource_db_from_default(&connection)?;
-        let xkb_context = xkb::Context::new();
-        xkb_context.set_log_level(tracing::Level::DEBUG);
+        let mut xkb_context = xkb::Context::new();
+        xkb_context.set_log_level(
+            tracing::level_filters::STATIC_MAX_LEVEL
+                .into_level()
+                .unwrap_or(Level::TRACE),
+        );
         use x11rb::protocol::xkb::ConnectionExt;
         connection
             .xkb_use_extension(1, 0)?
@@ -300,7 +305,7 @@ impl AppInner {
             .context("get core keyboard device id")?;
 
         let keymap = xkb_context
-            .keymap_from_device(&connection, &device_id)
+            .keymap_from_x11_device(&connection, &device_id)
             .context("key map from device")?;
 
         connection
@@ -583,13 +588,19 @@ impl AppInner {
                     .context("KEY_PRESS - failed to get window")?;
                 let hw_keycode = ev.detail;
                 let mut state = borrow_mut!(self.state)?;
-                let key_event = state.xkb_state.key_event(
+                let compose_context = match w.get_active_text_field() {
+                    Some(_) => xkb::ComposingContext::TextField,
+                    None => xkb::ComposingContext::NoTextField,
+                };
+                let (key_event, compose) = state.xkb_state.key_event(
                     hw_keycode as _,
                     keyboard_types::KeyState::Down,
+                    // This might be a key repeat event, but detecting that is a pain
                     false,
+                    compose_context,
                 );
 
-                w.handle_key_event(key_event);
+                w.handle_key_event(key_event, compose);
             }
             Event::XkbStateNotify(ev) => {
                 let mut state = borrow_mut!(self.state)?;
@@ -607,13 +618,17 @@ impl AppInner {
                     .window(ev.event)
                     .context("KEY_PRESS - failed to get window")?;
                 let hw_keycode = ev.detail;
-                let mut state = borrow_mut!(self.state)?;
-                let key_event =
-                    state
-                        .xkb_state
-                        .key_event(hw_keycode as _, keyboard_types::KeyState::Up, false);
 
-                w.handle_key_event(key_event);
+                let mut state = borrow_mut!(self.state)?;
+                let (key_event, compose) = state.xkb_state.key_event(
+                    hw_keycode as _,
+                    keyboard_types::KeyState::Up,
+                    false,
+                    // We're never composing during key release
+                    xkb::ComposingContext::NoTextField,
+                );
+
+                w.handle_key_event(key_event, compose);
             }
             Event::XinputHierarchy(_) => {
                 self.reinitialize_pointers();
