@@ -31,6 +31,8 @@ use xkbcommon_sys::*;
 #[cfg(feature = "x11")]
 use x11rb::xcb_ffi::XCBConnection;
 
+use self::keycodes::{is_backspace, map_for_compose};
+
 #[cfg(feature = "x11")]
 pub struct DeviceId(pub std::os::raw::c_int);
 
@@ -185,6 +187,8 @@ impl Context {
             active_mods: Modifiers::empty(),
             compose_state: self.compose_state(),
             is_composing: false,
+            compose_sequence: vec![],
+            compose_string: String::with_capacity(16),
         }
     }
     fn compose_state(&mut self) -> Option<NonNull<xkb_compose_state>> {
@@ -241,6 +245,9 @@ pub struct KeyEventsState {
     compose_state: Option<NonNull<xkb_compose_state>>,
     active_mods: Modifiers,
     is_composing: bool,
+    compose_sequence: Vec<KeySym>,
+    compose_string: String,
+    previous_was_compose: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -271,6 +278,10 @@ pub enum ComposingContext {
     TextField,
     NoTextField,
 }
+
+#[derive(Copy, Clone)]
+/// An opaque representation of a KeySym, to make APIs less error prone
+pub struct KeySym(xkb_keysym_t);
 
 impl KeyEventsState {
     /// Stop the active composition.
@@ -316,24 +327,176 @@ impl KeyEventsState {
         };
     }
 
-    /// Composing can happen in response to any input
-    pub fn key_event_no_compose(&mut self, scancode: u32, state: KeyState, repeat: bool) {}
-
-    pub fn key_event(
-        &mut self,
-        scancode: u32,
-        state: KeyState,
-        repeat: bool,
-        context: ComposingContext,
-    ) -> (KeyEvent, Option<CompositionEvent>) {
-        let keysym = self.key_get_one_sym(scancode);
+    /// For an explanation of how our compose/dead key handling operates, see
+    /// the documentation of [`crate::text::simulate_compose`]
+    ///
+    /// This method calculates the key event which is passed to the `key_down` handler.
+    /// This is step "0" if that process
+    pub fn key_event(&mut self, scancode: u32, state: KeyState, repeat: bool) -> KeyEvent {
+        let keysym = self.get_one_sym(scancode);
+        // TODO: This shouldn't be repeated
         let code = u16::try_from(scancode)
             .map(hardware_keycode_to_code)
             .unwrap_or(Code::Unidentified);
         // TODO this is lazy - really should use xkb i.e. augment the get_logical_key method.
         // TODO: How?
         let location = code_to_location(code);
-        if let Some(value) = self.handle_compose(context, state, keysym, code, location, repeat) {
+        let key = self.get_logical_key(keysym);
+
+        KeyEvent {
+            state,
+            key,
+            code,
+            location,
+            mods: self.active_mods,
+            repeat,
+            is_composing: self.is_composing,
+        }
+    }
+
+    /// Alert the composition pipeline of a new key down event
+    ///
+    /// Should only be called if we're currently in a text input field.
+    /// This will calculate:
+    ///  - Whether composition is active
+    ///  - If so, what the new composition range displayed to
+    ///    the user should be (and if it changed)
+    ///  - If composition finished, what the inserted string should be
+    ///  - Otherwise, does nothing
+    pub fn compose_key_down(&mut self, event: &KeyEvent, keysym: KeySym) {
+        let Some(compose_state) = self.compose_state else {
+            assert!(!self.is_composing);
+            // If we couldn't make a compose map, there's nothing to do
+            return /* NoComposition */;
+        };
+        // If we were going to do any custom compose kinds, here would be the place to inject them
+        // E.g. for unicode characters as in GTK
+        if self.is_composing && is_backspace(keysym.0) {
+            return self.compose_handle_backspace(compose_state);
+        }
+        let feed_result = unsafe { xkb_compose_state_feed(compose_state.as_ptr(), keysym.0) };
+        if feed_result == xkb_compose_feed_result::XKB_COMPOSE_FEED_IGNORED {
+            return /* Composition state unchanged */;
+        }
+
+        debug_assert_eq!(
+            xkb_compose_feed_result::XKB_COMPOSE_FEED_ACCEPTED,
+            feed_result
+        );
+
+        let status = unsafe { xkb_compose_state_get_status(compose_state.as_ptr()) };
+        match status {
+            xkb_compose_status::XKB_COMPOSE_COMPOSING => {
+                if !self.is_composing {
+                    // We cleared the compose_sequence when the previous item finished
+                    // but, the string was used in the return value of this function the previous
+                    // time it was executed, so wasn't cleared then
+                    self.compose_string.clear();
+                    self.previous_was_compose = false;
+                    self.is_composing = true;
+                }
+                if self.previous_was_compose {
+                    debug_assert_eq!(self.compose_string.pop(), Some('·'));
+                }
+                self.append_key_to_compose(
+                    &mut self.compose_string,
+                    keysym,
+                    true,
+                    &mut self.previous_was_compose,
+                );
+                self.compose_sequence.push(keysym);
+            }
+            xkb_compose_status::XKB_COMPOSE_COMPOSED => {
+                self.compose_sequence.clear();
+                self.is_composing = false;
+                let result_keysym =
+                    unsafe { xkb_compose_state_get_one_sym(compose_state.as_ptr()) };
+            }
+            xkb_compose_status::XKB_COMPOSE_CANCELLED => {
+                // Clearing the compose string and other state isn't needed,
+                // as it is cleared at the start of the next composition
+                self.compose_sequence.clear();
+            }
+            xkb_compose_status::XKB_COMPOSE_NOTHING => {
+                assert!(!self.is_composing);
+                // This is technically out-of-spec. xkbcommon documents that xkb_compose_state_get_status
+                // returns ..._ACCEPTED when "The keysym started, advanced or cancelled a sequence"
+                // which isn't the case when we're in "nothing". However, we have to work with the
+                // actually implemented version, which sends accepted even when the keysym didn't start
+                // a sequence
+                return /* NoComposition */;
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn compose_handle_backspace(&mut self, compose_state: NonNull<xkb_compose_state>) {
+        self.cancel_composing();
+        self.compose_sequence.pop();
+        if self.compose_sequence.is_empty() {
+            return;
+        }
+        let compose_sequence = std::mem::take(&mut self.compose_sequence);
+        let mut compose_string = std::mem::take(&mut self.compose_string);
+        compose_string.clear();
+        let last_index = compose_sequence.len() - 1;
+        let mut last_is_compose = false;
+        for (i, keysym) in compose_sequence.iter().cloned().enumerate() {
+            self.append_key_to_compose(
+                &mut compose_string,
+                keysym,
+                i == last_index,
+                &mut last_is_compose,
+            );
+            let feed_result = unsafe { xkb_compose_state_feed(compose_state.as_ptr(), keysym.0) };
+            debug_assert_eq!(
+                xkb_compose_feed_result::XKB_COMPOSE_FEED_ACCEPTED,
+                feed_result,
+                "Should only be storing accepted feed results"
+            );
+        }
+        self.compose_sequence = compose_sequence;
+        self.previous_was_compose = last_is_compose;
+    }
+    fn append_key_to_compose(
+        &mut self,
+        compose_string: &mut String,
+        keysym: KeySym,
+        is_last: bool,
+        last_is_compose: &mut bool,
+    ) {
+        if let Some(special) = map_for_compose(keysym.0) {
+            special.append_to(compose_string, is_last, last_is_compose);
+            return;
+        }
+        let key = self.get_logical_key(keysym);
+        match key {
+            Key::Character(it) => compose_string.push_str(&it),
+            it => {
+                tracing::warn!(
+                    ?it,
+                    "got unexpected key as a non-cancelling part of a compose"
+                )
+                // Do nothing for other keys. This should generally be unreachable anyway
+            }
+        }
+    }
+
+    pub fn key_event_with_compose(
+        &mut self,
+        scancode: u32,
+        state: KeyState,
+        repeat: bool,
+        context: ComposingContext,
+    ) -> (KeyEvent, Option<CompositionEvent>) {
+        let keysym = self.get_one_sym(scancode);
+        let code = u16::try_from(scancode)
+            .map(hardware_keycode_to_code)
+            .unwrap_or(Code::Unidentified);
+        // TODO this is lazy - really should use xkb i.e. augment the get_logical_key method.
+        // TODO: How?
+        let location = code_to_location(code);
+        if let Some(value) = self.handle_compose(context, state, keysym.0, code, location, repeat) {
             return value;
         }
         let key = self.get_logical_key(keysym);
@@ -375,7 +538,7 @@ impl KeyEventsState {
                         let mut composition_string = "".to_string();
                         let (composition_state, composition_key) = match status {
                             xkb_compose_status::XKB_COMPOSE_COMPOSING => {
-                                let key = self.get_logical_key(keysym);
+                                let key = self.get_logical_key(KeySym(keysym));
                                 if !self.is_composing {
                                     (CompositionState::Start, key)
                                 } else {
@@ -436,8 +599,8 @@ impl KeyEventsState {
         None
     }
 
-    fn get_logical_key(&mut self, keysym: u32) -> Key {
-        let mut key = keycodes::map_key(keysym);
+    fn get_logical_key(&mut self, keysym: KeySym) -> Key {
+        let mut key = keycodes::map_key(keysym.0);
         if matches!(key, Key::Unidentified) {
             if let Some(s) = self.key_get_utf8(keysym) {
                 key = Key::Character(s);
@@ -446,21 +609,24 @@ impl KeyEventsState {
         key
     }
 
-    fn key_get_one_sym(&mut self, scancode: u32) -> u32 {
-        // TODO: There are a few
-        unsafe { xkb_state_key_get_one_sym(self.mods_state, scancode) }
+    /// Get the single (opaque) KeySym the given scan
+    pub fn get_one_sym(&mut self, scancode: u32) -> KeySym {
+        // TODO: We should use xkb_state_key_get_syms here (returning &'keymap [*const xkb_keysym_t])
+        // but that is complicated slightly by the fact that we'd need to implement our own
+        // capitalisation transform
+        KeySym(unsafe { xkb_state_key_get_one_sym(self.mods_state, scancode) })
     }
 
     /// Get the string representation of a key.
     // TODO `keyboard_types` forces us to return a String, but it would be nicer if we could stay
     // on the stack, especially since we know all results will only contain 1 unicode codepoint
-    fn key_get_utf8(&mut self, keysym: u32) -> Option<String> {
+    fn key_get_utf8(&mut self, keysym: KeySym) -> Option<String> {
         // We convert the XKB 'symbol' to a string directly, rather than using the XKB 'string' based on the state
         // because (experimentally) [UI Events Keyboard Events](https://www.w3.org/TR/uievents-key/#key-attribute-value)
         // use the symbol rather than the x11 string (which includes the ctrl KeySym transformation)
         // If we used the KeySym transformation, it would not be possible to use keyboard shortcuts containing the
         // control key, for example
-        let chr = unsafe { xkb_keysym_to_utf32(keysym) };
+        let chr = unsafe { xkb_keysym_to_utf32(keysym.0) };
         if chr == 0 {
             // There is no unicode representation of this symbol
             return None;
@@ -475,5 +641,101 @@ impl Drop for KeyEventsState {
         unsafe {
             xkb_state_unref(self.mods_state);
         }
+    }
+}
+
+/// A keysym which gets special printing in our compose handling
+enum ComposeFeedSym {
+    DeadGrave,
+    DeadAcute,
+    DeadCircumflex,
+    DeadTilde,
+    DeadMacron,
+    DeadBreve,
+    DeadAbovedot,
+    DeadDiaeresis,
+    DeadAbovering,
+    DeadDoubleacute,
+    DeadCaron,
+    DeadCedilla,
+    DeadOgonek,
+    DeadIota,
+    DeadVoicedSound,
+    DeadSemivoicedSound,
+    DeadBelowdot,
+    DeadHook,
+    DeadHorn,
+    DeadStroke,
+    DeadAbovecomma,
+    DeadAbovereversedcomma,
+    DeadDoublegrave,
+    DeadBelowring,
+    DeadBelowmacron,
+    DeadBelowcircumflex,
+    DeadBelowtilde,
+    DeadBelowbreve,
+    DeadBelowdiaeresis,
+    DeadInvertedbreve,
+    DeadBelowcomma,
+    DeadCurrency,
+    DeadGreek,
+
+    Compose,
+}
+
+impl ComposeFeedSym {
+    fn append_to(self, string: &mut String, is_last: bool, last_is_compose: &mut bool) {
+        let char = match self {
+            ComposeFeedSym::DeadTilde => '~',       //	asciitilde # TILDE
+            ComposeFeedSym::DeadAcute => '´',       //	acute # ACUTE ACCENT
+            ComposeFeedSym::DeadGrave => '`',       //	grave # GRAVE ACCENT
+            ComposeFeedSym::DeadCircumflex => '^',  //	asciicircum # CIRCUMFLEX ACCENT
+            ComposeFeedSym::DeadAbovering => '°',   //	degree # DEGREE SIGN
+            ComposeFeedSym::DeadMacron => '¯',      //	macron # MACRON
+            ComposeFeedSym::DeadBreve => '˘',       //	breve # BREVE
+            ComposeFeedSym::DeadAbovedot => '˙',    //	abovedot # DOT ABOVE
+            ComposeFeedSym::DeadDiaeresis => '¨',   //	diaeresis # DIAERESIS
+            ComposeFeedSym::DeadDoubleacute => '˝', //	U2dd # DOUBLE ACUTE ACCENT
+            ComposeFeedSym::DeadCaron => 'ˇ',       //	caron # CARON
+            ComposeFeedSym::DeadCedilla => '¸',     //	cedilla # CEDILLA
+            ComposeFeedSym::DeadOgonek => '˛',      //	ogonek # OGONEK
+            ComposeFeedSym::DeadIota => 'ͺ',        //	U37a # GREEK YPOGEGRAMMENI
+            ComposeFeedSym::DeadBelowdot => '"',    //U0323 # COMBINING DOT BELOW
+            ComposeFeedSym::DeadBelowcomma => ',',  //	comma # COMMA
+            ComposeFeedSym::DeadCurrency => '¤',    //	currency # CURRENCY SIGN
+            ComposeFeedSym::DeadGreek => 'µ',       //	U00B5 # MICRO SIGN
+            ComposeFeedSym::DeadHook => '"',        //U0309 # COMBINING HOOK ABOVE
+            ComposeFeedSym::DeadHorn => '"',        //U031B # COMBINING HORN
+            ComposeFeedSym::DeadStroke => '/',      //	slash # SOLIDUS
+            ComposeFeedSym::Compose => {
+                if is_last {
+                    *last_is_compose = true;
+                    '·'
+                } else {
+                    return;
+                }
+            }
+            ComposeFeedSym::DeadVoicedSound => '゛',
+            ComposeFeedSym::DeadSemivoicedSound => '゜',
+            // These two dead keys appear to not be used in any
+            // of the default compose keymaps, and their names aren't clear what they represent
+            // Since these are only display versions, we just use acute and grave accents again,
+            // as these seem to describe those
+            ComposeFeedSym::DeadAbovecomma => '´',
+            ComposeFeedSym::DeadAbovereversedcomma => '`',
+            // There is no non-combining double grave, so we use the combining version with a circle
+            ComposeFeedSym::DeadDoublegrave => return string.push_str("◌̏"),
+            ComposeFeedSym::DeadBelowring => '˳',
+            ComposeFeedSym::DeadBelowmacron => 'ˍ',
+            ComposeFeedSym::DeadBelowcircumflex => '‸',
+            ComposeFeedSym::DeadBelowtilde => '˷',
+            // There is no non-combining breve below
+            ComposeFeedSym::DeadBelowbreve => return string.push_str("◌̮"),
+            // There is no non-combining diaeresis below
+            ComposeFeedSym::DeadBelowdiaeresis => return string.push_str("◌̤"),
+            // There is no non-combining inverted breve
+            ComposeFeedSym::DeadInvertedbreve => return string.push_str("◌̑"),
+        };
+        string.push(char);
     }
 }

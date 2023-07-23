@@ -592,7 +592,7 @@ impl AppInner {
                     Some(_) => xkb::ComposingContext::TextField,
                     None => xkb::ComposingContext::NoTextField,
                 };
-                let (key_event, compose) = state.xkb_state.key_event(
+                let (key_event, compose) = state.xkb_state.key_event_with_compose(
                     hw_keycode as _,
                     keyboard_types::KeyState::Down,
                     // This might be a key repeat event, but detecting that is a pain
@@ -620,7 +620,7 @@ impl AppInner {
                 let hw_keycode = ev.detail;
 
                 let mut state = borrow_mut!(self.state)?;
-                let (key_event, compose) = state.xkb_state.key_event(
+                let (key_event, compose) = state.xkb_state.key_event_with_compose(
                     hw_keycode as _,
                     keyboard_types::KeyState::Up,
                     false,

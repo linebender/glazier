@@ -230,7 +230,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                     None => ComposingContext::NoTextField,
                 };
                 let (key_event, compose_event) =
-                    xkb_state.key_event(scancode, key_state, false, context);
+                    xkb_state.key_event_with_compose(scancode, key_state, false, context);
 
                 window.handle_key_event(key_event.clone(), compose_event, token, &window_id);
                 let repeats = xkb_keymap.repeats(scancode);
