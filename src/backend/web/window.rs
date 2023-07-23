@@ -324,12 +324,7 @@ fn setup_keydown_callback(ws: &Rc<WindowState>) {
         let modifiers = get_modifiers!(event);
         let kb_event = convert_keyboard_event(&event, modifiers, KeyState::Down);
         let mut handler = state.handler.borrow_mut();
-        if simulate_input(
-            &mut **handler,
-            state.active_text_input.get(),
-            kb_event,
-            None,
-        ) {
+        if simulate_input(&mut **handler, state.active_text_input.get(), kb_event) {
             event.prevent_default();
         }
     });

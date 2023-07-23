@@ -701,8 +701,7 @@ impl WaylandWindowState {
     ) {
         match event.state {
             keyboard_types::KeyState::Down => {
-                let handled =
-                    simulate_input(&mut *self.handler, focused_text_field, event, compose_event);
+                let handled = simulate_input(&mut *self.handler, focused_text_field, event);
                 if handled {
                     if let Some(token) = focused_text_field {
                         self.loop_sender

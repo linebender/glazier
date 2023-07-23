@@ -766,7 +766,7 @@ impl Window {
     pub fn handle_key_event(&self, event: KeyEvent, compose: Option<CompositionEvent>) {
         self.with_handler(|h| match event.state {
             KeyState::Down => {
-                simulate_input(h, self.active_text_field.get(), event, compose);
+                simulate_input(h, self.active_text_field.get(), event);
             }
             KeyState::Up => h.key_up(event),
         });

@@ -21,7 +21,10 @@ use crate::{
     KeyEvent, KeyState, Modifiers,
 };
 use keyboard_types::{Code, CompositionEvent, CompositionState, Key};
-use std::{convert::TryFrom, ffi::CString};
+use std::{
+    convert::TryFrom,
+    ffi::{CStr, CString},
+};
 use std::{os::raw::c_char, ptr::NonNull};
 use xkbcommon_sys::*;
 
@@ -160,6 +163,12 @@ impl Context {
 
     fn keyboard_state(&mut self, keymap: &Keymap, state: *mut xkb_state) -> KeyEventsState {
         let keymap = keymap.0;
+        let mod_count = unsafe { xkb_keymap_num_mods(keymap) };
+        for idx in 0..mod_count {
+            let name = unsafe { xkb_keymap_mod_get_name(keymap, idx) };
+            let str = unsafe { CStr::from_ptr(name) };
+            println!("{:?}", str);
+        }
         let mod_idx = |str: &'static [u8]| unsafe {
             xkb_keymap_mod_get_index(keymap, str.as_ptr() as *mut c_char)
         };
@@ -244,7 +253,7 @@ pub struct ModsIndices {
     num_lock: xkb_mod_index_t,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct ActiveModifiers {
     pub base_mods: xkb_mod_mask_t,
     pub latched_mods: xkb_mod_mask_t,
@@ -307,6 +316,9 @@ impl KeyEventsState {
         };
     }
 
+    /// Composing can happen in response to any input
+    pub fn key_event_no_compose(&mut self, scancode: u32, state: KeyState, repeat: bool) {}
+
     pub fn key_event(
         &mut self,
         scancode: u32,
@@ -357,9 +369,10 @@ impl KeyEventsState {
                         let status =
                             unsafe { xkb_compose_state_get_status(compose_state.as_ptr()) };
                         // The choice of `code` and key here are interesting.
-                        // The UIEvents spec here suggests that we should give the actual pressed, and no specific code
+                        // The UIEvents spec here suggests that we should give the actual pressed key, and no specific code
                         // However, xkbcommon doesn't allow us to see what action the provided key performed, so we just treat it
                         // TODO: Determine what other platforms do here
+                        let mut composition_string = "".to_string();
                         let (composition_state, composition_key) = match status {
                             xkb_compose_status::XKB_COMPOSE_COMPOSING => {
                                 let key = self.get_logical_key(keysym);
@@ -376,6 +389,8 @@ impl KeyEventsState {
                             }
                             xkb_compose_status::XKB_COMPOSE_CANCELLED => {
                                 self.is_composing = false;
+                                // See https://xkbcommon.org/doc/current/group__compose.html#compose-cancellation
+                                // We implement option 1 here at the moment
                                 (CompositionState::End, Key::Cancel)
                             }
                             xkb_compose_status::XKB_COMPOSE_NOTHING => {
@@ -388,6 +403,8 @@ impl KeyEventsState {
                             }
                             _ => unreachable!(),
                         };
+                        let result_keysym =
+                            unsafe { xkb_compose_state_get_one_sym(compose_state.as_ptr()) };
                         return Some((
                             KeyEvent {
                                 code,
