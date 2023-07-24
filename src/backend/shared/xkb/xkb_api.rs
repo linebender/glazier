@@ -17,6 +17,7 @@
 use super::{keycodes, xkbcommon_sys::*};
 use crate::{
     backend::shared::{code_to_location, hardware_keycode_to_code, linux},
+    text::CompositionResult,
     KeyEvent, KeyState, Modifiers,
 };
 use keyboard_types::{Code, Key};
@@ -358,11 +359,15 @@ impl KeyEventsState {
     ///    the user should be (and if it changed)
     ///  - If composition finished, what the inserted string should be
     ///  - Otherwise, does nothing
-    pub fn compose_key_down(&mut self, event: &KeyEvent, keysym: KeySym) {
+    pub(crate) fn compose_key_down<'a>(
+        &'a mut self,
+        event: &KeyEvent,
+        keysym: KeySym,
+    ) -> CompositionResult<'a> {
         let Some(compose_state) = self.compose_state else {
             assert!(!self.is_composing);
             // If we couldn't make a compose map, there's nothing to do
-            return /* NoComposition */;
+            return CompositionResult::NoComposition;
         };
         // If we were going to do any custom compose kinds, here would be the place to inject them
         // E.g. for unicode characters as in GTK
@@ -371,7 +376,7 @@ impl KeyEventsState {
         }
         let feed_result = unsafe { xkb_compose_state_feed(compose_state.as_ptr(), keysym.0) };
         if feed_result == xkb_compose_feed_result::XKB_COMPOSE_FEED_IGNORED {
-            return /* Composition state unchanged */;
+            return CompositionResult::NoComposition;
         }
 
         debug_assert_eq!(
@@ -382,7 +387,8 @@ impl KeyEventsState {
         let status = unsafe { xkb_compose_state_get_status(compose_state.as_ptr()) };
         match status {
             xkb_compose_status::XKB_COMPOSE_COMPOSING => {
-                if !self.is_composing {
+                let just_started = !self.is_composing;
+                if just_started {
                     // We cleared the compose_sequence when the previous item finished
                     // but, the string was used in the return value of this function the previous
                     // time it was executed, so wasn't cleared then
@@ -402,6 +408,10 @@ impl KeyEventsState {
                     Some(&event.key),
                 );
                 self.compose_sequence.push(keysym);
+                CompositionResult::Updated {
+                    text: &self.compose_string,
+                    just_started,
+                }
             }
             xkb_compose_status::XKB_COMPOSE_COMPOSED => {
                 self.compose_sequence.clear();
@@ -413,7 +423,7 @@ impl KeyEventsState {
                     let result = Self::key_get_char(keysym);
                     if let Some(chr) = result {
                         self.compose_string.push(chr);
-                        return /* CompositionComplete(&self.compose_string) */;
+                        return CompositionResult::Finished(&self.compose_string);
                     } else {
                         tracing::warn!("Got a keysym without a unicode representation from xkb_compose_state_get_one_sym");
                     }
@@ -479,12 +489,13 @@ impl KeyEventsState {
                         .expect("libxkbcommon should have given valid utf8");
                     self.compose_string = result;
                 }
-                return /* CompositionComplete(&self.compose_string) */;
+                CompositionResult::Finished(&self.compose_string)
             }
             xkb_compose_status::XKB_COMPOSE_CANCELLED => {
                 // Clearing the compose string and other state isn't needed,
                 // as it is cleared at the start of the next composition
                 self.compose_sequence.clear();
+                CompositionResult::Cancelled
             }
             xkb_compose_status::XKB_COMPOSE_NOTHING => {
                 assert!(!self.is_composing);
@@ -493,17 +504,20 @@ impl KeyEventsState {
                 // which isn't the case when we're in "nothing". However, we have to work with the
                 // actually implemented version, which sends accepted even when the keysym didn't start
                 // a sequence
-                return /* NoComposition */;
+                return CompositionResult::NoComposition;
             }
             _ => unreachable!(),
         }
     }
 
-    fn compose_handle_backspace(&mut self, compose_state: NonNull<xkb_compose_state>) {
+    fn compose_handle_backspace(
+        &mut self,
+        compose_state: NonNull<xkb_compose_state>,
+    ) -> CompositionResult<'_> {
         self.cancel_composing();
         self.compose_sequence.pop();
         if self.compose_sequence.is_empty() {
-            return;
+            return CompositionResult::Cancelled;
         }
         let compose_sequence = std::mem::take(&mut self.compose_sequence);
         let mut compose_string = std::mem::take(&mut self.compose_string);
@@ -527,6 +541,10 @@ impl KeyEventsState {
         }
         self.compose_sequence = compose_sequence;
         self.previous_was_compose = last_is_compose;
+        CompositionResult::Updated {
+            text: &self.compose_string,
+            just_started: false,
+        }
     }
 
     fn append_key_to_compose(

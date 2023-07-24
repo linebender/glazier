@@ -2,13 +2,16 @@ mod xkb_api;
 use keyboard_types::KeyState;
 pub use xkb_api::*;
 
-use crate::{TextFieldToken, WinHandler};
+use crate::{
+    text::{simulate_compose, TextInputModification},
+    TextFieldToken, WinHandler,
+};
 
 mod keycodes;
 mod xkbcommon_sys;
 
 pub enum KeyboardHandled {
-    UpdatedTextfield(TextFieldToken),
+    UpdatedTextfield(TextFieldToken, TextInputModification),
     NoUpdate,
 }
 
@@ -38,14 +41,20 @@ pub fn handle_xkb_key_event_full(
                 // case. We get the same behaviour on macOS (?)
                 return KeyboardHandled::NoUpdate;
             };
-            handler.acquire_input_lock(field_token, true);
+            let input_handler = handler.acquire_input_lock(field_token, true);
             let compose_result = xkb_state.compose_key_down(&event, keysym);
+            let res = if let Some(change) = simulate_compose(input_handler, event, compose_result) {
+                KeyboardHandled::UpdatedTextfield(field_token, change)
+            } else {
+                KeyboardHandled::NoUpdate
+            };
+            handler.release_input_lock(field_token);
+            res
             // if simulate_compose(input_handler, event, composition) {
             //     KeyboardHandled::UpdatedTextfield(token)
             // } else {
             //     KeyboardHandled::NoUpdate
             // }
-            KeyboardHandled::NoUpdate
         }
         KeyState::Up => {
             handler.key_up(event);

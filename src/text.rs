@@ -447,6 +447,25 @@ pub trait InputHandler {
     fn handle_action(&mut self, action: Action);
 }
 
+pub enum TextInputModification {
+    /// The pre-edit text was changed (generally in response to
+    /// a composition updated event).
+    ///
+    /// In Wayland, the IME interface (in theory) doesn't need
+    /// to update `set_surrounding` when this changes, as the pre-edit
+    /// region is not included in the set_surrounding region.
+    ///
+    /// In practice however, there is no way to report "unchanged"
+    /// to the compositor, so this is a distinction without a difference
+    Preedit,
+    /// The text context was changed (including the cursor position)
+    Content,
+}
+
+/// Implements the "application facing" side of composition and dead keys.
+///
+/// Returns how the text input field was modified.
+///
 /// When using Wayland and X11, dead keys and compose are implemented as
 /// a transformation which converts a sequence of keypresses into a resulting
 /// string. For example, pressing the dead key corresponding to grave accent
@@ -517,15 +536,63 @@ pub trait InputHandler {
 /// so the processing doesn't have the context of the other "keybindings".
 #[allow(dead_code)]
 pub(crate) fn simulate_compose(
-    input_handler: Box<dyn InputHandler>,
+    mut input_handler: Box<dyn InputHandler>,
     event: KeyEvent,
     composition: CompositionResult,
-) -> bool {
+) -> Option<TextInputModification> {
+    match composition {
+        CompositionResult::NoComposition => {
+            if simulate_single_input(event, input_handler) {
+                Some(TextInputModification::Content)
+            } else {
+                None
+            }
+        }
+        CompositionResult::Cancelled => {
+            // We choose not to clear the previous composition "content",
+            // so as to not lose the content upon cancellation
+            input_handler.set_composition_range(None);
+            simulate_single_input(event, input_handler);
+            Some(TextInputModification::Content)
+        }
+        CompositionResult::Updated { text, just_started } => {
+            let (range, change) = if just_started {
+                (
+                    input_handler.selection().range(),
+                    TextInputModification::Content,
+                )
+            } else {
+                (
+                    input_handler.composition_range().unwrap(),
+                    TextInputModification::Preedit,
+                )
+            };
+            let start = range.start;
+            input_handler.replace_range(range, text);
+            input_handler.set_composition_range(Some(start..(start + text.len())));
+            Some(change)
+        }
+        CompositionResult::Finished(text) => {
+            let range = input_handler
+                .composition_range()
+                .expect("Composition should only finish if it were ongoing");
+            input_handler.replace_range(range, text);
+            Some(TextInputModification::Content)
+        }
+    }
 }
 
 #[allow(dead_code)]
-pub(crate) enum CompositionResult {
+pub(crate) enum CompositionResult<'a> {
+    /// Composition had no effect, either because composition remained
+    /// non-ongoing, or the key was an ignored modifier
     NoComposition,
+    Cancelled,
+    Updated {
+        text: &'a str,
+        just_started: bool,
+    },
+    Finished(&'a str),
 }
 
 #[allow(dead_code)]
@@ -551,12 +618,9 @@ pub(crate) fn simulate_input<H: WinHandler + ?Sized>(
         None => return false,
     };
     let input_handler = handler.acquire_input_lock(token, true);
-    if let Some(value) = simulate_single_input(event, input_handler) {
-        handler.release_input_lock(token);
-        return value;
-    };
+    let change_occured = simulate_single_input(event, input_handler);
     handler.release_input_lock(token);
-    true
+    change_occured
 }
 
 /// Simulate the effect of a single keypress on the
@@ -564,7 +628,7 @@ pub(crate) fn simulate_input<H: WinHandler + ?Sized>(
 pub(crate) fn simulate_single_input(
     event: KeyEvent,
     mut input_handler: Box<dyn InputHandler>,
-) -> Option<bool> {
+) -> bool {
     match event.key {
         KbKey::Character(c) if !event.mods.ctrl() && !event.mods.meta() && !event.mods.alt() => {
             let selection = input_handler.selection();
@@ -686,10 +750,10 @@ pub(crate) fn simulate_single_input(
             }
         }
         _ => {
-            return Some(false);
+            return false;
         }
     }
-    None
+    true
 }
 
 /// Indicates a movement that transforms a particular text position in a
