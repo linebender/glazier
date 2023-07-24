@@ -189,6 +189,7 @@ impl Context {
             is_composing: false,
             compose_sequence: vec![],
             compose_string: String::with_capacity(16),
+            previous_was_compose: false,
         }
     }
     fn compose_state(&mut self) -> Option<NonNull<xkb_compose_state>> {
@@ -341,7 +342,7 @@ impl KeyEventsState {
         // TODO this is lazy - really should use xkb i.e. augment the get_logical_key method.
         // TODO: How?
         let location = code_to_location(code);
-        let key = self.get_logical_key(keysym);
+        let key = Self::get_logical_key(keysym);
 
         KeyEvent {
             state,
@@ -396,9 +397,10 @@ impl KeyEventsState {
                     self.is_composing = true;
                 }
                 if self.previous_was_compose {
-                    debug_assert_eq!(self.compose_string.pop(), Some('·'));
+                    let _popped = self.compose_string.pop();
+                    debug_assert_eq!(_popped, Some('·'));
                 }
-                self.append_key_to_compose(
+                Self::append_key_to_compose(
                     &mut self.compose_string,
                     keysym,
                     true,
@@ -408,9 +410,81 @@ impl KeyEventsState {
             }
             xkb_compose_status::XKB_COMPOSE_COMPOSED => {
                 self.compose_sequence.clear();
+                self.compose_string.clear();
                 self.is_composing = false;
                 let result_keysym =
                     unsafe { xkb_compose_state_get_one_sym(compose_state.as_ptr()) };
+                if result_keysym != 0 {
+                    let result = Self::key_get_char(keysym);
+                    if let Some(chr) = result {
+                        self.compose_string.push(chr);
+                        return /* CompositionComplete(&self.compose_string) */;
+                    } else {
+                        tracing::warn!("Got a keysym without a unicode representation from xkb_compose_state_get_one_sym");
+                    }
+                }
+                // Ideally we'd have followed the happy path above, where composition results in
+                // a single unicode codepoint. But unfortunately, we need to use xkb_compose_state_get_utf8,
+                // which is a C API dealing with strings, and so is incredibly awkward.
+                // To handle this API, we need to pass in a buffer
+                // So as to minimise allocations, first we try with an array which should definitely be big enough
+                // The type of this buffer can safely be u8, as c_char is u8 on all platforms (supported by Rust)
+                if false {
+                    // We assert that u8 and c_char are the same size for the casts below
+                    let _test_valid = std::mem::transmute::<c_char, u8>;
+                }
+                let mut stack_buffer: [u8; 32] = Default::default();
+                let capacity = stack_buffer.len();
+                // Safety: We properly report the number of available elements to libxkbcommon
+                // Safety: We assume that libxkbcommon is somewhat sane, and therefore doesn't write
+                // uninitialised elements into the passed in buffer, and that
+                // "The number of bytes required for the string" is the number of bytes in the string
+                // The current implementation falls back to snprintf, which does make these guarantees,
+                // so we just hope for the best
+                let result_string_len = unsafe {
+                    xkb_compose_state_get_utf8(
+                        compose_state.as_ptr(),
+                        stack_buffer.as_mut_ptr().cast(),
+                        capacity,
+                    )
+                };
+                if result_string_len < 0 {
+                    // xkbcommon documents no case where this would be the case
+                    // peeking into the implementation, this could occur if snprint has
+                    // "encoding errors". This is just a safety valve
+                    unreachable!();
+                }
+                // The number of items needed in the buffer, as reported by
+                // xkb_compose_state_get_utf8. This excludes the null byte,
+                // but room is needed for the null byte
+                let non_null_bytes = result_string_len as usize;
+                // Truncation has occured if the needed size is greater than or equal to the capacity
+                if non_null_bytes < capacity {
+                    let from_utf = std::str::from_utf8(&stack_buffer[..result_string_len as usize])
+                        .expect("libxkbcommon should have given valid utf8");
+                    self.compose_string.clear();
+                    self.compose_string.push_str(from_utf);
+                } else {
+                    // Re-use the compose_string buffer for this, to avoid allocating on each compose
+                    let mut buffer = std::mem::take(&mut self.compose_string).into_bytes();
+                    // The buffer is already empty, reserve space for the needed items and the null byte
+                    buffer.reserve(non_null_bytes + 1);
+                    let new_result_size = unsafe {
+                        xkb_compose_state_get_utf8(
+                            compose_state.as_ptr(),
+                            buffer.as_mut_ptr().cast(),
+                            non_null_bytes + 1,
+                        )
+                    };
+                    assert_eq!(new_result_size, result_string_len);
+                    // Safety: We assume/know that xkb_compose_state_get_utf8 wrote new_result_size items
+                    // which we know is greater than 0. Note that we exclude the null byte here
+                    unsafe { buffer.set_len(non_null_bytes as usize) };
+                    let result = String::from_utf8(buffer)
+                        .expect("libxkbcommon should have given valid utf8");
+                    self.compose_string = result;
+                }
+                return /* CompositionComplete(&self.compose_string) */;
             }
             xkb_compose_status::XKB_COMPOSE_CANCELLED => {
                 // Clearing the compose string and other state isn't needed,
@@ -442,7 +516,7 @@ impl KeyEventsState {
         let last_index = compose_sequence.len() - 1;
         let mut last_is_compose = false;
         for (i, keysym) in compose_sequence.iter().cloned().enumerate() {
-            self.append_key_to_compose(
+            Self::append_key_to_compose(
                 &mut compose_string,
                 keysym,
                 i == last_index,
@@ -459,7 +533,6 @@ impl KeyEventsState {
         self.previous_was_compose = last_is_compose;
     }
     fn append_key_to_compose(
-        &mut self,
         compose_string: &mut String,
         keysym: KeySym,
         is_last: bool,
@@ -469,7 +542,7 @@ impl KeyEventsState {
             special.append_to(compose_string, is_last, last_is_compose);
             return;
         }
-        let key = self.get_logical_key(keysym);
+        let key = Self::get_logical_key(keysym);
         match key {
             Key::Character(it) => compose_string.push_str(&it),
             it => {
@@ -499,7 +572,7 @@ impl KeyEventsState {
         if let Some(value) = self.handle_compose(context, state, keysym.0, code, location, repeat) {
             return value;
         }
-        let key = self.get_logical_key(keysym);
+        let key = Self::get_logical_key(keysym);
         (
             KeyEvent {
                 state,
@@ -538,7 +611,7 @@ impl KeyEventsState {
                         let mut composition_string = "".to_string();
                         let (composition_state, composition_key) = match status {
                             xkb_compose_status::XKB_COMPOSE_COMPOSING => {
-                                let key = self.get_logical_key(KeySym(keysym));
+                                let key = Self::get_logical_key(KeySym(keysym));
                                 if !self.is_composing {
                                     (CompositionState::Start, key)
                                 } else {
@@ -599,11 +672,13 @@ impl KeyEventsState {
         None
     }
 
-    fn get_logical_key(&mut self, keysym: KeySym) -> Key {
+    fn get_logical_key(keysym: KeySym) -> Key {
         let mut key = keycodes::map_key(keysym.0);
         if matches!(key, Key::Unidentified) {
-            if let Some(s) = self.key_get_utf8(keysym) {
-                key = Key::Character(s);
+            if let Some(chr) = Self::key_get_char(keysym) {
+                // TODO `keyboard_types` forces us to return a String, but it would be nicer if we could stay
+                // on the stack, especially since we know all results will only contain 1 unicode codepoint
+                key = Key::Character(String::from(chr));
             }
         }
         key
@@ -618,10 +693,8 @@ impl KeyEventsState {
     }
 
     /// Get the string representation of a key.
-    // TODO `keyboard_types` forces us to return a String, but it would be nicer if we could stay
-    // on the stack, especially since we know all results will only contain 1 unicode codepoint
-    fn key_get_utf8(&mut self, keysym: KeySym) -> Option<String> {
-        // We convert the XKB 'symbol' to a string directly, rather than using the XKB 'string' based on the state
+    fn key_get_char(keysym: KeySym) -> Option<char> {
+        // We convert the keysym to a string directly, rather than using the XKB state function
         // because (experimentally) [UI Events Keyboard Events](https://www.w3.org/TR/uievents-key/#key-attribute-value)
         // use the symbol rather than the x11 string (which includes the ctrl KeySym transformation)
         // If we used the KeySym transformation, it would not be possible to use keyboard shortcuts containing the
@@ -632,7 +705,7 @@ impl KeyEventsState {
             return None;
         }
         let chr = char::from_u32(chr).expect("xkb should give valid UTF-32 char");
-        Some(String::from(chr))
+        Some(chr)
     }
 }
 
