@@ -678,12 +678,12 @@ impl ComposeFeedSym {
             ComposeFeedSym::DeadCedilla => '¸',     //	cedilla # CEDILLA
             ComposeFeedSym::DeadOgonek => '˛',      //	ogonek # OGONEK
             ComposeFeedSym::DeadIota => 'ͺ',        //	U37a # GREEK YPOGEGRAMMENI
-            ComposeFeedSym::DeadBelowdot => '"',    //U0323 # COMBINING DOT BELOW
+            ComposeFeedSym::DeadBelowdot => '̣',     //U0323 # COMBINING DOT BELOW
             ComposeFeedSym::DeadBelowcomma => ',',  //	comma # COMMA
             ComposeFeedSym::DeadCurrency => '¤',    //	currency # CURRENCY SIGN
             ComposeFeedSym::DeadGreek => 'µ',       //	U00B5 # MICRO SIGN
-            ComposeFeedSym::DeadHook => '"',        //U0309 # COMBINING HOOK ABOVE
-            ComposeFeedSym::DeadHorn => '"',        //U031B # COMBINING HORN
+            ComposeFeedSym::DeadHook => '̉',         //U0309 # COMBINING HOOK ABOVE
+            ComposeFeedSym::DeadHorn => '̛',         //U031B # COMBINING HORN
             ComposeFeedSym::DeadStroke => '/',      //	slash # SOLIDUS
             ComposeFeedSym::Compose => {
                 if is_last {
