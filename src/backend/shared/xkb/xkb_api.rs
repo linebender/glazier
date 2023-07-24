@@ -667,27 +667,6 @@ pub(super) enum ComposeFeedSym {
 impl ComposeFeedSym {
     fn append_to(self, string: &mut String, is_last: bool, last_is_compose: &mut bool) {
         let char = match self {
-            ComposeFeedSym::DeadTilde => '~',       //	asciitilde # TILDE
-            ComposeFeedSym::DeadAcute => '´',       //	acute # ACUTE ACCENT
-            ComposeFeedSym::DeadGrave => '`',       //	grave # GRAVE ACCENT
-            ComposeFeedSym::DeadCircumflex => '^',  //	asciicircum # CIRCUMFLEX ACCENT
-            ComposeFeedSym::DeadAbovering => '°',   //	degree # DEGREE SIGN
-            ComposeFeedSym::DeadMacron => '¯',      //	macron # MACRON
-            ComposeFeedSym::DeadBreve => '˘',       //	breve # BREVE
-            ComposeFeedSym::DeadAbovedot => '˙',    //	abovedot # DOT ABOVE
-            ComposeFeedSym::DeadDiaeresis => '¨',   //	diaeresis # DIAERESIS
-            ComposeFeedSym::DeadDoubleacute => '˝', //	U2dd # DOUBLE ACUTE ACCENT
-            ComposeFeedSym::DeadCaron => 'ˇ',       //	caron # CARON
-            ComposeFeedSym::DeadCedilla => '¸',     //	cedilla # CEDILLA
-            ComposeFeedSym::DeadOgonek => '˛',      //	ogonek # OGONEK
-            ComposeFeedSym::DeadIota => 'ͺ',        //	U37a # GREEK YPOGEGRAMMENI
-            ComposeFeedSym::DeadBelowdot => '̣',     //U0323 # COMBINING DOT BELOW
-            ComposeFeedSym::DeadBelowcomma => ',',  //	comma # COMMA
-            ComposeFeedSym::DeadCurrency => '¤',    //	currency # CURRENCY SIGN
-            ComposeFeedSym::DeadGreek => 'µ',       //	U00B5 # MICRO SIGN
-            ComposeFeedSym::DeadHook => '̉',         //U0309 # COMBINING HOOK ABOVE
-            ComposeFeedSym::DeadHorn => '̛',         //U031B # COMBINING HORN
-            ComposeFeedSym::DeadStroke => '/',      //	slash # SOLIDUS
             ComposeFeedSym::Compose => {
                 if is_last {
                     *last_is_compose = true;
@@ -697,6 +676,24 @@ impl ComposeFeedSym {
                 }
             }
             ComposeFeedSym::DeadVoicedSound => '゛',
+            ComposeFeedSym::DeadTilde => '~', //	asciitilde # TILDE
+            ComposeFeedSym::DeadAcute => '´', //	acute # ACUTE ACCENT
+            ComposeFeedSym::DeadGrave => '`', //	grave # GRAVE ACCENT
+            ComposeFeedSym::DeadCircumflex => '^', //	asciicircum # CIRCUMFLEX ACCENT
+            ComposeFeedSym::DeadAbovering => '°', //	degree # DEGREE SIGN
+            ComposeFeedSym::DeadMacron => '¯', //	macron # MACRON
+            ComposeFeedSym::DeadBreve => '˘', //	breve # BREVE
+            ComposeFeedSym::DeadAbovedot => '˙', //	abovedot # DOT ABOVE
+            ComposeFeedSym::DeadDiaeresis => '¨', //	diaeresis # DIAERESIS
+            ComposeFeedSym::DeadDoubleacute => '˝', //	U2dd # DOUBLE ACUTE ACCENT
+            ComposeFeedSym::DeadCaron => 'ˇ', //	caron # CARON
+            ComposeFeedSym::DeadCedilla => '¸', //	cedilla # CEDILLA
+            ComposeFeedSym::DeadOgonek => '˛', //	ogonek # OGONEK
+            ComposeFeedSym::DeadIota => 'ͺ',  //	U37a # GREEK YPOGEGRAMMENI
+            ComposeFeedSym::DeadBelowcomma => ',', //	comma # COMMA
+            ComposeFeedSym::DeadCurrency => '¤', //	currency # CURRENCY SIGN
+            ComposeFeedSym::DeadGreek => 'µ', //	U00B5 # MICRO SIGN
+            ComposeFeedSym::DeadStroke => '/', //	slash # SOLIDUS
             ComposeFeedSym::DeadSemivoicedSound => '゜',
             // These two dead keys appear to not be used in any
             // of the default compose keymaps, and their names aren't clear what they represent
@@ -704,12 +701,18 @@ impl ComposeFeedSym {
             // as these seem to describe those
             ComposeFeedSym::DeadAbovecomma => '´',
             ComposeFeedSym::DeadAbovereversedcomma => '`',
-            // There is no non-combining double grave, so we use the combining version with a circle
-            ComposeFeedSym::DeadDoublegrave => return string.push_str("◌̏"),
             ComposeFeedSym::DeadBelowring => '˳',
             ComposeFeedSym::DeadBelowmacron => 'ˍ',
             ComposeFeedSym::DeadBelowcircumflex => '‸',
             ComposeFeedSym::DeadBelowtilde => '˷',
+            // There is no non-combining dot below, so we use the combining version with a circle
+            ComposeFeedSym::DeadBelowdot => return string.push_str("◌̣"), //U0323 # COMBINING DOT BELOW
+            // There is no non-combining hook above
+            ComposeFeedSym::DeadHook => return string.push_str("◌̉"), //U0309 # COMBINING HOOK ABOVE
+            // There is no non-combining horn
+            ComposeFeedSym::DeadHorn => return string.push_str("◌̛"), //U031B # COMBINING HORN
+            // There is no non-combining double grave
+            ComposeFeedSym::DeadDoublegrave => return string.push_str("◌̏"),
             // There is no non-combining breve below
             ComposeFeedSym::DeadBelowbreve => return string.push_str("◌̮"),
             // There is no non-combining diaeresis below
