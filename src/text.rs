@@ -515,7 +515,18 @@ pub trait InputHandler {
 /// it gets inserted. I believe this to be an order of operations issue - i.e. if we're composing,
 /// the keypress gets consumed by the input method, but then it turns out to cancel the input,
 /// so the processing doesn't have the context of the other "keybindings".
-pub(crate) fn simulate_compose(handler: &mut dyn WinHandler) {}
+#[allow(dead_code)]
+pub(crate) fn simulate_compose(
+    input_handler: Box<dyn InputHandler>,
+    event: KeyEvent,
+    composition: CompositionResult,
+) -> bool {
+}
+
+#[allow(dead_code)]
+pub(crate) enum CompositionResult {
+    NoComposition,
+}
 
 #[allow(dead_code)]
 /// Simulates `InputHandler` calls on `handler` for a given keypress `event`.
@@ -539,7 +550,21 @@ pub(crate) fn simulate_input<H: WinHandler + ?Sized>(
         Some(v) => v,
         None => return false,
     };
-    let mut input_handler = handler.acquire_input_lock(token, true);
+    let input_handler = handler.acquire_input_lock(token, true);
+    if let Some(value) = simulate_single_input(event, input_handler) {
+        handler.release_input_lock(token);
+        return value;
+    };
+    handler.release_input_lock(token);
+    true
+}
+
+/// Simulate the effect of a single keypress on the
+#[allow(dead_code)]
+pub(crate) fn simulate_single_input(
+    event: KeyEvent,
+    mut input_handler: Box<dyn InputHandler>,
+) -> Option<bool> {
     match event.key {
         KbKey::Character(c) if !event.mods.ctrl() && !event.mods.meta() && !event.mods.alt() => {
             let selection = input_handler.selection();
@@ -661,12 +686,10 @@ pub(crate) fn simulate_input<H: WinHandler + ?Sized>(
             }
         }
         _ => {
-            handler.release_input_lock(token);
-            return false;
+            return Some(false);
         }
-    };
-    handler.release_input_lock(token);
-    true
+    }
+    None
 }
 
 /// Indicates a movement that transforms a particular text position in a

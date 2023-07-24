@@ -14,24 +14,22 @@
 
 //! A minimal wrapper around Xkb for our use.
 
-mod keycodes;
-mod xkbcommon_sys;
+use super::{keycodes, xkbcommon_sys::*};
 use crate::{
-    backend::shared::{code_to_location, hardware_keycode_to_code},
+    backend::shared::{code_to_location, hardware_keycode_to_code, linux},
     KeyEvent, KeyState, Modifiers,
 };
-use keyboard_types::{Code, CompositionEvent, CompositionState, Key};
+use keyboard_types::{Code, Key};
 use std::{
     convert::TryFrom,
     ffi::{CStr, CString},
 };
 use std::{os::raw::c_char, ptr::NonNull};
-use xkbcommon_sys::*;
 
 #[cfg(feature = "x11")]
 use x11rb::xcb_ffi::XCBConnection;
 
-use self::keycodes::{is_backspace, map_for_compose};
+use super::keycodes::{is_backspace, map_for_compose};
 
 #[cfg(feature = "x11")]
 pub struct DeviceId(pub std::os::raw::c_int);
@@ -193,7 +191,7 @@ impl Context {
         }
     }
     fn compose_state(&mut self) -> Option<NonNull<xkb_compose_state>> {
-        let locale = super::linux::env::iso_locale();
+        let locale = linux::env::iso_locale();
         let locale = CString::new(locale).unwrap();
         // Safety: Self is a valid context
         // Locale is a C string, which (although it isn't documented as such), we have to assume is the preconditon
@@ -271,15 +269,6 @@ pub struct ActiveModifiers {
     pub locked_layout: xkb_layout_index_t,
 }
 
-/// In what context does a key event occur
-///
-/// If there is no text field, we choose to disable composing, based on the observation that
-/// the behaviour of text fields is to cancel composition if the text field changes
-pub enum ComposingContext {
-    TextField,
-    NoTextField,
-}
-
 #[derive(Copy, Clone)]
 /// An opaque representation of a KeySym, to make APIs less error prone
 pub struct KeySym(xkb_keysym_t);
@@ -333,8 +322,13 @@ impl KeyEventsState {
     ///
     /// This method calculates the key event which is passed to the `key_down` handler.
     /// This is step "0" if that process
-    pub fn key_event(&mut self, scancode: u32, state: KeyState, repeat: bool) -> KeyEvent {
-        let keysym = self.get_one_sym(scancode);
+    pub fn key_event(
+        &mut self,
+        scancode: u32,
+        keysym: KeySym,
+        state: KeyState,
+        repeat: bool,
+    ) -> KeyEvent {
         // TODO: This shouldn't be repeated
         let code = u16::try_from(scancode)
             .map(hardware_keycode_to_code)
@@ -405,6 +399,7 @@ impl KeyEventsState {
                     keysym,
                     true,
                     &mut self.previous_was_compose,
+                    Some(&event.key),
                 );
                 self.compose_sequence.push(keysym);
             }
@@ -521,6 +516,7 @@ impl KeyEventsState {
                 keysym,
                 i == last_index,
                 &mut last_is_compose,
+                None,
             );
             let feed_result = unsafe { xkb_compose_state_feed(compose_state.as_ptr(), keysym.0) };
             debug_assert_eq!(
@@ -532,19 +528,27 @@ impl KeyEventsState {
         self.compose_sequence = compose_sequence;
         self.previous_was_compose = last_is_compose;
     }
+
     fn append_key_to_compose(
         compose_string: &mut String,
         keysym: KeySym,
         is_last: bool,
         last_is_compose: &mut bool,
+        key: Option<&Key>,
     ) {
         if let Some(special) = map_for_compose(keysym.0) {
             special.append_to(compose_string, is_last, last_is_compose);
             return;
         }
-        let key = Self::get_logical_key(keysym);
+        let key_temp;
+        let key = if let Some(key) = key {
+            key
+        } else {
+            key_temp = Self::get_logical_key(keysym);
+            &key_temp
+        };
         match key {
-            Key::Character(it) => compose_string.push_str(&it),
+            Key::Character(it) => compose_string.push_str(it),
             it => {
                 tracing::warn!(
                     ?it,
@@ -553,123 +557,6 @@ impl KeyEventsState {
                 // Do nothing for other keys. This should generally be unreachable anyway
             }
         }
-    }
-
-    pub fn key_event_with_compose(
-        &mut self,
-        scancode: u32,
-        state: KeyState,
-        repeat: bool,
-        context: ComposingContext,
-    ) -> (KeyEvent, Option<CompositionEvent>) {
-        let keysym = self.get_one_sym(scancode);
-        let code = u16::try_from(scancode)
-            .map(hardware_keycode_to_code)
-            .unwrap_or(Code::Unidentified);
-        // TODO this is lazy - really should use xkb i.e. augment the get_logical_key method.
-        // TODO: How?
-        let location = code_to_location(code);
-        if let Some(value) = self.handle_compose(context, state, keysym.0, code, location, repeat) {
-            return value;
-        }
-        let key = Self::get_logical_key(keysym);
-        (
-            KeyEvent {
-                state,
-                key,
-                code,
-                location,
-                mods: self.active_mods,
-                repeat,
-                is_composing: self.is_composing,
-            },
-            None,
-        )
-    }
-
-    fn handle_compose(
-        &mut self,
-        context: ComposingContext,
-        state: KeyState,
-        keysym: u32,
-        code: Code,
-        location: keyboard_types::Location,
-        repeat: bool,
-    ) -> Option<(KeyEvent, Option<CompositionEvent>)> {
-        match (self.compose_state, context, state) {
-            // Only compose in TextFields, and only when the key is being pressed
-            (Some(compose_state), ComposingContext::TextField, KeyState::Down) => {
-                let feed = unsafe { xkb_compose_state_feed(compose_state.as_ptr(), keysym) };
-                match feed {
-                    xkb_compose_feed_result::XKB_COMPOSE_FEED_ACCEPTED => {
-                        let status =
-                            unsafe { xkb_compose_state_get_status(compose_state.as_ptr()) };
-                        // The choice of `code` and key here are interesting.
-                        // The UIEvents spec here suggests that we should give the actual pressed key, and no specific code
-                        // However, xkbcommon doesn't allow us to see what action the provided key performed, so we just treat it
-                        // TODO: Determine what other platforms do here
-                        let mut composition_string = "".to_string();
-                        let (composition_state, composition_key) = match status {
-                            xkb_compose_status::XKB_COMPOSE_COMPOSING => {
-                                let key = Self::get_logical_key(KeySym(keysym));
-                                if !self.is_composing {
-                                    (CompositionState::Start, key)
-                                } else {
-                                    self.is_composing = true;
-                                    (CompositionState::Update, key)
-                                }
-                            }
-                            xkb_compose_status::XKB_COMPOSE_COMPOSED => {
-                                self.is_composing = false;
-                                (CompositionState::End, Key::Accept)
-                            }
-                            xkb_compose_status::XKB_COMPOSE_CANCELLED => {
-                                self.is_composing = false;
-                                // See https://xkbcommon.org/doc/current/group__compose.html#compose-cancellation
-                                // We implement option 1 here at the moment
-                                (CompositionState::End, Key::Cancel)
-                            }
-                            xkb_compose_status::XKB_COMPOSE_NOTHING => {
-                                assert!(!self.is_composing);
-                                // This is technically out-of-spec. xkbcommon documents that xkb_compose_state_get_status
-                                // returns ..._ACCEPTED when "The keysym started, advanced or cancelled a sequence"
-                                // which isn't the case when we're in "nothing". However, we have to work with the
-                                // actually implemented version, which means having this behaviour
-                                return None;
-                            }
-                            _ => unreachable!(),
-                        };
-                        let result_keysym =
-                            unsafe { xkb_compose_state_get_one_sym(compose_state.as_ptr()) };
-                        return Some((
-                            KeyEvent {
-                                code,
-                                location,
-                                is_composing: true,
-                                key: composition_key,
-                                mods: self.active_mods,
-                                repeat,
-                                state,
-                            },
-                            Some(CompositionEvent {
-                                state: composition_state,
-                                data: "".to_string(),
-                            }),
-                        ));
-                    }
-                    xkb_compose_feed_result::XKB_COMPOSE_FEED_IGNORED => {
-                        // No effect on the composition. Either we already weren't composing,
-                        // or this was a modifier key. Either way, we handle it as normal
-                    }
-                    _ => unreachable!(),
-                }
-            }
-            _ => {
-                // Skip composing
-                assert!(!self.is_composing);
-            }
-        }
-        None
     }
 
     fn get_logical_key(keysym: KeySym) -> Key {
@@ -718,7 +605,7 @@ impl Drop for KeyEventsState {
 }
 
 /// A keysym which gets special printing in our compose handling
-enum ComposeFeedSym {
+pub(super) enum ComposeFeedSym {
     DeadGrave,
     DeadAcute,
     DeadCircumflex,

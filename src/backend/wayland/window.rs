@@ -18,7 +18,7 @@ use std::os::raw::c_void;
 use std::rc::{Rc, Weak};
 use std::sync::mpsc::{self, Sender};
 
-use keyboard_types::CompositionEvent;
+use keyboard_types::{CompositionEvent, KeyState};
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
     WaylandDisplayHandle, WaylandWindowHandle,
@@ -42,6 +42,7 @@ use super::input::{SeatName, TextFieldChange};
 use super::menu::Menu;
 use super::{ActiveAction, IdleAction, WaylandState};
 
+use crate::backend::shared::xkb::{handle_xkb_key_event_full, KeyEventsState};
 use crate::text::{simulate_input, InputHandler};
 use crate::{
     dialog::FileDialogOptions,
@@ -691,10 +692,29 @@ impl WaylandWindowState {
         self.handler.paint(&region);
     }
 
+    pub(super) fn handle_key_event_full(
+        &mut self,
+        xkb_state: &mut KeyEventsState,
+        scancode: u32,
+        key_state: KeyState,
+        // Note that we repeat scancodes instead of Keys, to allow
+        // aaaAAAAAaaa to all be a single 'A' press. The correct behaviour here isn't clear
+        is_repeat: bool,
+    ) {
+        let field_token = self.get_text_field();
+        handle_xkb_key_event_full(
+            xkb_state,
+            scancode,
+            key_state,
+            is_repeat,
+            &mut *self.handler,
+            field_token,
+        );
+    }
+
     pub(super) fn handle_key_event(
         &mut self,
         event: KeyEvent,
-        compose_event: Option<CompositionEvent>,
         focused_text_field: Option<TextFieldToken>,
         // TODO: Make WindowId Copy so that WaylandWindowState can just own it directly
         my_id: &WindowId,

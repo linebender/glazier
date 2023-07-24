@@ -23,6 +23,7 @@ use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use crate::backend::shared::xkb::{handle_xkb_key_event_full, KeyEventsState};
 use crate::pointer::{
     Angle, MouseInfo, PenInclination, PenInfo, PointerId, PointerType, TouchInfo,
 };
@@ -759,16 +760,18 @@ impl Window {
         Ok(())
     }
 
-    pub fn get_active_text_field(&self) -> Option<TextFieldToken> {
-        self.active_text_field.get()
-    }
-
-    pub fn handle_key_event(&self, event: KeyEvent, compose: Option<CompositionEvent>) {
-        self.with_handler(|h| match event.state {
-            KeyState::Down => {
-                simulate_input(h, self.active_text_field.get(), event);
-            }
-            KeyState::Up => h.key_up(event),
+    pub fn handle_key_event(
+        &self,
+        scancode: u32,
+        xkb_state: &mut KeyEventsState,
+        key_state: KeyState,
+        is_repeat: bool,
+    ) {
+        let text_field = self.active_text_field.get();
+        self.with_handler(|handler| {
+            handle_xkb_key_event_full(
+                xkb_state, scancode, key_state, is_repeat, handler, text_field,
+            )
         });
     }
 

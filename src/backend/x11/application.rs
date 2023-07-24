@@ -43,7 +43,7 @@ use super::pointer::{DeviceInfo, PointersState};
 use super::util;
 use super::window::Window;
 use crate::backend::shared::linux;
-use crate::backend::shared::xkb;
+use crate::backend::shared::xkb::{self, handle_xkb_key_event_full};
 
 // This creates a `struct WindowAtoms` containing the specified atoms as members (along with some
 // convenience methods to intern and query those atoms). We use the following atoms:
@@ -588,19 +588,15 @@ impl AppInner {
                     .context("KEY_PRESS - failed to get window")?;
                 let hw_keycode = ev.detail;
                 let mut state = borrow_mut!(self.state)?;
-                let compose_context = match w.get_active_text_field() {
-                    Some(_) => xkb::ComposingContext::TextField,
-                    None => xkb::ComposingContext::NoTextField,
-                };
-                let (key_event, compose) = state.xkb_state.key_event_with_compose(
-                    hw_keycode as _,
-                    keyboard_types::KeyState::Down,
-                    // This might be a key repeat event, but detecting that is a pain
-                    false,
-                    compose_context,
-                );
 
-                w.handle_key_event(key_event, compose);
+                w.handle_key_event(
+                    hw_keycode as u32,
+                    &mut state.xkb_state,
+                    keyboard_types::KeyState::Down,
+                    // Detecting whether the key press is a repeat is a massive pain on x11
+                    // so just don't do it and hope that's fine
+                    false,
+                );
             }
             Event::XkbStateNotify(ev) => {
                 let mut state = borrow_mut!(self.state)?;
@@ -620,15 +616,12 @@ impl AppInner {
                 let hw_keycode = ev.detail;
 
                 let mut state = borrow_mut!(self.state)?;
-                let (key_event, compose) = state.xkb_state.key_event_with_compose(
-                    hw_keycode as _,
+                w.handle_key_event(
+                    hw_keycode as u32,
+                    &mut state.xkb_state,
                     keyboard_types::KeyState::Up,
                     false,
-                    // We're never composing during key release
-                    xkb::ComposingContext::NoTextField,
                 );
-
-                w.handle_key_event(key_event, compose);
             }
             Event::XinputHierarchy(_) => {
                 self.reinitialize_pointers();

@@ -2,7 +2,7 @@ use std::{num::NonZeroU32, os::fd::AsRawFd};
 
 use crate::{
     backend::{
-        shared::xkb::{ActiveModifiers, ComposingContext, KeyEventsState, Keymap},
+        shared::xkb::{ActiveModifiers, KeyEventsState, Keymap},
         wayland::window::WindowId,
     },
     KeyEvent,
@@ -224,18 +224,10 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                 let window_id = keyboard.focused_window.as_ref().unwrap().clone();
                 let window = state.windows.get_mut(&window_id).unwrap();
 
-                let token = window.get_text_field();
-                let context = match token {
-                    Some(_) => ComposingContext::TextField,
-                    None => ComposingContext::NoTextField,
-                };
-                let (key_event, compose_event) =
-                    xkb_state.key_event_with_compose(scancode, key_state, false, context);
-
-                window.handle_key_event(key_event.clone(), compose_event, token, &window_id);
+                window.handle_key_event_full(xkb_state, scancode, key_state, false);
                 let repeats = xkb_keymap.repeats(scancode);
                 // Handle repeating
-                match &key_event.state {
+                match &key_state {
                     KeyState::Down => {
                         if repeats {
                             // Start repeating. Exact choice of repeating behaviour varies - see
