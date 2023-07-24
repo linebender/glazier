@@ -420,7 +420,7 @@ impl KeyEventsState {
                 let result_keysym =
                     unsafe { xkb_compose_state_get_one_sym(compose_state.as_ptr()) };
                 if result_keysym != 0 {
-                    let result = Self::key_get_char(keysym);
+                    let result = Self::key_get_char(KeySym(result_keysym));
                     if let Some(chr) = result {
                         self.compose_string.push(chr);
                         return CompositionResult::Finished(&self.compose_string);
