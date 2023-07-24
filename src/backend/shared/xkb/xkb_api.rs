@@ -399,6 +399,7 @@ impl KeyEventsState {
                 if self.previous_was_compose {
                     let _popped = self.compose_string.pop();
                     debug_assert_eq!(_popped, Some('·'));
+                    self.previous_was_compose = false;
                 }
                 Self::append_key_to_compose(
                     &mut self.compose_string,
@@ -495,6 +496,7 @@ impl KeyEventsState {
                 // Clearing the compose string and other state isn't needed,
                 // as it is cleared at the start of the next composition
                 self.compose_sequence.clear();
+                self.is_composing = false;
                 CompositionResult::Cancelled
             }
             xkb_compose_status::XKB_COMPOSE_NOTHING => {
@@ -541,6 +543,7 @@ impl KeyEventsState {
         }
         self.compose_sequence = compose_sequence;
         self.previous_was_compose = last_is_compose;
+        self.compose_string = compose_string;
         CompositionResult::Updated {
             text: &self.compose_string,
             just_started: false,
