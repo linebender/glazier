@@ -112,7 +112,6 @@ impl Application {
             |it| Ok(Some(it)),
         )?;
 
-        let xkb_context = Context::new();
         let mut state = WaylandState {
             registry_state: RegistryState::new(&globals),
             output_state: OutputState::new(&globals, &qh),
@@ -128,7 +127,7 @@ impl Application {
             loop_signal: loop_signal.clone(),
             input_states: vec![],
             seats: SeatState::new(&globals, &qh),
-            xkb_context,
+            xkb_context: Context::new(),
             text_input: text_input_global,
         };
         state.initial_seats();
