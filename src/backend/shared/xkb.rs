@@ -2,16 +2,13 @@ mod xkb_api;
 use keyboard_types::KeyState;
 pub use xkb_api::*;
 
-use crate::{
-    text::{simulate_compose, TextInputModification},
-    TextFieldToken, WinHandler,
-};
+use crate::{text::simulate_compose, TextFieldToken, WinHandler};
 
 mod keycodes;
 mod xkbcommon_sys;
 
 pub enum KeyboardHandled {
-    UpdatedTextfield(TextFieldToken, TextInputModification),
+    UpdatedTextfield(TextFieldToken),
     NoUpdate,
 }
 
@@ -43,8 +40,8 @@ pub fn handle_xkb_key_event_full(
             };
             let input_handler = handler.acquire_input_lock(field_token, true);
             let compose_result = xkb_state.compose_key_down(&event, keysym);
-            let res = if let Some(change) = simulate_compose(input_handler, event, compose_result) {
-                KeyboardHandled::UpdatedTextfield(field_token, change)
+            let res = if simulate_compose(input_handler, event, compose_result) {
+                KeyboardHandled::UpdatedTextfield(field_token)
             } else {
                 KeyboardHandled::NoUpdate
             };

@@ -21,10 +21,7 @@ use crate::{
     KeyEvent, KeyState, Modifiers,
 };
 use keyboard_types::{Code, Key};
-use std::{
-    convert::TryFrom,
-    ffi::{CStr, CString},
-};
+use std::{convert::TryFrom, ffi::CString};
 use std::{os::raw::c_char, ptr::NonNull};
 
 #[cfg(feature = "x11")]
@@ -143,33 +140,14 @@ impl Context {
         }
     }
 
-    /// Set the log level using `tracing` levels.
-    ///
-    /// Because `xkb` has a `critical` error, each rust error maps to 1 above (e.g. error ->
-    /// critical, warn -> error etc.)
-    #[allow(unused)]
-    pub fn set_log_level(&self, level: tracing::Level) {
-        use tracing::Level;
-        let level = match level {
-            Level::ERROR => xkb_log_level::XKB_LOG_LEVEL_CRITICAL,
-            Level::WARN => xkb_log_level::XKB_LOG_LEVEL_ERROR,
-            Level::INFO => xkb_log_level::XKB_LOG_LEVEL_WARNING,
-            Level::DEBUG => xkb_log_level::XKB_LOG_LEVEL_INFO,
-            Level::TRACE => xkb_log_level::XKB_LOG_LEVEL_DEBUG,
-        };
-        unsafe {
-            xkb_context_set_log_level(self.0, level);
-        }
-    }
-
     fn keyboard_state(&mut self, keymap: &Keymap, state: *mut xkb_state) -> KeyEventsState {
         let keymap = keymap.0;
-        let mod_count = unsafe { xkb_keymap_num_mods(keymap) };
-        for idx in 0..mod_count {
-            let name = unsafe { xkb_keymap_mod_get_name(keymap, idx) };
-            let str = unsafe { CStr::from_ptr(name) };
-            println!("{:?}", str);
-        }
+        // let mod_count = unsafe { xkb_keymap_num_mods(keymap) };
+        // for idx in 0..mod_count {
+        //     let name = unsafe { xkb_keymap_mod_get_name(keymap, idx) };
+        //     let str = unsafe { CStr::from_ptr(name) };
+        //     println!("{:?}", str);
+        // }
         let mod_idx = |str: &'static [u8]| unsafe {
             xkb_keymap_mod_get_index(keymap, str.as_ptr() as *mut c_char)
         };
@@ -278,11 +256,13 @@ impl KeyEventsState {
     /// Stop the active composition.
     /// This should happen if the text field changes, or the selection within the text field changes
     /// or the IME is activated
-    pub fn cancel_composing(&mut self) {
+    pub fn cancel_composing(&mut self) -> bool {
+        let was_composing = self.is_composing;
         self.is_composing = false;
         if let Some(state) = self.compose_state {
             unsafe { xkb_compose_state_reset(state.as_ptr()) }
         }
+        was_composing
     }
 
     pub fn update_xkb_state(&mut self, mods: ActiveModifiers) {
@@ -389,10 +369,8 @@ impl KeyEventsState {
             xkb_compose_status::XKB_COMPOSE_COMPOSING => {
                 let just_started = !self.is_composing;
                 if just_started {
-                    // We cleared the compose_sequence when the previous item finished
-                    // but, the string was used in the return value of this function the previous
-                    // time it was executed, so wasn't cleared then
                     self.compose_string.clear();
+                    self.compose_sequence.clear();
                     self.previous_was_compose = false;
                     self.is_composing = true;
                 }
@@ -415,7 +393,6 @@ impl KeyEventsState {
                 }
             }
             xkb_compose_status::XKB_COMPOSE_COMPOSED => {
-                self.compose_sequence.clear();
                 self.compose_string.clear();
                 self.is_composing = false;
                 let result_keysym =
@@ -485,7 +462,7 @@ impl KeyEventsState {
                     assert_eq!(new_result_size, result_string_len);
                     // Safety: We assume/know that xkb_compose_state_get_utf8 wrote new_result_size items
                     // which we know is greater than 0. Note that we exclude the null byte here
-                    unsafe { buffer.set_len(non_null_bytes as usize) };
+                    unsafe { buffer.set_len(non_null_bytes) };
                     let result = String::from_utf8(buffer)
                         .expect("libxkbcommon should have given valid utf8");
                     self.compose_string = result;
@@ -495,9 +472,11 @@ impl KeyEventsState {
             xkb_compose_status::XKB_COMPOSE_CANCELLED => {
                 // Clearing the compose string and other state isn't needed,
                 // as it is cleared at the start of the next composition
-                self.compose_sequence.clear();
                 self.is_composing = false;
-                CompositionResult::Cancelled
+                if self.previous_was_compose {
+                    self.compose_string.pop();
+                }
+                CompositionResult::Cancelled(&self.compose_string)
             }
             xkb_compose_status::XKB_COMPOSE_NOTHING => {
                 assert!(!self.is_composing);
@@ -506,7 +485,7 @@ impl KeyEventsState {
                 // which isn't the case when we're in "nothing". However, we have to work with the
                 // actually implemented version, which sends accepted even when the keysym didn't start
                 // a sequence
-                return CompositionResult::NoComposition;
+                CompositionResult::NoComposition
             }
             _ => unreachable!(),
         }
@@ -519,7 +498,8 @@ impl KeyEventsState {
         self.cancel_composing();
         self.compose_sequence.pop();
         if self.compose_sequence.is_empty() {
-            return CompositionResult::Cancelled;
+            // This is not cancelled, but finished, because cancelled would replay the backspace a second time
+            return CompositionResult::Finished("");
         }
         let compose_sequence = std::mem::take(&mut self.compose_sequence);
         let mut compose_string = std::mem::take(&mut self.compose_string);

@@ -101,8 +101,6 @@
 //! `InputHandler` calls are simulated from keypresses on other platforms, which
 //! doesn't allow for IME input, dead keys, etc.
 
-use keyboard_types::{CompositionEvent, CompositionState};
-
 use crate::keyboard::{KbKey, KeyEvent, ModifiersExt};
 use crate::kurbo::{Point, Rect};
 use crate::window::{TextFieldToken, WinHandler};
@@ -447,21 +445,6 @@ pub trait InputHandler {
     fn handle_action(&mut self, action: Action);
 }
 
-pub enum TextInputModification {
-    /// The pre-edit text was changed (generally in response to
-    /// a composition updated event).
-    ///
-    /// In Wayland, the IME interface (in theory) doesn't need
-    /// to update `set_surrounding` when this changes, as the pre-edit
-    /// region is not included in the set_surrounding region.
-    ///
-    /// In practice however, there is no way to report "unchanged"
-    /// to the compositor, so this is a distinction without a difference
-    Preedit,
-    /// The text context was changed (including the cursor position)
-    Content,
-}
-
 /// Implements the "application facing" side of composition and dead keys.
 ///
 /// Returns how the text input field was modified.
@@ -539,45 +522,32 @@ pub(crate) fn simulate_compose(
     mut input_handler: Box<dyn InputHandler>,
     event: KeyEvent,
     composition: CompositionResult,
-) -> Option<TextInputModification> {
+) -> bool {
     match composition {
-        CompositionResult::NoComposition => {
-            if simulate_single_input(event, input_handler) {
-                Some(TextInputModification::Content)
-            } else {
-                None
-            }
-        }
-        CompositionResult::Cancelled => {
-            // We choose not to clear the previous composition "content",
-            // so as to not lose the content upon cancellation
-            input_handler.set_composition_range(None);
+        CompositionResult::NoComposition => simulate_single_input(event, input_handler),
+        CompositionResult::Cancelled(text) => {
+            let range = input_handler.composition_range().unwrap();
+            input_handler.replace_range(range, text);
             simulate_single_input(event, input_handler);
-            Some(TextInputModification::Content)
+            true
         }
         CompositionResult::Updated { text, just_started } => {
-            let (range, change) = if just_started {
-                (
-                    input_handler.selection().range(),
-                    TextInputModification::Content,
-                )
+            let range = if just_started {
+                input_handler.selection().range()
             } else {
-                (
-                    input_handler.composition_range().unwrap(),
-                    TextInputModification::Preedit,
-                )
+                input_handler.composition_range().unwrap()
             };
             let start = range.start;
             input_handler.replace_range(range, text);
             input_handler.set_composition_range(Some(start..(start + text.len())));
-            Some(change)
+            true
         }
         CompositionResult::Finished(text) => {
             let range = input_handler
                 .composition_range()
                 .expect("Composition should only finish if it were ongoing");
             input_handler.replace_range(range, text);
-            Some(TextInputModification::Content)
+            true
         }
     }
 }
@@ -587,7 +557,7 @@ pub(crate) enum CompositionResult<'a> {
     /// Composition had no effect, either because composition remained
     /// non-ongoing, or the key was an ignored modifier
     NoComposition,
-    Cancelled,
+    Cancelled(&'a str),
     Updated {
         text: &'a str,
         just_started: bool,

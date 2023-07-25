@@ -1,11 +1,8 @@
 use std::{num::NonZeroU32, os::fd::AsRawFd};
 
-use crate::{
-    backend::{
-        shared::xkb::{ActiveModifiers, KeyEventsState, Keymap},
-        wayland::window::WindowId,
-    },
-    KeyEvent,
+use crate::backend::{
+    shared::xkb::{ActiveModifiers, KeyEventsState, Keymap},
+    wayland::window::WindowId,
 };
 
 use super::{input_state, SeatInfo, SeatName, WaylandState};
@@ -45,16 +42,11 @@ pub enum RepeatInfo {
 struct KeyboardUserData(SeatName);
 
 pub(super) struct KeyboardState {
-    xkb_state: Option<(KeyEventsState, Keymap)>,
+    pub(super) xkb_state: Option<(KeyEventsState, Keymap)>,
     keyboard: wl_keyboard::WlKeyboard,
-    focused_window: Option<WindowId>,
 
     repeat_settings: RepeatInfo,
     _repeat_token: Option<RegistrationToken>,
-    /// A single key press can result in multiple keysyms
-    ///
-    /// TODO: How does this handle composing?
-    cached_keys: Vec<KeyEvent>,
 }
 
 impl KeyboardState {
@@ -66,10 +58,8 @@ impl KeyboardState {
         KeyboardState {
             xkb_state: None,
             keyboard: seat.get_keyboard(qh, KeyboardUserData(name)),
-            focused_window: None,
             repeat_settings: RepeatInfo::Disable,
             _repeat_token: None,
-            cached_keys: vec![],
         }
     }
 }
@@ -168,17 +158,12 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                 keys: _,
             } => {
                 // TODO: Handle `keys`
-                let keyboard = state.keyboard(data);
-                keyboard.focused_window = Some(WindowId::of_surface(&surface));
+                let seat = state.input_state(data.0);
+                seat.keyboard_focused = Some(WindowId::of_surface(&surface));
             }
-            wl_keyboard::Event::Leave { surface, .. } => {
-                let keyboard = state.keyboard(data);
-                debug_assert_eq!(
-                    keyboard.focused_window.as_ref().unwrap(),
-                    &WindowId::of_surface(&surface)
-                );
-                keyboard.focused_window = None;
-                keyboard.cached_keys.clear();
+            wl_keyboard::Event::Leave { .. } => {
+                let seat = state.input_state(data.0);
+                seat.keyboard_focused = None;
             }
             wl_keyboard::Event::Modifiers {
                 serial: _,
@@ -208,11 +193,22 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                 key,
                 state: key_state,
             } => {
-                let keyboard = keyboard(&mut state.input_states, data);
-                let (xkb_state, xkb_keymap) = keyboard.xkb_state.as_mut().unwrap();
                 // Need to add 8 as per wayland spec
                 // TODO: Point to canonical link here
                 let scancode = key + 8;
+
+                let seat = input_state(&mut state.input_states, data.0);
+                let key_repeats = {
+                    let (_, xkb_keymap) = seat
+                        .keyboard_state
+                        .as_mut()
+                        .unwrap()
+                        .xkb_state
+                        .as_mut()
+                        .unwrap();
+                    xkb_keymap.repeats(scancode)
+                };
+
                 let key_state = match key_state {
                     WEnum::Value(it) => match it {
                         wl_keyboard::KeyState::Pressed => KeyState::Down,
@@ -221,15 +217,14 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                     },
                     WEnum::Unknown(_) => todo!(),
                 };
-                let window_id = keyboard.focused_window.as_ref().unwrap().clone();
+                let window_id = seat.keyboard_focused.as_ref().unwrap().clone();
                 let window = state.windows.get_mut(&window_id).unwrap();
 
-                window.handle_key_event_full(xkb_state, scancode, key_state, false);
-                let repeats = xkb_keymap.repeats(scancode);
+                window.handle_key_event_full(seat, scancode, key_state, false, &window_id);
                 // Handle repeating
                 match &key_state {
                     KeyState::Down => {
-                        if repeats {
+                        if key_repeats {
                             // Start repeating. Exact choice of repeating behaviour varies - see
                             // discussion in #glazier > Key Repeat Behaviour
                         }

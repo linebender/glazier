@@ -29,7 +29,6 @@ use crate::pointer::{
 };
 use crate::scale::Scalable;
 use anyhow::{anyhow, Context, Error};
-use keyboard_types::CompositionEvent;
 use tracing::{error, warn};
 use x11rb::connection::Connection;
 use x11rb::errors::ReplyOrIdError;
@@ -58,11 +57,11 @@ use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 use crate::mouse::{Cursor, CursorDesc};
 use crate::region::Region;
 use crate::scale::Scale;
-use crate::text::{simulate_input, Event};
+use crate::text::Event;
 use crate::window::{
     FileDialogToken, IdleToken, TextFieldToken, TimerToken, WinHandler, WindowLevel,
 };
-use crate::{window, KeyEvent, PointerButton, PointerButtons, PointerEvent, ScaledArea};
+use crate::{window, PointerButton, PointerButtons, PointerEvent, ScaledArea};
 
 use super::application::Application;
 use super::dialog;
@@ -411,6 +410,8 @@ impl WindowBuilder {
             idle_queue: Arc::new(Mutex::new(Vec::new())),
             idle_pipe: self.app.idle_pipe(),
             active_text_field: Cell::new(None),
+            previous_text_field: Cell::new(None),
+            text_field_updated_by_application: Cell::new(false),
             parent,
         });
 
@@ -463,6 +464,8 @@ pub(crate) struct Window {
     // Writing to this wakes up the event loop, so that it can run idle handlers.
     idle_pipe: RawFd,
     active_text_field: Cell<Option<TextFieldToken>>,
+    previous_text_field: Cell<Option<TextFieldToken>>,
+    text_field_updated_by_application: Cell<bool>,
     parent: Weak<Window>,
 }
 
@@ -767,8 +770,27 @@ impl Window {
         key_state: KeyState,
         is_repeat: bool,
     ) {
+        // This is a horrible hack, but the X11 backend is not actively maintained anyway
         let text_field = self.active_text_field.get();
+        let previous = self.previous_text_field.get();
+        let text_field_updated_by_application = self.text_field_updated_by_application.take();
         self.with_handler(|handler| {
+            if text_field != previous {
+                if xkb_state.cancel_composing() {
+                    let previous = previous.unwrap();
+                    let mut ime = handler.acquire_input_lock(previous, true);
+                    // TODO: Actually use
+                    ime.set_composition_range(None);
+                    handler.release_input_lock(previous);
+                }
+                self.previous_text_field.set(text_field);
+            }
+            if text_field_updated_by_application && xkb_state.cancel_composing() {
+                let field = text_field.unwrap();
+                let mut ime = handler.acquire_input_lock(field, true);
+                ime.set_composition_range(None);
+                handler.release_input_lock(field);
+            }
             handle_xkb_key_event_full(
                 xkb_state, scancode, key_state, is_repeat, handler, text_field,
             )
@@ -1335,7 +1357,11 @@ impl WindowHandle {
     }
 
     pub fn update_text_field(&self, _token: TextFieldToken, _update: Event) {
-        // noop until we get a real text input implementation
+        if let Some(window) = self.window.upgrade() {
+            // This should be active rather than passive, but since the X11 backend is
+            // low-maintenance, this is fine
+            window.text_field_updated_by_application.set(true);
+        }
     }
 
     pub fn request_timer(&self, deadline: Instant) -> TimerToken {

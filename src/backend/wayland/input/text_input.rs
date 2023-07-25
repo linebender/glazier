@@ -7,73 +7,12 @@ use smithay_client_toolkit::reexports::{
 };
 
 use crate::{
-    backend::wayland::{
-        window::{WaylandWindowState, WindowId},
-        WaylandState,
-    },
-    text::{Affinity, Event, InputHandler, Selection},
+    backend::wayland::{input::TextFieldChange, window::WindowId, WaylandState},
+    text::{Affinity, InputHandler, Selection},
     TextFieldToken,
 };
 
 use super::{input_state, SeatInfo, SeatName};
-
-#[derive(Debug)]
-pub(in crate::backend::wayland) enum TextFieldChange {
-    Updated(TextFieldToken, Event),
-    Changed,
-}
-
-impl TextFieldChange {
-    pub(in crate::backend::wayland) fn apply(
-        self,
-        window: &mut WaylandWindowState,
-        input_states: &mut [SeatInfo],
-        seat: SeatName,
-    ) {
-        match self {
-            TextFieldChange::Updated(event_token, event) => {
-                let state = seat_text_input(input_states, seat);
-                if let Some((mut handler, token)) = window.get_input_lock(false) {
-                    if token != event_token {
-                        window.release_input_lock(token);
-                        return;
-                    }
-                    match event {
-                        Event::LayoutChanged => {
-                            let selection = handler.selection();
-                            let selection_range = selection.range();
-                            state.sync_cursor_rectangle(
-                                selection,
-                                selection_range.clone(),
-                                handler.line_range(selection_range.start, Affinity::Upstream),
-                                handler.line_range(selection_range.end, Affinity::Downstream),
-                                &mut *handler,
-                            );
-                        }
-                        // Wayland doesn't distinguish between these cases
-                        Event::SelectionChanged | Event::Reset => {
-                            state.sync_state(&mut *handler, zwp_text_input_v3::ChangeCause::Other);
-                        }
-                    }
-                    window.release_input_lock(token);
-                }
-            }
-            TextFieldChange::Changed => {
-                let state = seat_text_input(input_states, seat);
-                if let Some((mut handler, token)) = window.get_input_lock(false) {
-                    state.reset();
-                    state.token = Some(token);
-                    state.text_input.enable();
-                    state.sync_state(&mut *handler, zwp_text_input_v3::ChangeCause::Other);
-                    window.release_input_lock(token);
-                } else {
-                    state.text_input.disable();
-                    state.reset();
-                }
-            }
-        }
-    }
-}
 
 struct InputUserData(SeatName);
 
@@ -98,6 +37,8 @@ pub(super) struct InputState {
     new_cursor_begin: i32,
     new_cursor_end: i32,
     state_might_have_changed: bool,
+
+    pub(super) has_preedit: bool,
 
     // The bookkeeping state
     /// Used for sanity checking - the token we believe we're operating on,
@@ -137,13 +78,14 @@ impl InputState {
 
             buffer_start: None,
             token: None,
+            has_preedit: false,
         }
     }
 
     /// Move between different text inputs
     ///
     /// Used alongside the enable request, or in response to the leave event
-    fn reset(&mut self) {
+    pub(super) fn reset(&mut self, token: Option<TextFieldToken>) {
         self.commit_string = None;
         self.preedit_string = None;
         self.delete_surrounding_before = 0;
@@ -151,10 +93,16 @@ impl InputState {
         self.new_cursor_begin = 0;
         self.new_cursor_end = 0;
         self.buffer_start = None;
-        self.token = None;
+        self.token = token;
+        if token.is_some() {
+            self.text_input.enable();
+        } else {
+            self.text_input.disable();
+            self.commit();
+        }
     }
 
-    fn sync_state(
+    pub(super) fn sync_state(
         &mut self,
         handler: &mut dyn InputHandler,
         cause: zwp_text_input_v3::ChangeCause,
@@ -241,7 +189,7 @@ impl InputState {
             self.buffer_start = Some(buffer_start);
         }
 
-        self.sync_cursor_rectangle(selection, selection_range, start_line, end_line, handler);
+        self.sync_cursor_rectangle_inner(selection, selection_range, start_line, end_line, handler);
 
         // We always set a text change cause to make sure
         self.text_input.set_text_change_cause(cause);
@@ -249,7 +197,23 @@ impl InputState {
         self.commit();
     }
 
-    fn sync_cursor_rectangle(
+    pub(super) fn sync_cursor_rectangle(&mut self, handler: &mut dyn InputHandler) {
+        let selection = handler.selection();
+        let selection_range = selection.range();
+        self.sync_cursor_rectangle_inner(
+            selection,
+            selection_range.clone(),
+            handler.line_range(selection_range.start, Affinity::Upstream),
+            handler.line_range(selection_range.end, Affinity::Downstream),
+            handler,
+        );
+        // We don't set the change cause because the "text, cursor or anchor" positions haven't changed
+        // self.text_input
+        //     .set_text_change_cause(zwp_text_input_v3::ChangeCause::Other);
+        self.commit();
+    }
+
+    fn sync_cursor_rectangle_inner(
         &mut self,
         selection: Selection,
         selection_range: std::ops::Range<usize>,
@@ -289,7 +253,8 @@ impl InputState {
         self.text_input.commit();
     }
 
-    fn done(&mut self, handler: &mut dyn InputHandler) {
+    fn done(&mut self, handler: &mut dyn InputHandler) -> bool {
+        let mut made_change = false;
         //  The application must proceed by evaluating the changes in the following order:
         let pre_edit_range = handler.composition_range();
         let mut selection = handler.selection();
@@ -311,9 +276,11 @@ impl InputState {
             selection.active = delete_range.start;
 
             handler.replace_range(delete_range, "");
+            made_change = true;
         }
         // 3. Insert commit string with the cursor at its end.
         if let Some(commit) = self.commit_string.take() {
+            made_change = true;
             handler.replace_range(selection.range(), &commit);
             selection = handler.selection();
         }
@@ -321,6 +288,7 @@ impl InputState {
         // We skip this step, because we compute it in sync_state.
         // 5. Insert new preedit text in cursor position.
         if let Some(preedit) = self.preedit_string.take() {
+            made_change = true;
             let range = selection.range();
 
             let selection_start = range.start;
@@ -332,13 +300,16 @@ impl InputState {
                 (selection_start + self.new_cursor_begin) as usize,
                 (selection_start + self.new_cursor_end) as usize,
             ));
+            self.has_preedit = true;
         } else {
             handler.set_composition_range(None);
+            self.has_preedit = false;
         }
         selection = handler.selection();
         // TODO: Confirm this affinity
         let active_line = handler.line_range(selection.active, Affinity::Upstream);
         self.sync_cursor_line(handler, active_line);
+        made_change
     }
 }
 
@@ -389,7 +360,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 let Some(win) = state.windows.get_mut(&window_id) else {return;};
                 win.remove_input_seat(data.0);
                 let text_input = text_input(&mut state.input_states, data);
-                text_input.reset();
+                text_input.reset(None);
                 text_input.active_window = None;
                 text_input.state_might_have_changed = true;
                 // These seem to be invalid here, as the surface no longer exists
@@ -424,21 +395,37 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 input_state.state_might_have_changed = true;
             }
             zwp_text_input_v3::Event::Done { serial } => {
-                let input_state = text_input(&mut state.input_states, data);
-                let Some(win) = state.windows.get_mut(input_state.active_window.as_ref().unwrap()) else {return;};
+                let input_state = input_state(&mut state.input_states, data.0);
+                let text_input = input_state.input_state.as_mut().unwrap();
+                let window_id = text_input.active_window.clone().unwrap();
+                let Some(win) = state.windows.get_mut(&window_id) else {return;};
                 let input_lock = win.get_input_lock(true);
                 if let Some((mut handler, token)) = input_lock {
-                    if Some(token) == input_state.token {
-                        input_state.done(&mut *handler);
-                        if serial == input_state.commit_count
-                            && input_state.state_might_have_changed
+                    if Some(token) == text_input.token {
+                        let changed_input = text_input.done(&mut *handler);
+                        if serial == text_input.commit_count && text_input.state_might_have_changed
                         {
-                            input_state.sync_state(
+                            text_input.sync_state(
                                 &mut *handler,
                                 zwp_text_input_v3::ChangeCause::InputMethod,
                             );
-                            input_state.state_might_have_changed = false;
+                            text_input.state_might_have_changed = false;
                         }
+                        win.release_input_lock(token);
+                        if changed_input {
+                            TextFieldChange::Updated(
+                                token,
+                                crate::text::Event::Reset,
+                                crate::backend::wayland::input::TextFieldChangeCause::TextInput,
+                            )
+                            .apply(
+                                input_state,
+                                &mut *win.handler,
+                                &window_id,
+                            );
+                        }
+                    } else {
+                        win.release_input_lock(token);
                     }
                 }
             }

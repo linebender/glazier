@@ -22,7 +22,6 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Error};
-use tracing::Level;
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::render::{self, ConnectionExt as _, Pictformat};
 use x11rb::protocol::xinput::ChangeReason;
@@ -43,7 +42,7 @@ use super::pointer::{DeviceInfo, PointersState};
 use super::util;
 use super::window::Window;
 use crate::backend::shared::linux;
-use crate::backend::shared::xkb::{self, handle_xkb_key_event_full};
+use crate::backend::shared::xkb::{self};
 
 // This creates a `struct WindowAtoms` containing the specified atoms as members (along with some
 // convenience methods to intern and query those atoms). We use the following atoms:
@@ -290,11 +289,6 @@ impl AppInner {
         let (connection, screen_num) = XCBConnection::connect(None)?;
         let rdb = new_resource_db_from_default(&connection)?;
         let mut xkb_context = xkb::Context::new();
-        xkb_context.set_log_level(
-            tracing::level_filters::STATIC_MAX_LEVEL
-                .into_level()
-                .unwrap_or(Level::TRACE),
-        );
         use x11rb::protocol::xkb::ConnectionExt;
         connection
             .xkb_use_extension(1, 0)?

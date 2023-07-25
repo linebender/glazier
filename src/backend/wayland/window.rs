@@ -38,12 +38,11 @@ use tracing;
 use wayland_backend::client::ObjectId;
 
 use super::application::{self};
-use super::input::{SeatName, TextFieldChange};
+use super::input::{input_state, SeatInfo, SeatName, TextFieldChange, TextFieldChangeCause};
 use super::menu::Menu;
 use super::{ActiveAction, IdleAction, WaylandState};
 
-use crate::backend::shared::xkb::{handle_xkb_key_event_full, KeyEventsState};
-use crate::text::{simulate_input, InputHandler};
+use crate::text::InputHandler;
 use crate::{
     dialog::FileDialogOptions,
     error::Error as ShellError,
@@ -54,7 +53,7 @@ use crate::{
     window::{self, FileDialogToken, TimerToken, WinHandler, WindowLevel},
     TextFieldToken,
 };
-use crate::{IdleToken, KeyEvent, Region, Scalable};
+use crate::{IdleToken, Region, Scalable};
 
 #[derive(Clone)]
 pub struct WindowHandle {
@@ -208,23 +207,32 @@ impl WindowHandle {
         if props.focused_text_field.is_some_and(|it| it == token) {
             props.focused_text_field = None;
             drop(props);
-            self.defer(WindowAction::TextField(TextFieldChange::Changed));
+            self.defer(WindowAction::TextField(TextFieldChange::Changed {
+                // The text field no longer exists, so it isn't meaningful to say we moved from it
+                from: None,
+                to: None,
+            }));
         }
     }
 
     pub fn set_focused_text_field(&self, active_field: Option<TextFieldToken>) {
         let props = self.properties();
         let mut props = props.borrow_mut();
+        let from = props.focused_text_field;
         props.focused_text_field = active_field;
         drop(props);
-        self.defer(WindowAction::TextField(TextFieldChange::Changed));
+        self.defer(WindowAction::TextField(TextFieldChange::Changed {
+            from,
+            to: active_field,
+        }));
     }
 
     pub fn update_text_field(&self, token: TextFieldToken, update: Event) {
         self.defer(WindowAction::TextField(TextFieldChange::Updated(
-            token, update,
+            token,
+            update,
+            TextFieldChangeCause::Application,
         )));
-        // noop until we get a real text input implementation
     }
 
     pub fn request_timer(&self, _deadline: std::time::Instant) -> TimerToken {
@@ -531,7 +539,6 @@ impl WindowBuilder {
                         handler: self.handler.unwrap(),
                         properties: properties_strong,
                         text_input_seat: None,
-                        loop_sender: self.loop_sender.clone(),
                     },
                     handle.clone(),
                 ),
@@ -562,7 +569,6 @@ pub(super) struct WaylandWindowState {
     // TODO: Rc<RefCell>?
     properties: Rc<RefCell<WindowProperties>>,
     text_input_seat: Option<SeatName>,
-    loop_sender: channel::Sender<ActiveAction>,
 }
 
 struct WindowProperties {
@@ -694,50 +700,24 @@ impl WaylandWindowState {
 
     pub(super) fn handle_key_event_full(
         &mut self,
-        xkb_state: &mut KeyEventsState,
+        seat: &mut SeatInfo,
         scancode: u32,
         key_state: KeyState,
         // Note that we repeat scancodes instead of Keys, to allow
         // aaaAAAAAaaa to all be a single 'A' press. The correct behaviour here isn't clear
         is_repeat: bool,
+        // TODO: Make WindowId a u64 wrapper, so we can just pass it around
+        my_id: &WindowId,
     ) {
         let field_token = self.get_text_field();
-        handle_xkb_key_event_full(
-            xkb_state,
+        seat.handle_key_event(
             scancode,
             key_state,
             is_repeat,
-            &mut *self.handler,
             field_token,
+            &mut *self.handler,
+            my_id,
         );
-    }
-
-    pub(super) fn handle_key_event(
-        &mut self,
-        event: KeyEvent,
-        focused_text_field: Option<TextFieldToken>,
-        // TODO: Make WindowId Copy so that WaylandWindowState can just own it directly
-        my_id: &WindowId,
-    ) {
-        match event.state {
-            keyboard_types::KeyState::Down => {
-                let handled = simulate_input(&mut *self.handler, focused_text_field, event);
-                if handled {
-                    if let Some(token) = focused_text_field {
-                        self.loop_sender
-                            .send(ActiveAction::Window(
-                                my_id.clone(),
-                                WindowAction::TextField(TextFieldChange::Updated(
-                                    token,
-                                    Event::Reset,
-                                )),
-                            ))
-                            .expect("Loop should still be running when key event recieved");
-                    }
-                }
-            }
-            keyboard_types::KeyState::Up => self.handler.key_up(event),
-        }
     }
 
     pub(super) fn set_input_seat(&mut self, seat: SeatName) {
@@ -911,7 +891,11 @@ impl WindowAction {
                     return;
                 };
                 let Some(seat) = props.text_input_seat else {return;};
-                change.apply(props, &mut state.input_states, seat);
+                change.apply(
+                    input_state(&mut state.input_states, seat),
+                    &mut *props.handler,
+                    &window_id,
+                );
             }
         }
     }

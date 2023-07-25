@@ -113,11 +113,6 @@ impl Application {
         )?;
 
         let xkb_context = Context::new();
-        xkb_context.set_log_level(
-            tracing::level_filters::STATIC_MAX_LEVEL
-                .into_level()
-                .unwrap_or(tracing::Level::TRACE),
-        );
         let mut state = WaylandState {
             registry_state: RegistryState::new(&globals),
             output_state: OutputState::new(&globals, &qh),
