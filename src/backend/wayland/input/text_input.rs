@@ -38,8 +38,6 @@ pub(super) struct InputState {
     new_cursor_end: i32,
     state_might_have_changed: bool,
 
-    pub(super) has_preedit: bool,
-
     // The bookkeeping state
     /// Used for sanity checking - the token we believe we're operating on,
     /// which this bookkeeping state is relative to
@@ -78,7 +76,6 @@ impl InputState {
 
             buffer_start: None,
             token: None,
-            has_preedit: false,
         }
     }
 
@@ -262,6 +259,7 @@ impl InputState {
         if let Some(range) = pre_edit_range {
             selection.active = range.start;
             selection.anchor = range.start;
+            made_change = true;
             handler.replace_range(range, "");
         }
         // 2. Delete requested surrounding text.
@@ -300,10 +298,8 @@ impl InputState {
                 (selection_start + self.new_cursor_begin) as usize,
                 (selection_start + self.new_cursor_end) as usize,
             ));
-            self.has_preedit = true;
         } else {
             handler.set_composition_range(None);
-            self.has_preedit = false;
         }
         selection = handler.selection();
         // TODO: Confirm this affinity

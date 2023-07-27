@@ -34,10 +34,7 @@ pub(in crate::backend::wayland) enum TextFieldChange {
     /// An existing text field was updated
     Updated(TextFieldToken, Event, TextFieldChangeCause),
     /// A different text field was selected
-    Changed {
-        from: Option<TextFieldToken>,
-        to: Option<TextFieldToken>,
-    },
+    Changed { to: Option<TextFieldToken> },
 }
 
 impl TextFieldChange {
@@ -94,7 +91,7 @@ impl TextFieldChange {
                     handler.release_input_lock(event_token);
                 }
             }
-            TextFieldChange::Changed { from, to } => {
+            TextFieldChange::Changed { to } => {
                 if let Some(ref mut ime_state) = seat.input_state {
                     if let Some(from) = from {
                         let mut ime_handler = handler.acquire_input_lock(from, true);

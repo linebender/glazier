@@ -204,12 +204,11 @@ impl WindowHandle {
     pub fn remove_text_field(&self, token: TextFieldToken) {
         let props = self.properties();
         let mut props = props.borrow_mut();
-        if props.focused_text_field.is_some_and(|it| it == token) {
-            props.focused_text_field = None;
+        if props.active_text_field.is_some_and(|it| it == token) {
+            props.text_field_valid = false;
             drop(props);
             self.defer(WindowAction::TextField(TextFieldChange::Changed {
                 // The text field no longer exists, so it isn't meaningful to say we moved from it
-                from: None,
                 to: None,
             }));
         }
@@ -217,12 +216,9 @@ impl WindowHandle {
 
     pub fn set_focused_text_field(&self, active_field: Option<TextFieldToken>) {
         let props = self.properties();
-        let mut props = props.borrow_mut();
-        let from = props.focused_text_field;
-        props.focused_text_field = active_field;
-        drop(props);
+        let props = props.borrow();
+        let from = props.active_text_field;
         self.defer(WindowAction::TextField(TextFieldChange::Changed {
-            from,
             to: active_field,
         }));
     }
@@ -519,7 +515,7 @@ impl WindowBuilder {
             will_repaint: false,
             pending_frame_callback: false,
             configured: false,
-            focused_text_field: None,
+            active_text_field: None,
         };
         let properties_strong = Rc::new(RefCell::new(properties));
 
@@ -566,7 +562,7 @@ impl WindowId {
 /// The state associated with each window, stored in [`WaylandState`]
 pub(super) struct WaylandWindowState {
     pub handler: Box<dyn WinHandler>,
-    // TODO: Rc<RefCell>?
+    // TODO: This refcell is too strong - most of the fields can just be Cells
     properties: Rc<RefCell<WindowProperties>>,
     text_input_seat: Option<SeatName>,
 }
@@ -601,7 +597,10 @@ struct WindowProperties {
     // We can't draw before being configured
     configured: bool,
 
-    focused_text_field: Option<TextFieldToken>,
+    /// The text field which is currently *being* edited
+    active_text_field: Option<TextFieldToken>,
+
+    text_field_valid: bool,
 }
 
 impl WindowProperties {
@@ -730,7 +729,7 @@ impl WaylandWindowState {
     }
     pub(super) fn get_text_field(&mut self) -> Option<TextFieldToken> {
         let props = self.properties.borrow();
-        props.focused_text_field
+        props.active_text_field
     }
 
     pub(super) fn get_input_lock(
@@ -739,7 +738,7 @@ impl WaylandWindowState {
     ) -> Option<(Box<dyn InputHandler + 'static>, TextFieldToken)> {
         let focused_field = {
             let props = self.properties.borrow();
-            props.focused_text_field?
+            props.active_text_field?
         };
         Some((
             self.handler.acquire_input_lock(focused_field, mutable),
