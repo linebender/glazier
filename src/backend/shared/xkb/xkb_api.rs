@@ -495,9 +495,12 @@ impl KeyEventsState {
         &mut self,
         compose_state: NonNull<xkb_compose_state>,
     ) -> CompositionResult<'_> {
-        self.cancel_composing();
+        if let Some(state) = self.compose_state {
+            unsafe { xkb_compose_state_reset(state.as_ptr()) }
+        }
         self.compose_sequence.pop();
         if self.compose_sequence.is_empty() {
+            self.is_composing = false;
             // This is not cancelled, but finished, because cancelled would replay the backspace a second time
             return CompositionResult::Finished("");
         }
