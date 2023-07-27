@@ -118,7 +118,7 @@ impl PenInclination {
         let deg_to_rad = PI / 180.0;
 
         // Tilts are not capable of representing angles close to the horizon, so avoid numerical
-        // issues by thresholding the altidue away from the horizon.
+        // issues by thresholding the altitude away from the horizon.
         let altitude_angle = self.altitude.to_radians().max(0.5 * deg_to_rad);
 
         let tan_alt = altitude_angle.tan();
@@ -280,8 +280,6 @@ impl PointerButton {
 }
 
 /// A set of [`PointerButton`]s.
-///
-/// [`PointerButton`]: enum.PointerButton.html
 #[derive(PartialEq, Eq, Clone, Copy, Default)]
 pub struct PointerButtons(u8);
 
@@ -348,40 +346,30 @@ impl PointerButtons {
     }
 
     /// Returns `true` if [`PointerButton::Left`] is in the set.
-    ///
-    /// [`PointerButton::Left`]: enum.PointerButton.html#variant.Left
     #[inline]
     pub fn has_left(self) -> bool {
         self.contains(PointerButton::Left)
     }
 
     /// Returns `true` if [`PointerButton::Right`] is in the set.
-    ///
-    /// [`PointerButton::Right`]: enum.PointerButton.html#variant.Right
     #[inline]
     pub fn has_right(self) -> bool {
         self.contains(PointerButton::Right)
     }
 
     /// Returns `true` if [`PointerButton::Middle`] is in the set.
-    ///
-    /// [`PointerButton::Middle`]: enum.PointerButton.html#variant.Middle
     #[inline]
     pub fn has_middle(self) -> bool {
         self.contains(PointerButton::Middle)
     }
 
     /// Returns `true` if [`PointerButton::X1`] is in the set.
-    ///
-    /// [`PointerButton::X1`]: enum.PointerButton.html#variant.X1
     #[inline]
     pub fn has_x1(self) -> bool {
         self.contains(PointerButton::X1)
     }
 
     /// Returns `true` if [`PointerButton::X2`] is in the set.
-    ///
-    /// [`PointerButton::X2`]: enum.PointerButton.html#variant.X2
     #[inline]
     pub fn has_x2(self) -> bool {
         self.contains(PointerButton::X2)

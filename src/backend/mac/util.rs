@@ -32,7 +32,7 @@ pub(crate) fn assert_main_thread() {
     }
 }
 
-/// Create a new NSString from a &str.
+/// Create a new `NSString` from a `&str`.
 pub(crate) fn make_nsstring(s: &str) -> id {
     unsafe { NSString::alloc(nil).init_str(s).autorelease() }
 }

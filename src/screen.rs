@@ -21,7 +21,7 @@ use std::fmt::Display;
 
 /// Monitor struct containing data about a monitor on the system
 ///
-/// Use `Screen::get_monitors()` to return a `Vec<Monitor>` of all the monitors on the system
+/// Use [`Screen::get_monitors()`] to return a `Vec<Monitor>` of all the monitors on the system
 #[derive(Clone, Debug, PartialEq)]
 pub struct Monitor {
     primary: bool,
@@ -82,7 +82,7 @@ pub struct Screen {}
 impl Screen {
     /// Returns a vector of all the [`monitors`] on the system.
     ///
-    /// [`monitors`]: struct.Monitor.html
+    /// [`monitors`]: Monitor
     pub fn get_monitors() -> Vec<Monitor> {
         backend::screen::get_monitors()
     }

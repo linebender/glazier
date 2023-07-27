@@ -53,8 +53,6 @@ use crate::{IntoKey, KbKey, KeyEvent, Modifiers};
 /// assert!(hotkey.matches(KeyEvent::for_test(RawMods::None, KbKey::ArrowLeft)));
 /// assert!(!hotkey.matches(KeyEvent::for_test(RawMods::Ctrl, KbKey::ArrowLeft)));
 /// ```
-///
-/// [`SysMods`]: enum.SysMods.html
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HotKey {
     pub(crate) mods: RawMods,
@@ -82,8 +80,6 @@ impl HotKey {
     /// ```
     ///
     /// [`Key`]: keyboard_types::Key
-    /// [`SysMods`]: enum.SysMods.html
-    /// [`RawMods`]: enum.RawMods.html
     pub fn new(mods: impl Into<Option<RawMods>>, key: impl IntoKey) -> Self {
         HotKey {
             mods: mods.into().unwrap_or(RawMods::None),
