@@ -104,7 +104,7 @@ impl IdleHandle {
         self.0.add_idle_callback(callback)
     }
 
-    /// Request a callback from the runloop. Your `WinHander::idle` method will
+    /// Request a callback from the runloop. Your [`WinHandler::idle`] method will
     /// be called with the `token` that was passed in.
     pub fn schedule_idle(&mut self, token: IdleToken) {
         self.0.add_idle_token(token)
@@ -645,8 +645,8 @@ pub trait WinHandler {
         false
     }
 
-    /// Called when a key is released. This corresponds to the WM_KEYUP message
-    /// on Windows, or keyUp(withEvent:) on macOS.
+    /// Called when a key is released. This corresponds to the `WM_KEYUP` message
+    /// on Windows, or `keyUp(withEvent:)` on macOS.
     #[allow(unused_variables)]
     fn key_up(&mut self, event: KeyEvent) {}
 
@@ -767,8 +767,8 @@ pub trait WinHandler {
     fn request_close(&mut self) {}
 
     /// Called when the window is being destroyed. Note that this happens
-    /// earlier in the sequence than drop (at WM_DESTROY, while the latter is
-    /// WM_NCDESTROY).
+    /// earlier in the sequence than drop (at `WM_DESTROY`, while the latter is
+    /// `WM_NCDESTROY`).
     #[allow(unused_variables)]
     fn destroy(&mut self) {}
 

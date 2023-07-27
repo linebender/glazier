@@ -27,7 +27,7 @@ use crate::Modifiers;
 pub struct MouseEvent {
     /// The location of the mouse in [display points] in relation to the current window.
     ///
-    /// [display points]: struct.Scale.html
+    /// [display points]: crate::Scale
     pub pos: Point,
     /// Mouse buttons being held down during a move or after a click event.
     /// Thus it will contain the `button` that triggered a mouse-down event,
@@ -118,8 +118,6 @@ impl MouseButton {
 }
 
 /// A set of [`MouseButton`]s.
-///
-/// [`MouseButton`]: enum.MouseButton.html
 #[derive(PartialEq, Eq, Clone, Copy, Default)]
 pub struct MouseButtons(pub(crate) u8);
 
@@ -175,40 +173,30 @@ impl MouseButtons {
     }
 
     /// Returns `true` if [`MouseButton::Left`] is in the set.
-    ///
-    /// [`MouseButton::Left`]: enum.MouseButton.html#variant.Left
     #[inline]
     pub fn has_left(self) -> bool {
         self.contains(MouseButton::Left)
     }
 
     /// Returns `true` if [`MouseButton::Right`] is in the set.
-    ///
-    /// [`MouseButton::Right`]: enum.MouseButton.html#variant.Right
     #[inline]
     pub fn has_right(self) -> bool {
         self.contains(MouseButton::Right)
     }
 
     /// Returns `true` if [`MouseButton::Middle`] is in the set.
-    ///
-    /// [`MouseButton::Middle`]: enum.MouseButton.html#variant.Middle
     #[inline]
     pub fn has_middle(self) -> bool {
         self.contains(MouseButton::Middle)
     }
 
     /// Returns `true` if [`MouseButton::X1`] is in the set.
-    ///
-    /// [`MouseButton::X1`]: enum.MouseButton.html#variant.X1
     #[inline]
     pub fn has_x1(self) -> bool {
         self.contains(MouseButton::X1)
     }
 
     /// Returns `true` if [`MouseButton::X2`] is in the set.
-    ///
-    /// [`MouseButton::X2`]: enum.MouseButton.html#variant.X2
     #[inline]
     pub fn has_x2(self) -> bool {
         self.contains(MouseButton::X2)

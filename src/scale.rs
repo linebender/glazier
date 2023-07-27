@@ -66,8 +66,6 @@ pub struct Scale {
 /// will still match up with the platform area pixel boundaries as often as the scale factor allows.
 ///
 /// A copy of `ScaledArea` will be stale as soon as the platform area size changes.
-///
-/// [`Scale`]: struct.Scale.html
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct ScaledArea {
     /// The size of the scaled area in display points.
@@ -78,8 +76,6 @@ pub struct ScaledArea {
 
 /// The `Scalable` trait describes how coordinates should be translated
 /// from display points into pixels and vice versa using a [`Scale`].
-///
-/// [`Scale`]: struct.Scale.html
 pub trait Scalable {
     /// Converts the scalable item from display points into pixels,
     /// using the x axis scale factor for coordinates on the x axis

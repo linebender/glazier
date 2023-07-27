@@ -101,7 +101,7 @@ mod levels {
 
 #[derive(Clone)]
 pub(crate) struct WindowHandle {
-    /// This is an NSView, as our concept of "window" is more the top-level container holding
+    /// This is an `NSView`, as our concept of "window" is more the top-level container holding
     /// a view. Also, this is better for hosted applications such as VST.
     nsview: WeakPtr,
     idle_queue: Weak<Mutex<Vec<IdleKind>>>,
@@ -175,7 +175,7 @@ enum IdleKind {
     DeferredOp(DeferredOp),
 }
 
-/// This is the state associated with our custom NSView.
+/// This is the state associated with our custom `NSView`.
 struct ViewState {
     nsview: WeakPtr,
     handler: Box<dyn WinHandler>,
@@ -315,7 +315,7 @@ impl WindowBuilder {
             view.initWithFrame_(frame);
 
             // The rect of the tracking area doesn't matter, because
-            // we use the InVisibleRect option where the OS syncs the size automatically.
+            // we use the `InVisibleRect` option where the OS syncs the size automatically.
             let rect = NSRect::new(NSPoint::new(0., 0.), NSSize::new(0., 0.));
             let opts = NSTrackingAreaOptions::MouseEnteredAndExited
                 | NSTrackingAreaOptions::MouseMoved
@@ -370,7 +370,7 @@ impl WindowBuilder {
     }
 }
 
-// Wrap pointer because lazy_static requires Sync.
+// Wrap pointer because lazy_static requires [`Sync`].
 struct ViewClass(*const Class);
 unsafe impl Sync for ViewClass {}
 unsafe impl Send for ViewClass {}
@@ -1626,7 +1626,7 @@ impl ViewState {
     }
 }
 
-/// Convert an `Instant` into an NSTimeInterval, i.e. a fractional number
+/// Convert an `Instant` into an `NSTimeInterval`, i.e. a fractional number
 /// of seconds from now.
 ///
 /// This may lose some precision for multi-month durations.

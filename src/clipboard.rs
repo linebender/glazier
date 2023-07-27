@@ -22,8 +22,8 @@ pub use crate::backend::clipboard as backend;
 ///
 /// # Working with text
 ///
-/// Copying and pasting text is simple, using [`Clipboard::put_string`] and
-/// [`Clipboard::get_string`]. If this is all you need, you're in luck.
+/// Copying and pasting text is simple, using [`Clipboard::put_string()`] and
+/// [`Clipboard::get_string()`]. If this is all you need, you're in luck.
 ///
 /// # Advanced usage
 ///
@@ -118,13 +118,9 @@ pub use crate::backend::clipboard as backend;
 /// # fn do_something_with_data(_: &str, _: Vec<u8>) {}
 /// ```
 ///
-/// [`Application::clipboard()`]: struct.Application.html#method.clipboard
-/// [`Clipboard::put_string`]: struct.Clipboard.html#method.put_string
-/// [`Clipboard::get_string`]: struct.Clipboard.html#method.get_string
-/// [`FormatId`]: type.FormatId.html
+/// [`Application::clipboard()`]: crate::Application::clipboard
 /// [`Universal Type Identifier`]: https://escapetech.eu/manuals/qdrop/uti.html
 /// [MIME types]: https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types
-/// [`ClipboardFormat`]: struct.ClipboardFormat.html
 #[derive(Debug, Clone)]
 pub struct Clipboard(pub(crate) backend::Clipboard);
 
@@ -153,10 +149,7 @@ impl Clipboard {
     /// Return data in a given format, if available.
     ///
     /// It is recommended that the [`FormatId`] argument be a format returned by
-    /// [`Clipboard::preferred_format`].
-    ///
-    /// [`Clipboard::preferred_format`]: struct.Clipboard.html#method.preferred_format
-    /// [`FormatId`]: type.FormatId.html
+    /// [`Clipboard::preferred_format()`].
     pub fn get_format(&self, format: FormatId) -> Option<Vec<u8>> {
         self.0.get_format(format)
     }

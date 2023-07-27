@@ -36,13 +36,13 @@ pub(crate) struct KeyboardState {
     last_mods: NSEventModifierFlags,
 }
 
-/// Convert a macOS platform key code (keyCode field of NSEvent).
+/// Convert a macOS platform key code (`keyCode` field of `NSEvent`).
 ///
 /// The primary source for this mapping is:
 /// <https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/code/code_values>
 ///
-/// It should also match up with CODE_MAP_MAC bindings in
-/// NativeKeyToDOMCodeName.h.
+/// It should also match up with `CODE_MAP_MAC` bindings in
+/// `NativeKeyToDOMCodeName.h`.
 fn key_code_to_code(key_code: u16) -> Code {
     match key_code {
         0x00 => Code::KeyA,
@@ -174,13 +174,13 @@ fn key_code_to_code(key_code: u16) -> Code {
 
 /// Convert code to key.
 ///
-/// On macOS, for non-printable keys, the keyCode we get from the event serves is
+/// On macOS, for non-printable keys, the `keyCode` we get from the event serves is
 /// really more of a key than a physical scan code.
 ///
-/// When this function returns None, the code can be considered printable.
+/// When this function returns `None`, the code can be considered printable.
 ///
-/// The logic for this function is derived from KEY_MAP_COCOA bindings in
-/// NativeKeyToDOMKeyName.h.
+/// The logic for this function is derived from `KEY_MAP_COCOA` bindings in
+/// `NativeKeyToDOMKeyName.h`.
 fn code_to_key(code: Code) -> Option<KbKey> {
     Some(match code {
         Code::Escape => KbKey::Escape,

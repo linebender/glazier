@@ -100,7 +100,7 @@ pub(crate) struct WindowBuilder {
 /// with different strategies.
 #[allow(dead_code)]
 pub enum PresentStrategy {
-    /// Corresponds to the swap effect DXGI_SWAP_EFFECT_SEQUENTIAL. It
+    /// Corresponds to the swap effect `DXGI_SWAP_EFFECT_SEQUENTIAL`. It
     /// is compatible with GDI (such as menus), but is not the best in
     /// performance.
     ///
@@ -113,13 +113,13 @@ pub enum PresentStrategy {
     #[default]
     Sequential,
 
-    /// Corresponds to the swap effect DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL.
+    /// Corresponds to the swap effect `DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL`.
     /// In testing, it seems to perform well, but isn't compatible with
     /// GDI. Resize can probably be made to work reasonably smoothly with
     /// additional synchronization work, but has some artifacts.
     Flip,
 
-    /// Corresponds to the swap effect DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL
+    /// Corresponds to the swap effect `DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL`
     /// but with a redirection surface for GDI compatibility. Resize is
     /// very laggy and artifacty.
     FlipRedirect,
@@ -134,7 +134,7 @@ pub enum PresentStrategy {
 /// we'd try to call the `WinHandler` again).
 ///
 /// The solution is that for every `WindowHandle` method that *wants* to return control to the
-/// system's event loop, instead of doing that we queue up a deferrred operation and return
+/// system's event loop, instead of doing that we queue up a deferred operation and return
 /// immediately. The deferred operations will run whenever the currently running `WinHandler`
 /// method returns.
 ///
@@ -196,8 +196,8 @@ unsafe impl HasRawDisplayHandle for WindowHandle {
 }
 
 /// A handle that can get used to schedule an idle handler. Note that
-/// this handle is thread safe. If the handle is used after the hwnd
-/// has been destroyed, probably not much will go wrong (the DS_RUN_IDLE
+/// this handle is thread safe. If the handle is used after the `hwnd`
+/// has been destroyed, probably not much will go wrong (the `DS_RUN_IDLE`
 /// message may be sent to a stray window).
 #[derive(Clone)]
 pub struct IdleHandle {
