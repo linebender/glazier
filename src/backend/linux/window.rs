@@ -677,6 +677,20 @@ impl WindowHandle {
             WindowHandle::None => panic!("Used an uninitialised WindowHandle"),
         }
     }
+
+    #[cfg(feature = "accesskit")]
+    pub fn update_accesskit_if_active(
+        &self,
+        update_factory: impl FnOnce() -> accesskit::TreeUpdate,
+    ) {
+        match self {
+            #[cfg(feature = "x11")]
+            WindowHandle::X11(handle) => handle.update_accesskit_if_active(update_factory),
+            #[cfg(feature = "wayland")]
+            WindowHandle::Wayland(handle) => handle.update_accesskit_if_active(update_factory),
+            WindowHandle::None => panic!("Used an uninitialised WindowHandle"),
+        }
+    }
 }
 
 unsafe impl HasRawWindowHandle for WindowHandle {
