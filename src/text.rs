@@ -519,8 +519,8 @@ pub trait InputHandler {
 /// so the processing doesn't have the context of the other "keybindings".
 #[allow(dead_code)]
 pub(crate) fn simulate_compose(
-    mut input_handler: Box<dyn InputHandler>,
-    event: KeyEvent,
+    input_handler: &mut dyn InputHandler,
+    event: &KeyEvent,
     composition: CompositionResult,
 ) -> bool {
     match composition {
@@ -587,8 +587,8 @@ pub(crate) fn simulate_input<H: WinHandler + ?Sized>(
         Some(v) => v,
         None => return false,
     };
-    let input_handler = handler.acquire_input_lock(token, true);
-    let change_occured = simulate_single_input(event, input_handler);
+    let mut input_handler = handler.acquire_input_lock(token, true);
+    let change_occured = simulate_single_input(&event, &mut *input_handler);
     handler.release_input_lock(token);
     change_occured
 }
@@ -596,13 +596,13 @@ pub(crate) fn simulate_input<H: WinHandler + ?Sized>(
 /// Simulate the effect of a single keypress on the
 #[allow(dead_code)]
 pub(crate) fn simulate_single_input(
-    event: KeyEvent,
-    mut input_handler: Box<dyn InputHandler>,
+    event: &KeyEvent,
+    input_handler: &mut dyn InputHandler,
 ) -> bool {
-    match event.key {
+    match &event.key {
         KbKey::Character(c) if !event.mods.ctrl() && !event.mods.meta() && !event.mods.alt() => {
             let selection = input_handler.selection();
-            input_handler.replace_range(selection.range(), &c);
+            input_handler.replace_range(selection.range(), c);
             let new_caret_index = selection.min() + c.len();
             input_handler.set_selection(Selection::caret(new_caret_index));
         }

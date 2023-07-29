@@ -23,7 +23,7 @@ use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use crate::backend::shared::xkb::{handle_xkb_key_event_full, KeyEventsState};
+use crate::backend::shared::xkb::{xkb_simulate_input, KeyEventsState};
 use crate::pointer::{
     Angle, MouseInfo, PenInclination, PenInfo, PointerId, PointerType, TouchInfo,
 };
@@ -409,9 +409,9 @@ impl WindowBuilder {
             timer_queue: Mutex::new(BinaryHeap::new()),
             idle_queue: Arc::new(Mutex::new(Vec::new())),
             idle_pipe: self.app.idle_pipe(),
+            next_text_field: Cell::new(None),
             active_text_field: Cell::new(None),
-            previous_text_field: Cell::new(None),
-            text_field_updated_by_application: Cell::new(false),
+            need_to_reset_compose: Cell::new(false),
             parent,
         });
 
@@ -463,9 +463,9 @@ pub(crate) struct Window {
     idle_queue: Arc<Mutex<Vec<IdleKind>>>,
     // Writing to this wakes up the event loop, so that it can run idle handlers.
     idle_pipe: RawFd,
+    next_text_field: Cell<Option<TextFieldToken>>,
     active_text_field: Cell<Option<TextFieldToken>>,
-    previous_text_field: Cell<Option<TextFieldToken>>,
-    text_field_updated_by_application: Cell<bool>,
+    need_to_reset_compose: Cell<bool>,
     parent: Weak<Window>,
 }
 
@@ -771,30 +771,73 @@ impl Window {
         is_repeat: bool,
     ) {
         // This is a horrible hack, but the X11 backend is not actively maintained anyway
-        let text_field = self.active_text_field.get();
-        let previous = self.previous_text_field.get();
-        let text_field_updated_by_application = self.text_field_updated_by_application.take();
         self.with_handler(|handler| {
-            if text_field != previous {
-                if xkb_state.cancel_composing() {
-                    let previous = previous.unwrap();
-                    let mut ime = handler.acquire_input_lock(previous, true);
-                    // TODO: Actually use
-                    ime.set_composition_range(None);
-                    handler.release_input_lock(previous);
+            let keysym = xkb_state.get_one_sym(scancode);
+            let event = xkb_state.key_event(scancode, keysym, key_state, is_repeat);
+            match key_state {
+                KeyState::Down => {
+                    if handler.key_down(event.clone()) {
+                        // The keypress was handled by the user, nothing to do
+                        return;
+                    }
+                    let next_field = self.reset_text_fields_if_needed(xkb_state, handler);
+
+                    let Some(field_token) = next_field else {
+                            // We're not in a text field, therefore, we don't want to compose
+                            // This does mean that we don't get composition outside of a text field
+                            // but that's expected, as there is no suitable `handler` method for that 
+                            // case. We get the same behaviour on macOS (?)
+                            return;
+                        };
+                    let mut input_handler = handler.acquire_input_lock(field_token, true);
+                    // Because there is no *other* IME on this backend, we meet the criteria for this method
+                    xkb_simulate_input(xkb_state, keysym, &event, &mut *input_handler);
+                    handler.release_input_lock(field_token);
                 }
-                self.previous_text_field.set(text_field);
+                KeyState::Up => {
+                    handler.key_up(event);
+                    self.reset_text_fields_if_needed(xkb_state, handler);
+                }
             }
-            if text_field_updated_by_application && xkb_state.cancel_composing() {
-                let field = text_field.unwrap();
-                let mut ime = handler.acquire_input_lock(field, true);
-                ime.set_composition_range(None);
-                handler.release_input_lock(field);
-            }
-            handle_xkb_key_event_full(
-                xkb_state, scancode, key_state, is_repeat, handler, text_field,
-            )
         });
+    }
+
+    fn reset_text_fields_if_needed(
+        &self,
+        xkb_state: &mut KeyEventsState,
+        handler: &mut dyn WinHandler,
+    ) -> Option<TextFieldToken> {
+        let next_field = self.next_text_field.get();
+        let need_to_reset_compose = self.need_to_reset_compose.take();
+        {
+            let previous_field = self.active_text_field.get();
+            // In theory, this should be more proactive - but I'm not sure how to implement that
+            // and researching that isn't a high priority
+            if next_field != previous_field {
+                // If the active field has changed, the composition doesn't make any sense
+                if xkb_state.cancel_composing() {
+                    // If we previously were composing, the previous field must have existed
+                    // However, the previous field may also have been deleted, so we need to only
+                    // reset it if it were enabled
+                    if let Some(previous) = previous_field {
+                        let mut ime = handler.acquire_input_lock(previous, true);
+                        ime.set_composition_range(None);
+                        handler.release_input_lock(previous);
+                    }
+                }
+                self.active_text_field.set(next_field);
+            }
+        }
+        // Shadow previous, as we know it may be outdated, and text_field should be used instead
+        if need_to_reset_compose && xkb_state.cancel_composing() {
+            if let Some(text_field) = next_field {
+                // Please note: This might be superfluous
+                let mut ime = handler.acquire_input_lock(text_field, true);
+                ime.set_composition_range(None);
+                handler.release_input_lock(text_field);
+            }
+        }
+        next_field
     }
 
     fn base_pointer_event(
@@ -1344,23 +1387,32 @@ impl WindowHandle {
 
     pub fn remove_text_field(&self, token: TextFieldToken) {
         if let Some(window) = self.window.upgrade() {
+            if window.next_text_field.get() == Some(token) {
+                window.next_text_field.set(None);
+                window.need_to_reset_compose.set(true);
+            }
             if window.active_text_field.get() == Some(token) {
-                window.active_text_field.set(None)
+                window.active_text_field.set(None);
+                window.need_to_reset_compose.set(true);
             }
         }
     }
 
     pub fn set_focused_text_field(&self, active_field: Option<TextFieldToken>) {
         if let Some(window) = self.window.upgrade() {
-            window.active_text_field.set(active_field);
+            window.next_text_field.set(active_field);
         }
     }
 
-    pub fn update_text_field(&self, _token: TextFieldToken, _update: Event) {
+    pub fn update_text_field(&self, token: TextFieldToken, _update: Event) {
         if let Some(window) = self.window.upgrade() {
             // This should be active rather than passive, but since the X11 backend is
             // low-maintenance, this is fine
-            window.text_field_updated_by_application.set(true);
+            if window.active_text_field.get() == Some(token) {
+                window.need_to_reset_compose.set(true);
+            }
+            // If a different text field were updated, we don't care about that case
+            // as we only have the one composition state
         }
     }
 
