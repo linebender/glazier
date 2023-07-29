@@ -1039,8 +1039,27 @@ impl Window {
         self.with_handler(|h| h.got_focus());
     }
 
-    pub fn handle_lost_focus(&self) {
-        self.with_handler(|h| h.lost_focus());
+    pub fn handle_lost_focus(&self, xkb_state: &mut KeyEventsState) {
+        self.with_handler(|h| {
+            h.lost_focus();
+            let active = self.active_text_field.get();
+            if let Some(field) = active {
+                if xkb_state.cancel_composing() {
+                    let mut ime = h.acquire_input_lock(field, true);
+                    let range = ime.composition_range();
+                    // If we were composing, a composition range must have been set.
+                    // To be safe, avoid unwrapping it anyway
+                    if let Some(range) = range {
+                        // replace_range resets the composition string
+                        ime.replace_range(range, xkb_state.cancelled_string());
+                    } else {
+                        ime.set_composition_range(None);
+                    }
+
+                    h.release_input_lock(field);
+                }
+            }
+        });
     }
 
     pub fn handle_client_message(&self, client_message: &xproto::ClientMessageEvent) {

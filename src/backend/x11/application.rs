@@ -745,10 +745,15 @@ impl AppInner {
                 w.handle_got_focus();
             }
             Event::FocusOut(ev) => {
-                let w = self
-                    .window(ev.event)
+                let mut state = borrow_mut!(self.state)?;
+                let w = state
+                    .windows
+                    .get(&ev.event)
+                    .cloned()
+                    .ok_or_else(|| anyhow!("No window with id {}", ev.event))
                     .context("FOCUS_OUT - failed to get window")?;
-                w.handle_lost_focus();
+
+                w.handle_lost_focus(&mut state.xkb_state);
             }
             Event::Error(e) => {
                 // TODO: if an error is caused by the present extension, disable it and fall back

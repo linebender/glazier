@@ -470,13 +470,7 @@ impl KeyEventsState {
                 CompositionResult::Finished(&self.compose_string)
             }
             xkb_compose_status::XKB_COMPOSE_CANCELLED => {
-                // Clearing the compose string and other state isn't needed,
-                // as it is cleared at the start of the next composition
-                self.is_composing = false;
-                if self.previous_was_compose {
-                    self.compose_string.pop();
-                }
-                CompositionResult::Cancelled(&self.compose_string)
+                CompositionResult::Cancelled(self.cancelled_string())
             }
             xkb_compose_status::XKB_COMPOSE_NOTHING => {
                 assert!(!self.is_composing);
@@ -489,6 +483,16 @@ impl KeyEventsState {
             }
             _ => unreachable!(),
         }
+    }
+
+    pub fn cancelled_string(&mut self) -> &str {
+        // Clearing the compose string and other state isn't needed,
+        // as it is cleared at the start of the next composition
+        self.is_composing = false;
+        if self.previous_was_compose {
+            self.compose_string.pop();
+        }
+        &self.compose_string
     }
 
     fn compose_handle_backspace(
