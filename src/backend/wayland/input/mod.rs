@@ -1,11 +1,15 @@
+use std::collections::HashMap;
+
 use crate::{
-    backend::shared::xkb::handle_xkb_key_event_full, text::Event, Counter, TextFieldToken,
-    WinHandler,
+    backend::shared::xkb::xkb_simulate_input, text::Event, Counter, TextFieldToken, WinHandler,
 };
 
 use self::{keyboard::KeyboardState, text_input::InputState};
 
-use super::{window::WindowId, WaylandState};
+use super::{
+    window::{WaylandWindowState, WindowId},
+    WaylandState,
+};
 
 use keyboard_types::KeyState;
 use smithay_client_toolkit::{
@@ -129,18 +133,96 @@ impl TextFieldChange {
 /// - Pointer
 /// - Touch
 /// Plus:
-/// - Text input (for )
+/// - Text input
 ///
 /// These are stored in a vector because we expect nearly all
 /// programs to only encounter a single seat, so we don't need the overhead of a HashMap.
 ///
 /// However, there's little harm in supporting multiple seats, so we may as well do so
+///
+/// The SeatInfo is also the only system which can edit text input fields.
+///
+/// Both the keyboard and text input want to handle text fields, so the seat handles ownership of this.
+/// In particular, either the keyboard, or the text input system can "own" the input handling for the
+/// focused text field, but not both. The main thing this impacts is whose state must be reset when the
+/// other makes this claim.
+///
+/// This state is stored in the window properties
 pub(super) struct SeatInfo {
     id: SeatName,
     seat: wl_seat::WlSeat,
     keyboard_state: Option<KeyboardState>,
     input_state: Option<InputState>,
     keyboard_focused: Option<WindowId>,
+
+    text_field_owner: TextFieldOwner,
+}
+
+enum TextFieldOwner {
+    Keyboard,
+    TextInput,
+    Neither,
+}
+
+/// The type used to store the set of active windows
+type Windows = HashMap<WindowId, WaylandWindowState>;
+
+pub(in crate::backend::wayland) struct TextInputProperties {
+    pub active_text_field: Option<TextFieldToken>,
+    pub next_text_field: Option<TextFieldToken>,
+    pub active_text_field_updated: bool,
+}
+
+impl SeatInfo {
+    /// Called when the text input focused window might have changed (due to a keyboard focus leave event)
+    /// or a window being deleted
+    fn focus_changed(&mut self, new_focus: Option<WindowId>, windows: &mut Windows) {
+        if new_focus == self.keyboard_focused {
+            return;
+        }
+        if let Some(old_focus) = self.keyboard_focused {
+            let handler = self.handler(windows);
+            self.release_input(handler, token);
+        }
+    }
+
+    fn update_active_text_input(
+        &mut self,
+        props: &TextInputProperties,
+        handler: &mut dyn WinHandler,
+    ) {
+        let next = props.next_text_field;
+        {
+            let previous = props.active_text_field;
+            if next != previous {
+                self.release_input(handler, previous);
+            }
+        }
+    }
+
+    fn release_input(&mut self, handler: &mut dyn WinHandler, token: Option<TextFieldToken>) {
+        match self.text_field_owner {
+            TextFieldOwner::Keyboard => {
+                let keyboard_state = self
+                    .keyboard_state
+                    .expect("Keyboard can only claim compose if available");
+                let xkb_state = keyboard_state
+                    .xkb_state
+                    .expect("Keyboard can only claim if keymap available");
+            }
+            TextFieldOwner::TextInput => {}
+            TextFieldOwner::Neither => {}
+        }
+    }
+
+    /// Stop receiving events for the given keyboard
+    fn destroy_keyboard(&mut self) {
+        self.keyboard_state = None;
+
+        if matches!(self.text_field_owner, TextFieldOwner::Keyboard) {
+            self.text_field_owner = TextFieldOwner::Neither;
+        }
+    }
 }
 
 impl SeatInfo {
@@ -159,7 +241,7 @@ impl SeatInfo {
             // TODO: If the keyboard is removed from the seat whilst repeating,
             // this might not be true. Although at that point, repeat should be cancelled anyway, so should be fine
             .expect("Will have a keyboard if handling text input");
-        let result = handle_xkb_key_event_full(
+        let result = xkb_simulate_input(
             &mut keyboard
                 .xkb_state
                 .as_mut()
@@ -180,6 +262,15 @@ impl SeatInfo {
             crate::backend::shared::xkb::KeyboardHandled::NoUpdate => {}
         }
     }
+}
+
+/// Get the text input information for the given window
+fn handler<'a>(
+    windows: &'a mut Windows,
+    window: &WindowId,
+) -> Option<(&'a dyn WinHandler, TextInputProperties)> {
+    let window = &mut *windows.get_mut(&window)?;
+    todo!()
 }
 
 /// Identifier for a seat
@@ -276,7 +367,7 @@ impl SeatHandler for WaylandState {
     ) {
         let state = self.info_of_seat(&seat);
         match capability {
-            smithay_client_toolkit::seat::Capability::Keyboard => state.keyboard_state = None,
+            smithay_client_toolkit::seat::Capability::Keyboard => state.destroy_keyboard(),
             smithay_client_toolkit::seat::Capability::Pointer => {}
             smithay_client_toolkit::seat::Capability::Touch => {}
             it => tracing::info!(?seat, "Removed unknown seat capability {it}"),
