@@ -187,6 +187,7 @@ impl Context {
         let state = unsafe {
             xkb_compose_state_new(table, xkb_compose_state_flags::XKB_COMPOSE_STATE_NO_FLAGS)
         };
+        unsafe { xkb_compose_table_unref(table) };
         NonNull::new(state)
     }
 }
@@ -608,6 +609,9 @@ impl Drop for KeyEventsState {
     fn drop(&mut self) {
         unsafe {
             xkb_state_unref(self.mods_state);
+            if let Some(compose) = self.compose_state {
+                xkb_compose_state_unref(compose.as_ptr());
+            }
         }
     }
 }
