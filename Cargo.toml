@@ -1,17 +1,21 @@
 [package]
 name = "glazier"
-version = "0.7.0"
-license = "Apache-2.0"
-authors = ["Raph Levien <raph.levien@gmail.com>"]
-description = "Platform abstracting application shell used for druid toolkit."
-repository = "https://github.com/linebender/druid"
-readme = "README.md"
-categories = ["os::macos-apis", "os::windows-apis", "gui"]
+version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/linebender/glazier"
+description = "Cross-platform native API abstraction for building GUI applications."
+keywords = ["gui", "native", "window", "menu", "winit"]
+categories = ["gui", "os", "os::windows-apis", "os::macos-apis", "os::linux-apis"]
+exclude = ["/.github/"]
+publish = false # Until it's ready
 
 [package.metadata.docs.rs]
+features = ["accesskit", "image"] # Try to keep all features enabled for docs
 rustdoc-args = ["--cfg", "docsrs"]
 default-target = "x86_64-pc-windows-msvc"
+# rustdoc-scrape-examples tracking issue https://github.com/rust-lang/rust/issues/88791
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [features]
 default = ["x11"]
@@ -27,21 +31,20 @@ wayland = [
 
 # passing on all the image features. AVIF is not supported because it does not
 # support decoding, and that's all we use `Image` for.
-bmp = []
-dds = []
-dxt = []
-farbfeld = []
-gif = []
-jpeg = []
-png = []
-ico = []
-tiff = []
-webp = []
-tga = []
-hdr = []
-image_png = []
-jpeg_rayon = []
-pnm = []
+bmp = ["image/bmp", "image"]
+dds = ["image/dds", "image"]
+dxt = ["image/dxt", "image"]
+farbfeld = ["image/farbfeld", "image"]
+gif = ["image/gif", "image"]
+hdr = ["image/hdr", "image"]
+ico = ["image/ico", "image"]
+png = ["image/png", "image"]
+jpeg = ["image/jpeg", "image"]
+jpeg_rayon = ["image/jpeg_rayon", "image"]
+pnm = ["image/pnm", "image"]
+tga = ["image/tga", "image"]
+tiff = ["image/tiff", "image"]
+webp = ["image/webp", "image"]
 serde = ["kurbo/serde"]
 
 accesskit = [
@@ -169,6 +172,12 @@ wgpu = "0.15.0"
 [target.'cfg(any(target_os = "freebsd", target_os="linux", target_os="openbsd"))'.build-dependencies]
 bindgen = { version = "0.60.1", optional = true }
 pkg-config = { version = "0.3.25", optional = true }
+
+[[example]]
+name = "shello"
+# This actually enables scraping for all examples, not just `shello`.
+# However it is possible to add another [[example]] entry to disable it for a specific example.
+doc-scrape-examples = true
 
 [[example]]
 name = "accesskit"
