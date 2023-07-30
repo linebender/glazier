@@ -33,10 +33,6 @@
     html_logo_url = "https://raw.githubusercontent.com/linebender/druid/screenshots/images/doc_logo.png"
 )]
 
-// Reexport the version of `image` we are using.
-#[cfg(feature = "image")]
-pub use image;
-
 pub use kurbo;
 
 // Reexport the version of `raw_window_handle` we are using.
