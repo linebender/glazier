@@ -91,20 +91,16 @@ impl Application {
 
     /// Get the current globally active `Application`.
     ///
-    /// A globally active `Application` exists
-    /// after [`new`] is called and until [`run`] returns.
+    /// A globally active `Application` exists after [`Application::new()`]
+    /// is called and until [`Application::run()`] returns.
     ///
     /// # Panics
     ///
     /// Panics if there is no globally active `Application`.
-    /// For a non-panicking function use [`try_global`].
+    /// For a non-panicking function use [`Application::try_global()`].
     ///
     /// This function will also panic if called from a non-main thread.
     /// Use [`AppHandle`] instead.
-    ///
-    /// [`new`]: #method.new
-    /// [`run`]: #method.run
-    /// [`try_global`]: #method.try_global
     #[inline]
     pub fn global() -> Application {
         // Main thread assertion takes place in try_global()
@@ -113,15 +109,12 @@ impl Application {
 
     /// Get the current globally active `Application`.
     ///
-    /// A globally active `Application` exists
-    /// after [`new`] is called and until [`run`] returns.
+    /// A globally active `Application` exists after [`Application::new()`]
+    /// is called and until [`Application::run()`] returns.
     ///
     /// # Panics
     ///
     /// Panics if called from a non-main thread.
-    ///
-    /// [`new`]: #method.new
-    /// [`run`]: #method.run
     pub fn try_global() -> Option<Application> {
         util::assert_main_thread_or_main_unclaimed();
         GLOBAL_APP.with(|global_app| global_app.borrow().clone())
@@ -165,9 +158,7 @@ impl Application {
 
     /// Quit the `Application`.
     ///
-    /// This will cause [`run`] to return control back to the calling function.
-    ///
-    /// [`run`]: #method.run
+    /// This will cause [`Application::run`] to return control back to the calling function.
     pub fn quit(&self) {
         self.backend_app.quit()
     }
@@ -179,7 +170,7 @@ impl Application {
 
     /// Returns the current locale string.
     ///
-    /// This should a [Unicode language identifier].
+    /// This should be a [Unicode language identifier].
     ///
     /// [Unicode language identifier]: https://unicode.org/reports/tr35/#Unicode_language_identifier
     pub fn get_locale() -> String {
