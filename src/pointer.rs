@@ -239,40 +239,30 @@ impl From<crate::MouseButton> for PointerButton {
 
 impl PointerButton {
     /// Returns `true` if this is [`PointerButton::Left`].
-    ///
-    /// [`MouseButton::Left`]: #variant.Left
     #[inline]
     pub fn is_left(self) -> bool {
         self == PointerButton::Left
     }
 
     /// Returns `true` if this is [`PointerButton::Right`].
-    ///
-    /// [`PointerButton::Right`]: #variant.Right
     #[inline]
     pub fn is_right(self) -> bool {
         self == PointerButton::Right
     }
 
     /// Returns `true` if this is [`PointerButton::Middle`].
-    ///
-    /// [`PointerButton::Middle`]: #variant.Middle
     #[inline]
     pub fn is_middle(self) -> bool {
         self == PointerButton::Middle
     }
 
     /// Returns `true` if this is [`PointerButton::X1`].
-    ///
-    /// [`PointerButton::X1`]: #variant.X1
     #[inline]
     pub fn is_x1(self) -> bool {
         self == PointerButton::X1
     }
 
     /// Returns `true` if this is [`PointerButton::X2`].
-    ///
-    /// [`PointerButton::X2`]: #variant.X2
     #[inline]
     pub fn is_x2(self) -> bool {
         self == PointerButton::X2

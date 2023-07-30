@@ -77,40 +77,30 @@ pub enum MouseButton {
 
 impl MouseButton {
     /// Returns `true` if this is [`MouseButton::Left`].
-    ///
-    /// [`MouseButton::Left`]: #variant.Left
     #[inline]
     pub fn is_left(self) -> bool {
         self == MouseButton::Left
     }
 
     /// Returns `true` if this is [`MouseButton::Right`].
-    ///
-    /// [`MouseButton::Right`]: #variant.Right
     #[inline]
     pub fn is_right(self) -> bool {
         self == MouseButton::Right
     }
 
     /// Returns `true` if this is [`MouseButton::Middle`].
-    ///
-    /// [`MouseButton::Middle`]: #variant.Middle
     #[inline]
     pub fn is_middle(self) -> bool {
         self == MouseButton::Middle
     }
 
     /// Returns `true` if this is [`MouseButton::X1`].
-    ///
-    /// [`MouseButton::X1`]: #variant.X1
     #[inline]
     pub fn is_x1(self) -> bool {
         self == MouseButton::X1
     }
 
     /// Returns `true` if this is [`MouseButton::X2`].
-    ///
-    /// [`MouseButton::X2`]: #variant.X2
     #[inline]
     pub fn is_x2(self) -> bool {
         self == MouseButton::X2

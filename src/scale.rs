@@ -33,15 +33,13 @@ use crate::kurbo::{Insets, Line, Point, Rect, Size, Vec2};
 /// ## Converting with `Scale`
 ///
 /// To translate coordinates between pixels and display points you should use one of the
-/// helper conversion methods of `Scale` or for manual conversion [`x`] / [`y`].
+/// helper conversion methods of `Scale` or for manual conversion [`Scale::x()`] / [`Scale::y()`].
 ///
 /// `Scale` is designed for responsive applications, including responding to platform scale changes.
 /// The platform scale can change quickly, e.g. when moving a window from one monitor to another.
 ///
 /// A copy of `Scale` will be stale as soon as the platform scale changes.
 ///
-/// [`x`]: #method.x
-/// [`y`]: #method.y
 /// [in the Druid book]: https://linebender.org/druid/07_resolution_independence.html
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Scale {
@@ -277,9 +275,8 @@ impl ScaledArea {
     ///
     /// The calculated size in pixels is rounded away from zero to integers.
     /// That means that the scaled area size in display points isn't always the same
-    /// as the `size` given to this function. To find out the new size in points use [`size_dp`].
-    ///
-    /// [`size_dp`]: #method.size_dp
+    /// as the `size` given to this function. To find out the new size in points use
+    /// [`ScaledArea::size_dp()`].
     pub fn from_dp<T: Into<Size>>(size: T, scale: Scale) -> ScaledArea {
         let size_px = size.into().to_px(scale).expand();
         let size_dp = size_px.to_dp(scale);
