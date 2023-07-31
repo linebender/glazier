@@ -39,7 +39,7 @@ pub struct MouseEvent {
     /// be `0` for a mouse-up and mouse-move events.
     pub count: u8,
     /// Focus is `true` on macOS when the mouse-down event (or its companion mouse-up event)
-    /// with `MouseButton::Left` was the event that caused the window to gain focus.
+    /// with `MouseButton::Primary` was the event that caused the window to gain focus.
     pub focus: bool,
     /// The button that was pressed down in the case of mouse-down,
     /// or the button that was released in the case of mouse-up.
@@ -63,12 +63,12 @@ pub enum MouseButton {
     /// No mouse button.
     // MUST BE FIRST (== 0)
     None,
-    /// Left mouse button.
-    Left,
-    /// Right mouse button.
-    Right,
-    /// Middle mouse button.
-    Middle,
+    /// Primary mouse button, commonly the left mouse button.
+    Primary,
+    /// Secondary mouse button, commonly the right mouse button.
+    Secondary,
+    /// Auxiliary mouse button, commonly the middle mouse button.
+    Auxiliary,
     /// First X button.
     X1,
     /// Second X button.
@@ -76,22 +76,22 @@ pub enum MouseButton {
 }
 
 impl MouseButton {
-    /// Returns `true` if this is [`MouseButton::Left`].
+    /// Returns `true` if this is [`MouseButton::Primary`].
     #[inline]
-    pub fn is_left(self) -> bool {
-        self == MouseButton::Left
+    pub fn is_primary(self) -> bool {
+        self == MouseButton::Primary
     }
 
-    /// Returns `true` if this is [`MouseButton::Right`].
+    /// Returns `true` if this is [`MouseButton::Secondary`].
     #[inline]
-    pub fn is_right(self) -> bool {
-        self == MouseButton::Right
+    pub fn is_secondary(self) -> bool {
+        self == MouseButton::Secondary
     }
 
-    /// Returns `true` if this is [`MouseButton::Middle`].
+    /// Returns `true` if this is [`MouseButton::Auxiliary`].
     #[inline]
-    pub fn is_middle(self) -> bool {
-        self == MouseButton::Middle
+    pub fn is_auxiliary(self) -> bool {
+        self == MouseButton::Auxiliary
     }
 
     /// Returns `true` if this is [`MouseButton::X1`].
@@ -162,22 +162,22 @@ impl MouseButtons {
         self.0 & buttons.0 == buttons.0
     }
 
-    /// Returns `true` if [`MouseButton::Left`] is in the set.
+    /// Returns `true` if [`MouseButton::Primary`] is in the set.
     #[inline]
-    pub fn has_left(self) -> bool {
-        self.contains(MouseButton::Left)
+    pub fn has_primary(self) -> bool {
+        self.contains(MouseButton::Primary)
     }
 
-    /// Returns `true` if [`MouseButton::Right`] is in the set.
+    /// Returns `true` if [`MouseButton::Secondary`] is in the set.
     #[inline]
-    pub fn has_right(self) -> bool {
-        self.contains(MouseButton::Right)
+    pub fn has_secondary(self) -> bool {
+        self.contains(MouseButton::Secondary)
     }
 
-    /// Returns `true` if [`MouseButton::Middle`] is in the set.
+    /// Returns `true` if [`MouseButton::Auxiliary`] is in the set.
     #[inline]
-    pub fn has_middle(self) -> bool {
-        self.contains(MouseButton::Middle)
+    pub fn has_auxiliary(self) -> bool {
+        self.contains(MouseButton::Auxiliary)
     }
 
     /// Returns `true` if [`MouseButton::X1`] is in the set.

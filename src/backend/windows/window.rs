@@ -321,13 +321,13 @@ pub(crate) const DS_REQUEST_DESTROY: UINT = WM_USER + 1;
 fn get_buttons(wparam: WPARAM) -> MouseButtons {
     let mut buttons = MouseButtons::new();
     if wparam & MK_LBUTTON != 0 {
-        buttons.insert(MouseButton::Left);
+        buttons.insert(MouseButton::Primary);
     }
     if wparam & MK_RBUTTON != 0 {
-        buttons.insert(MouseButton::Right);
+        buttons.insert(MouseButton::Secondary);
     }
     if wparam & MK_MBUTTON != 0 {
-        buttons.insert(MouseButton::Middle);
+        buttons.insert(MouseButton::Auxiliary);
     }
     if wparam & MK_XBUTTON1 != 0 {
         buttons.insert(MouseButton::X1);
@@ -1041,9 +1041,13 @@ impl WndProc for MyWndProc {
             | WM_RBUTTONDOWN | WM_RBUTTONUP | WM_MBUTTONDBLCLK | WM_MBUTTONDOWN | WM_MBUTTONUP
             | WM_XBUTTONDBLCLK | WM_XBUTTONDOWN | WM_XBUTTONUP => {
                 if let Some(button) = match msg {
-                    WM_LBUTTONDBLCLK | WM_LBUTTONDOWN | WM_LBUTTONUP => Some(MouseButton::Left),
-                    WM_RBUTTONDBLCLK | WM_RBUTTONDOWN | WM_RBUTTONUP => Some(MouseButton::Right),
-                    WM_MBUTTONDBLCLK | WM_MBUTTONDOWN | WM_MBUTTONUP => Some(MouseButton::Middle),
+                    WM_LBUTTONDBLCLK | WM_LBUTTONDOWN | WM_LBUTTONUP => Some(MouseButton::Primary),
+                    WM_RBUTTONDBLCLK | WM_RBUTTONDOWN | WM_RBUTTONUP => {
+                        Some(MouseButton::Secondary)
+                    }
+                    WM_MBUTTONDBLCLK | WM_MBUTTONDOWN | WM_MBUTTONUP => {
+                        Some(MouseButton::Auxiliary)
+                    }
                     WM_XBUTTONDBLCLK | WM_XBUTTONDOWN | WM_XBUTTONUP => {
                         match HIWORD(wparam as u32) {
                             XBUTTON1 => Some(MouseButton::X1),

@@ -841,7 +841,7 @@ impl Window {
             pressure: 0.0,
         });
         let button = if is_primary {
-            PointerButton::Left
+            PointerButton::Primary
         } else {
             PointerButton::None
         };
@@ -1077,9 +1077,9 @@ impl Window {
 fn pointer_button(button: u32) -> PointerButton {
     match button {
         0 => PointerButton::None,
-        1 => PointerButton::Left,
-        2 => PointerButton::Middle,
-        3 => PointerButton::Right,
+        1 => PointerButton::Primary,
+        2 => PointerButton::Auxiliary,
+        3 => PointerButton::Secondary,
         // buttons 4 through 7 are for scrolling.
         4..=7 => PointerButton::None,
         8 => PointerButton::X1,
@@ -1096,9 +1096,9 @@ fn pointer_button(button: u32) -> PointerButton {
 fn pointer_buttons(mods: KeyButMask) -> PointerButtons {
     let mut buttons = PointerButtons::new();
     let button_masks = &[
-        (xproto::ButtonMask::M1, PointerButton::Left),
-        (xproto::ButtonMask::M2, PointerButton::Middle),
-        (xproto::ButtonMask::M3, PointerButton::Right),
+        (xproto::ButtonMask::M1, PointerButton::Primary),
+        (xproto::ButtonMask::M2, PointerButton::Auxiliary),
+        (xproto::ButtonMask::M3, PointerButton::Secondary),
         // TODO: determine the X1/X2 state, using our own caching if necessary.
         // BUTTON_MASK_4/5 do not work: they are for scroll events.
     ];
