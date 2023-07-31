@@ -1,17 +1,21 @@
 [package]
 name = "glazier"
-version = "0.7.0"
-license = "Apache-2.0"
-authors = ["Raph Levien <raph.levien@gmail.com>"]
-description = "Platform abstracting application shell used for druid toolkit."
-repository = "https://github.com/linebender/druid"
-readme = "README.md"
-categories = ["os::macos-apis", "os::windows-apis", "gui"]
+version = "0.1.0"
 edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/linebender/glazier"
+description = "Cross-platform native API abstraction for building GUI applications."
+keywords = ["gui", "native", "window", "menu", "winit"]
+categories = ["gui", "os", "os::windows-apis", "os::macos-apis", "os::linux-apis"]
+exclude = ["/.github/"]
+publish = false # Until it's ready
 
 [package.metadata.docs.rs]
+features = ["accesskit"] # Try to keep all features enabled for docs
 rustdoc-args = ["--cfg", "docsrs"]
 default-target = "x86_64-pc-windows-msvc"
+# rustdoc-scrape-examples tracking issue https://github.com/rust-lang/rust/issues/88791
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [features]
 default = ["x11"]
@@ -25,23 +29,6 @@ wayland = [
     "wayland-backend",
 ]
 
-# passing on all the image features. AVIF is not supported because it does not
-# support decoding, and that's all we use `Image` for.
-bmp = []
-dds = []
-dxt = []
-farbfeld = []
-gif = []
-jpeg = []
-png = []
-ico = []
-tiff = []
-webp = []
-tga = []
-hdr = []
-image_png = []
-jpeg_rayon = []
-pnm = []
 serde = ["kurbo/serde"]
 
 accesskit = [
@@ -64,7 +51,6 @@ keyboard-types = { version = "0.6.2", default_features = false }
 memchr = "2.5"
 
 # Optional dependencies
-image = { version = "0.24.4", optional = true, default_features = false }
 raw-window-handle = { version = "0.5.0", default_features = false }
 accesskit = { version = "0.11.0", optional = true }
 once_cell = { version = "1", optional = true }
@@ -130,7 +116,6 @@ x11rb = { version = "0.11.1", features = [
 rand = { version = "0.8.0", optional = true }
 calloop = { version = "0.7.1", optional = true }
 log = { version = "0.4.14", optional = true }
-im = { version = "15.0.0", optional = true }
 
 # Wayland dependencies
 smithay-client-toolkit = { version = "0.17.0", optional = true }
@@ -169,6 +154,12 @@ wgpu = "0.15.0"
 [target.'cfg(any(target_os = "freebsd", target_os="linux", target_os="openbsd"))'.build-dependencies]
 bindgen = { version = "0.60.1", optional = true }
 pkg-config = { version = "0.3.25", optional = true }
+
+[[example]]
+name = "shello"
+# This actually enables scraping for all examples, not just `shello`.
+# However it is possible to add another [[example]] entry to disable it for a specific example.
+doc-scrape-examples = true
 
 [[example]]
 name = "accesskit"

@@ -131,7 +131,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: cargo test glazier --doc
-        run: cargo test --doc --no-default-features --features=image,im
+        run: cargo test --doc --no-default-features --features=accesskit
 
   # This tests the future rust compiler to catch errors ahead of time without
   # breaking CI
@@ -176,7 +176,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: cargo test glazier --doc
-        run: cargo test --doc --features=image,im
+        run: cargo test --doc --features=accesskit
 
   check-docs:
     name: Docs
