@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cell::Cell, collections::HashMap, rc::Rc};
 
 use crate::{
     backend::shared::xkb::xkb_simulate_input, text::Event, Counter, TextFieldToken, WinHandler,
@@ -167,52 +167,110 @@ enum TextFieldOwner {
 /// The type used to store the set of active windows
 type Windows = HashMap<WindowId, WaylandWindowState>;
 
+/// The properties maintained about the text input fields.
+/// These are owned by the Window, as they may be modified at any time
+///
+/// We should be extremely careful around the use of `active_text_field` and
+/// `next_text_field`, because these could become None any time user code has control
+/// (during `WinHandler::release_input_lock` is an especially sneaky case we need to watch out
+/// for). This is because the corresponding text input could be removed by calling the window method,
+/// so we need to not access the input field in that case.
+///
+/// Conceptually, `active_text_field` is the same thing as
+///
+/// Because of this shared nature, for simplicity we choose to store the properties for each window
+/// in a `Rc<Cell<TextInputProperties>>`, known as
+///
+/// The contents of this struct are opaque to applications.
+#[derive(Clone, Copy)]
 pub(in crate::backend::wayland) struct TextInputProperties {
     pub active_text_field: Option<TextFieldToken>,
     pub next_text_field: Option<TextFieldToken>,
+    /// Whether the contents of `active_text_field` are different
+    /// to what they previously were. This is only set to true by the application
     pub active_text_field_updated: bool,
 }
 
+type TextInputCell = Rc<Cell<TextInputProperties>>;
+
 impl SeatInfo {
-    /// Called when the text input focused window might have changed (due to a keyboard focus leave event)
-    /// or a window being deleted
-    fn focus_changed(&mut self, new_focus: Option<WindowId>, windows: &mut Windows) {
-        if new_focus == self.keyboard_focused {
-            return;
+    /// Called when the text input focused window might have changed (due to a keyboard focus leave/enter event)
+    /// or a window being closed
+    fn window_focus_enter(&mut self, windows: &mut Windows, new_window: WindowId) {
+        assert!(self.keyboard_focused.is_none());
+        let handler = handler(windows, &new_window);
+        if let Some((handler, props)) = handler {
+            self.update_active_text_input(&props, handler);
         }
-        if let Some(old_focus) = self.keyboard_focused {
-            let handler = self.handler(windows);
-            self.release_input(handler, token);
-        }
+        self.keyboard_focused = Some(new_window);
     }
 
-    fn update_active_text_input(
-        &mut self,
-        props: &TextInputProperties,
-        handler: &mut dyn WinHandler,
-    ) {
-        let next = props.next_text_field;
-        {
-            let previous = props.active_text_field;
-            if next != previous {
-                self.release_input(handler, previous);
+    fn window_focus_leave(&mut self, new_focus: Option<WindowId>, windows: &mut Windows) {
+        if let Some(old_focus) = self.keyboard_focused {
+            let handler = handler(windows, &old_focus);
+            if let Some((handler, props)) = handler {
+                self.release_input(props.active_text_field.map(|it| (handler, it)));
+            } else {
+                // The window might have been dropped, such that there is no previous handler
+                // However, we need to update our state
+                self.release_input(None)
             }
         }
     }
 
-    fn release_input(&mut self, handler: &mut dyn WinHandler, token: Option<TextFieldToken>) {
+    fn update_active_text_input(&mut self, windows: &mut Windows, window: &WindowId) {
+        let handler = handler(windows, window);
+        let Some((handler, props_cell)) = handler else { return; };
+        let mut props = props_cell.get();
+        loop {
+            {
+                let previous = props.active_text_field;
+                if props.next_text_field != previous {
+                    self.release_input(
+                        previous.map(|it| (handler, it)),
+                        props.active_text_field_updated,
+                    );
+                    props.active_text_field_updated = true;
+                    // release_input might have called into application code, which might in turn have called a
+                    // text field updating window method. Because of that, we synchronise which field will be active now
+                    props = props_cell.get();
+                    props.active_text_field = props.next_text_field;
+                    props_cell.set(props);
+                }
+            }
+            if props.active_text_field_updated {
+                // Tell the IME about this
+            }
+        }
+    }
+
+    fn release_input(
+        &mut self,
+        field: Option<(&mut dyn WinHandler, TextFieldToken)>,
+        field_updated: bool,
+    ) {
         match self.text_field_owner {
             TextFieldOwner::Keyboard => {
                 let keyboard_state = self
                     .keyboard_state
                     .expect("Keyboard can only claim compose if available");
-                let xkb_state = keyboard_state
+                let mut xkb_state = keyboard_state
                     .xkb_state
                     .expect("Keyboard can only claim if keymap available");
+                if xkb_state.0.cancel_composing() {
+                } else {
+                    // This is an implementation error in Glazier
+                    panic!(
+                        "If the keyboard has claimed the input, it must own the composition field"
+                    );
+                }
+                xkb_state.0.cancelled_string();
+                self.text_field_owner = TextFieldOwner::Neither;
             }
-            TextFieldOwner::TextInput => {}
+            TextFieldOwner::TextInput => if let Some(ime_state) = self.input_state {},
             TextFieldOwner::Neither => {}
         }
+        if let Some(ime_state) = self.input_state {}
     }
 
     /// Stop receiving events for the given keyboard
@@ -220,6 +278,7 @@ impl SeatInfo {
         self.keyboard_state = None;
 
         if matches!(self.text_field_owner, TextFieldOwner::Keyboard) {
+            // TODO: Reset the active text field
             self.text_field_owner = TextFieldOwner::Neither;
         }
     }
@@ -268,7 +327,7 @@ impl SeatInfo {
 fn handler<'a>(
     windows: &'a mut Windows,
     window: &WindowId,
-) -> Option<(&'a dyn WinHandler, TextInputProperties)> {
+) -> Option<(&'a mut dyn WinHandler, TextInputCell)> {
     let window = &mut *windows.get_mut(&window)?;
     todo!()
 }
