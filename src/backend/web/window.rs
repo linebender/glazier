@@ -767,9 +767,9 @@ impl IdleHandle {
 
 fn mouse_button(button: i16) -> Option<MouseButton> {
     match button {
-        0 => Some(MouseButton::Left),
-        1 => Some(MouseButton::Middle),
-        2 => Some(MouseButton::Right),
+        0 => Some(MouseButton::Primary),
+        1 => Some(MouseButton::Auxiliary),
+        2 => Some(MouseButton::Secondary),
         3 => Some(MouseButton::X1),
         4 => Some(MouseButton::X2),
         _ => None,
@@ -779,13 +779,13 @@ fn mouse_button(button: i16) -> Option<MouseButton> {
 fn mouse_buttons(mask: u16) -> MouseButtons {
     let mut buttons = MouseButtons::new();
     if mask & 1 != 0 {
-        buttons.insert(MouseButton::Left);
+        buttons.insert(MouseButton::Primary);
     }
     if mask & 1 << 1 != 0 {
-        buttons.insert(MouseButton::Right);
+        buttons.insert(MouseButton::Secondary);
     }
     if mask & 1 << 2 != 0 {
-        buttons.insert(MouseButton::Middle);
+        buttons.insert(MouseButton::Auxiliary);
     }
     if mask & 1 << 3 != 0 {
         buttons.insert(MouseButton::X1);

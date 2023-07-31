@@ -713,9 +713,9 @@ fn mouse_event(
 
 fn get_mouse_button(button: NSInteger) -> Option<MouseButton> {
     match button {
-        0 => Some(MouseButton::Left),
-        1 => Some(MouseButton::Right),
-        2 => Some(MouseButton::Middle),
+        0 => Some(MouseButton::Primary),
+        1 => Some(MouseButton::Secondary),
+        2 => Some(MouseButton::Auxiliary),
         3 => Some(MouseButton::X1),
         4 => Some(MouseButton::X2),
         _ => None,
@@ -725,13 +725,13 @@ fn get_mouse_button(button: NSInteger) -> Option<MouseButton> {
 fn get_mouse_buttons(mask: NSUInteger) -> MouseButtons {
     let mut buttons = MouseButtons::new();
     if mask & 1 != 0 {
-        buttons.insert(MouseButton::Left);
+        buttons.insert(MouseButton::Primary);
     }
     if mask & 1 << 1 != 0 {
-        buttons.insert(MouseButton::Right);
+        buttons.insert(MouseButton::Secondary);
     }
     if mask & 1 << 2 != 0 {
-        buttons.insert(MouseButton::Middle);
+        buttons.insert(MouseButton::Auxiliary);
     }
     if mask & 1 << 3 != 0 {
         buttons.insert(MouseButton::X1);
@@ -773,11 +773,11 @@ fn check_if_layer_delegate_install_needed(view: *mut Object, view_state: &mut Vi
 }
 
 extern "C" fn mouse_down_left(this: &mut Object, _: Sel, nsevent: id) {
-    mouse_down(this, nsevent, MouseButton::Left);
+    mouse_down(this, nsevent, MouseButton::Primary);
 }
 
 extern "C" fn mouse_down_right(this: &mut Object, _: Sel, nsevent: id) {
-    mouse_down(this, nsevent, MouseButton::Right);
+    mouse_down(this, nsevent, MouseButton::Secondary);
 }
 
 extern "C" fn mouse_down_other(this: &mut Object, _: Sel, nsevent: id) {
@@ -793,18 +793,18 @@ fn mouse_down(this: &mut Object, nsevent: id, button: MouseButton) {
         let view_state: *mut c_void = *this.get_ivar("viewState");
         let view_state = &mut *(view_state as *mut ViewState);
         let count = nsevent.clickCount() as u8;
-        let focus = view_state.focus_click && button == MouseButton::Left;
+        let focus = view_state.focus_click && button == MouseButton::Primary;
         let event = mouse_event(nsevent, this as id, count, focus, button, Vec2::ZERO);
         view_state.handler.mouse_down(&event);
     }
 }
 
 extern "C" fn mouse_up_left(this: &mut Object, _: Sel, nsevent: id) {
-    mouse_up(this, nsevent, MouseButton::Left);
+    mouse_up(this, nsevent, MouseButton::Primary);
 }
 
 extern "C" fn mouse_up_right(this: &mut Object, _: Sel, nsevent: id) {
-    mouse_up(this, nsevent, MouseButton::Right);
+    mouse_up(this, nsevent, MouseButton::Secondary);
 }
 
 extern "C" fn mouse_up_other(this: &mut Object, _: Sel, nsevent: id) {
@@ -819,7 +819,7 @@ fn mouse_up(this: &mut Object, nsevent: id, button: MouseButton) {
     unsafe {
         let view_state: *mut c_void = *this.get_ivar("viewState");
         let view_state = &mut *(view_state as *mut ViewState);
-        let focus = if view_state.focus_click && button == MouseButton::Left {
+        let focus = if view_state.focus_click && button == MouseButton::Primary {
             view_state.focus_click = false;
             true
         } else {
