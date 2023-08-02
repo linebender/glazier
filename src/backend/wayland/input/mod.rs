@@ -193,6 +193,8 @@ pub(in crate::backend::wayland) struct TextInputProperties {
 
 type TextInputCell = Rc<Cell<TextInputProperties>>;
 
+struct FutureInputLock<'a>(&'a mut dyn WinHandler, TextFieldToken);
+
 impl SeatInfo {
     /// Called when the text input focused window might have changed (due to a keyboard focus leave/enter event)
     /// or a window being closed
@@ -209,11 +211,17 @@ impl SeatInfo {
         if let Some(old_focus) = self.keyboard_focused {
             let handler = handler(windows, &old_focus);
             if let Some((handler, props)) = handler {
-                self.release_input(props.active_text_field.map(|it| (handler, it)));
+                let props = props.get();
+                self.force_release_preedit(
+                    props
+                        .active_text_field
+                        .map(|it| FutureInputLock(handler, it)),
+                    props.active_text_field_updated,
+                );
             } else {
                 // The window might have been dropped, such that there is no previous handler
                 // However, we need to update our state
-                self.release_input(None)
+                self.force_release_preedit(None, false);
             }
         }
     }
@@ -226,8 +234,8 @@ impl SeatInfo {
             {
                 let previous = props.active_text_field;
                 if props.next_text_field != previous {
-                    self.release_input(
-                        previous.map(|it| (handler, it)),
+                    self.force_release_preedit(
+                        previous.map(|it| FutureInputLock(handler, it)),
                         props.active_text_field_updated,
                     );
                     props.active_text_field_updated = true;
@@ -244,9 +252,17 @@ impl SeatInfo {
         }
     }
 
-    fn release_input(
+    /// One of the cases in which the active preedit doesn't make sense anymore.
+    /// This can happen if:
+    /// 1.
+    fn force_release_preedit(
         &mut self,
-        field: Option<(&mut dyn WinHandler, TextFieldToken)>,
+        // The field which we were previously focused on
+        // If that field no longer exists (which could be because it was removed, or because it)
+        field: Option<FutureInputLock>,
+        // Whether the field has been updated by the application since the last
+        // execution. This effectively means that it isn't meaningful for the IME to
+        // edit the contents or selection any more
         field_updated: bool,
     ) {
         match self.text_field_owner {
@@ -257,20 +273,56 @@ impl SeatInfo {
                 let mut xkb_state = keyboard_state
                     .xkb_state
                     .expect("Keyboard can only claim if keymap available");
-                if xkb_state.0.cancel_composing() {
-                } else {
-                    // This is an implementation error in Glazier
-                    panic!(
-                        "If the keyboard has claimed the input, it must own the composition field"
-                    );
+                let cancelled = xkb_state.0.cancel_composing();
+                // This would be an implementation error in Glazier, so OK to panic
+                assert!(
+                    cancelled,
+                    "If the keyboard has claimed the input, it must be composing"
+                );
+                if let Some(FutureInputLock(handler, token)) = field {
+                    let mut ime = handler.acquire_input_lock(token, true);
+                    if field_updated {
+                        // If the application updated the active field, the best we can do is to
+                        // clear the region
+                        ime.set_composition_range(None);
+                    } else {
+                        let range = ime.composition_range().expect(
+                            "If we were still composing, there will be a composition range",
+                        );
+                        // If we (for example) lost focused
+                        ime.replace_range(range, xkb_state.0.cancelled_string());
+                    }
+                    handler.release_input_lock(token);
                 }
-                xkb_state.0.cancelled_string();
                 self.text_field_owner = TextFieldOwner::Neither;
             }
-            TextFieldOwner::TextInput => if let Some(ime_state) = self.input_state {},
-            TextFieldOwner::Neither => {}
+            TextFieldOwner::TextInput => {
+                if let Some(FutureInputLock(handler, token)) = field {
+                    // The Wayland text input interface does not permit the IME to respond to an input
+                    // becoming unfocused.
+                    let mut ime = handler.acquire_input_lock(token, true);
+                    ime.set_composition_range(None);
+                    // An alternative here would be to reset the composition region to the empty string
+                    // However, we choose not to do that for reasons discussed below
+                    handler.release_input_lock(token);
+                }
+            }
+            TextFieldOwner::Neither => {
+                // If there is no preedit text, we don't need to do anything in response to this code
+            }
         }
-        if let Some(ime_state) = self.input_state {}
+        if let Some(ime_state) = self.input_state.as_mut() {
+            // We believe that GNOME's implementation of the text input protocol is not ideal.
+            // It carries the same IME state between text fields and applications, until the IME is
+            // complete or the otherwise cancelled.
+            // Additionally, the design of our IME interface gives no opportunity for the IME to proactively
+            // intercept e.g. a click event to reset the preedit content.
+            // Because of these conditions, we are forced into one of two choices. If you are typing e.g.
+            // `this is a [test]` (where test is the preedit text), then click at ` i|s `, we can either get
+            // the result `this i[test]s a test`, or `this i|s a test`.
+            // We choose the former, as it doesn't litter pre-edit text all around
+            ime_state.reset(None);
+        }
     }
 
     /// Stop receiving events for the given keyboard
