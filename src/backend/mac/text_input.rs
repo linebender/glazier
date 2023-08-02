@@ -76,19 +76,19 @@ pub extern "C" fn has_marked_text(this: &mut Object, _: Sel) -> BOOL {
 }
 
 pub extern "C" fn marked_range(this: &mut Object, _: Sel) -> NSRange {
-    with_edit_lock_from_window(this, false, |mut edit_lock| {
+    with_edit_lock_from_window(this, false, |edit_lock| {
         edit_lock
             .composition_range()
-            .map(|range| encode_nsrange(&mut edit_lock, range))
+            .map(|range| encode_nsrange(&edit_lock, range))
             .unwrap_or(NSRange::NONE)
     })
     .unwrap_or(NSRange::NONE)
 }
 
 pub extern "C" fn selected_range(this: &mut Object, _: Sel) -> NSRange {
-    with_edit_lock_from_window(this, false, |mut edit_lock| {
+    with_edit_lock_from_window(this, false, |edit_lock| {
         let range = edit_lock.selection().range();
-        encode_nsrange(&mut edit_lock, range)
+        encode_nsrange(&edit_lock, range)
     })
     .unwrap_or(NSRange::NONE)
 }
@@ -169,14 +169,14 @@ pub extern "C" fn attributed_substring_for_proposed_range(
     proposed_range: NSRange,
     actual_range: *mut c_void,
 ) -> id {
-    with_edit_lock_from_window(this, false, |mut edit_lock| {
+    with_edit_lock_from_window(this, false, |edit_lock| {
         let range = match decode_nsrange(&*edit_lock, &proposed_range, 0) {
             Some(v) => v,
             None => return nil,
         };
         if !actual_range.is_null() {
             let ptr = actual_range as *mut NSRange;
-            let range_utf16 = encode_nsrange(&mut edit_lock, range.clone());
+            let range_utf16 = encode_nsrange(&edit_lock, range.clone());
             unsafe {
                 *ptr = range_utf16;
             }
@@ -230,7 +230,7 @@ pub extern "C" fn first_rect_for_character_range(
     character_range: NSRange,
     actual_range: *mut c_void,
 ) -> NSRect {
-    let rect = with_edit_lock_from_window(this, true, |mut edit_lock| {
+    let rect = with_edit_lock_from_window(this, true, |edit_lock| {
         let mut range = decode_nsrange(&*edit_lock, &character_range, 0).unwrap_or(0..0);
         {
             let line_range = edit_lock.line_range(range.start, Affinity::Downstream);
@@ -242,7 +242,7 @@ pub extern "C" fn first_rect_for_character_range(
         };
         if !actual_range.is_null() {
             let ptr = actual_range as *mut NSRange;
-            let range_utf16 = encode_nsrange(&mut edit_lock, range);
+            let range_utf16 = encode_nsrange(&edit_lock, range);
             unsafe {
                 *ptr = range_utf16;
             }
@@ -621,7 +621,8 @@ fn decode_nsrange(
 }
 
 // Encodes the UTF-8 `Range<usize>` into a UTF-16 `NSRange`.
-fn encode_nsrange(edit_lock: &mut Box<dyn InputHandler>, mut range: Range<usize>) -> NSRange {
+#[allow(clippy::borrowed_box)]
+fn encode_nsrange(edit_lock: &Box<dyn InputHandler>, mut range: Range<usize>) -> NSRange {
     while !edit_lock.is_char_boundary(range.start) {
         range.start -= 1;
     }

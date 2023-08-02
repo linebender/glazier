@@ -611,7 +611,7 @@ lazy_static! {
 
 /// Acquires a lock to an `InputHandler`, passes it to a closure, and releases the lock.
 pub(super) fn with_edit_lock_from_window<R>(
-    this: &mut Object,
+    this: &Object,
     mutable: bool,
     f: impl FnOnce(Box<dyn InputHandler>) -> R,
 ) -> Option<R> {
@@ -991,14 +991,14 @@ extern "C" fn display_layer(this: &mut Object, _: Sel, _: Sel) {
     }
 }
 
-fn run_deferred(this: &mut Object, view_state: &mut ViewState, op: DeferredOp) {
+fn run_deferred(this: &Object, view_state: &mut ViewState, op: DeferredOp) {
     match op {
         DeferredOp::SetSize(size) => set_size_deferred(this, view_state, size),
         DeferredOp::SetPosition(pos) => set_position_deferred(this, view_state, pos),
     }
 }
 
-fn set_size_deferred(this: &mut Object, _view_state: &mut ViewState, size: Size) {
+fn set_size_deferred(this: &Object, _view_state: &mut ViewState, size: Size) {
     unsafe {
         let window: id = msg_send![this, window];
         let current_frame: NSRect = msg_send![window, frame];
@@ -1012,7 +1012,7 @@ fn set_size_deferred(this: &mut Object, _view_state: &mut ViewState, size: Size)
     }
 }
 
-fn set_position_deferred(this: &mut Object, _view_state: &mut ViewState, position: Point) {
+fn set_position_deferred(this: &Object, _view_state: &mut ViewState, position: Point) {
     unsafe {
         let window: id = msg_send![this, window];
         let frame: NSRect = msg_send![window, frame];
