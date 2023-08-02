@@ -40,7 +40,10 @@ use crate::error::Error as ShellError;
 use crate::scale::{Scale, ScaledArea};
 
 use crate::keyboard::{KeyState, Modifiers};
-use crate::mouse::{Cursor, CursorDesc, MouseButton, MouseButtons, MouseEvent};
+use crate::mouse::{Cursor, CursorDesc};
+use crate::pointer::{
+    MouseInfo, PointerButton, PointerButtons, PointerEvent, PointerId, PointerType,
+};
 use crate::region::Region;
 use crate::text::{simulate_input, Event};
 use crate::window;
@@ -196,21 +199,23 @@ impl WindowState {
 fn setup_mouse_down_callback(ws: &Rc<WindowState>) {
     let state = ws.clone();
     register_canvas_event_listener(ws, "mousedown", move |event: web_sys::MouseEvent| {
-        if let Some(button) = mouse_button(event.button()) {
+        if let Some(button) = get_button(event.button()) {
             let pos = Point::new(event.offset_x() as f64, event.offset_y() as f64);
             let count = state.click_counter.count_for_click(pos);
-
-            let buttons = mouse_buttons(event.buttons());
-            let event = MouseEvent {
+            let event = PointerEvent {
+                pointer_id: PointerId(0),
+                is_primary: true,
+                pointer_type: PointerType::Mouse(MouseInfo {
+                    wheel_delta: Vec2::ZERO,
+                }),
                 pos,
-                buttons,
-                mods: get_modifiers!(event),
-                count,
-                focus: false,
+                buttons: get_buttons(event.buttons()),
+                modifiers: get_modifiers!(event),
                 button,
-                wheel_delta: Vec2::ZERO,
+                focus: false,
+                count,
             };
-            state.handler.borrow_mut().mouse_down(&event);
+            state.handler.borrow_mut().pointer_down(&event);
         }
     });
 }
@@ -218,18 +223,21 @@ fn setup_mouse_down_callback(ws: &Rc<WindowState>) {
 fn setup_mouse_up_callback(ws: &Rc<WindowState>) {
     let state = ws.clone();
     register_canvas_event_listener(ws, "mouseup", move |event: web_sys::MouseEvent| {
-        if let Some(button) = mouse_button(event.button()) {
-            let buttons = mouse_buttons(event.buttons());
-            let event = MouseEvent {
+        if let Some(button) = get_button(event.button()) {
+            let event = PointerEvent {
+                pointer_id: PointerId(0),
+                is_primary: true,
+                pointer_type: PointerType::Mouse(MouseInfo {
+                    wheel_delta: Vec2::ZERO,
+                }),
                 pos: Point::new(event.offset_x() as f64, event.offset_y() as f64),
-                buttons,
-                mods: get_modifiers!(event),
-                count: 0,
-                focus: false,
+                buttons: get_buttons(event.buttons()),
+                modifiers: get_modifiers!(event),
                 button,
-                wheel_delta: Vec2::ZERO,
+                focus: false,
+                count: 0,
             };
-            state.handler.borrow_mut().mouse_up(&event);
+            state.handler.borrow_mut().pointer_up(&event);
         }
     });
 }
@@ -237,17 +245,20 @@ fn setup_mouse_up_callback(ws: &Rc<WindowState>) {
 fn setup_mouse_move_callback(ws: &Rc<WindowState>) {
     let state = ws.clone();
     register_canvas_event_listener(ws, "mousemove", move |event: web_sys::MouseEvent| {
-        let buttons = mouse_buttons(event.buttons());
-        let event = MouseEvent {
+        let event = PointerEvent {
+            pointer_id: PointerId(0),
+            is_primary: true,
+            pointer_type: PointerType::Mouse(MouseInfo {
+                wheel_delta: Vec2::ZERO,
+            }),
             pos: Point::new(event.offset_x() as f64, event.offset_y() as f64),
-            buttons,
-            mods: get_modifiers!(event),
-            count: 0,
+            buttons: get_buttons(event.buttons()),
+            modifiers: get_modifiers!(event),
+            button: PointerButton::None,
             focus: false,
-            button: MouseButton::None,
-            wheel_delta: Vec2::ZERO,
+            count: 0,
         };
-        state.handler.borrow_mut().mouse_move(&event);
+        state.handler.borrow_mut().pointer_move(&event);
     });
 }
 
@@ -273,14 +284,16 @@ fn setup_scroll_callback(ws: &Rc<WindowState>) {
             }
         };
 
-        let event = MouseEvent {
+        let event = PointerEvent {
+            pointer_id: PointerId(0),
+            is_primary: true,
+            pointer_type: PointerType::Mouse(MouseInfo { wheel_delta }),
             pos: Point::new(event.offset_x() as f64, event.offset_y() as f64),
-            buttons: mouse_buttons(event.buttons()),
-            mods: get_modifiers!(event),
-            count: 0,
+            buttons: get_buttons(event.buttons()),
+            modifiers: get_modifiers!(event),
+            button: PointerButton::None,
             focus: false,
-            button: MouseButton::None,
-            wheel_delta,
+            count: 0,
         };
         state.handler.borrow_mut().wheel(&event);
     });
@@ -765,33 +778,33 @@ impl IdleHandle {
     }
 }
 
-fn mouse_button(button: i16) -> Option<MouseButton> {
+fn get_button(button: i16) -> Option<PointerButton> {
     match button {
-        0 => Some(MouseButton::Primary),
-        1 => Some(MouseButton::Auxiliary),
-        2 => Some(MouseButton::Secondary),
-        3 => Some(MouseButton::X1),
-        4 => Some(MouseButton::X2),
+        0 => Some(PointerButton::Primary),
+        1 => Some(PointerButton::Auxiliary),
+        2 => Some(PointerButton::Secondary),
+        3 => Some(PointerButton::X1),
+        4 => Some(PointerButton::X2),
         _ => None,
     }
 }
 
-fn mouse_buttons(mask: u16) -> MouseButtons {
-    let mut buttons = MouseButtons::new();
+fn get_buttons(mask: u16) -> PointerButtons {
+    let mut buttons = PointerButtons::new();
     if mask & 1 != 0 {
-        buttons.insert(MouseButton::Primary);
+        buttons.insert(PointerButton::Primary);
     }
     if mask & 1 << 1 != 0 {
-        buttons.insert(MouseButton::Secondary);
+        buttons.insert(PointerButton::Secondary);
     }
     if mask & 1 << 2 != 0 {
-        buttons.insert(MouseButton::Auxiliary);
+        buttons.insert(PointerButton::Auxiliary);
     }
     if mask & 1 << 3 != 0 {
-        buttons.insert(MouseButton::X1);
+        buttons.insert(PointerButton::X1);
     }
     if mask & 1 << 4 != 0 {
-        buttons.insert(MouseButton::X2);
+        buttons.insert(PointerButton::X2);
     }
     buttons
 }
