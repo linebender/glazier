@@ -154,7 +154,7 @@ pollster = "0.3.0"
 wgpu = "0.17.0"
 
 [target.'cfg(any(target_os = "freebsd", target_os="linux", target_os="openbsd"))'.build-dependencies]
-bindgen = { version = "0.60.1", optional = true }
+bindgen = { version = "0.66", optional = true }
 pkg-config = { version = "0.3.25", optional = true }
 
 [[example]]
