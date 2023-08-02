@@ -26,7 +26,7 @@ use crate::error::Error;
 use crate::keyboard::KeyEvent;
 use crate::kurbo::{Insets, Point, Rect, Size};
 use crate::menu::Menu;
-use crate::mouse::{Cursor, CursorDesc, MouseEvent};
+use crate::mouse::{Cursor, CursorDesc};
 use crate::region::Region;
 use crate::scale::Scale;
 use crate::text::{Event, InputHandler};
@@ -228,7 +228,7 @@ impl WindowHandle {
     /// Informs the system that the current location of the mouse should be treated as part of the
     /// window's titlebar. This can be used to implement a custom titlebar widget. Note that
     /// because this refers to the current location of the mouse, you should probably call this
-    /// function in response to every relevant [`WinHandler::mouse_move`].
+    /// function in response to every relevant [`WinHandler::pointer_move`].
     ///
     /// This is currently only implemented on Windows
     pub fn handle_titlebar(&self, val: bool) {
@@ -695,34 +695,6 @@ pub trait WinHandler {
     /// on the trackpad).
     #[allow(unused_variables)]
     fn zoom(&mut self, delta: f64) {}
-
-    // While the backends transition from mouse events to pointer events, we keep these compatibility
-    // shims.
-
-    #[doc(hidden)]
-    fn mouse_wheel(&mut self, event: &MouseEvent) {
-        self.wheel(&event.clone().into())
-    }
-
-    #[doc(hidden)]
-    fn mouse_move(&mut self, event: &MouseEvent) {
-        self.pointer_move(&event.clone().into())
-    }
-
-    #[doc(hidden)]
-    fn mouse_down(&mut self, event: &MouseEvent) {
-        self.pointer_down(&event.clone().into())
-    }
-
-    #[doc(hidden)]
-    fn mouse_up(&mut self, event: &MouseEvent) {
-        self.pointer_up(&event.clone().into())
-    }
-
-    #[doc(hidden)]
-    fn mouse_leave(&mut self) {
-        self.pointer_leave()
-    }
 
     /// Called on a mouse wheel event.
     ///

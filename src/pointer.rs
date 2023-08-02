@@ -224,19 +224,6 @@ pub enum PointerButton {
     X2,
 }
 
-impl From<crate::MouseButton> for PointerButton {
-    fn from(m: crate::MouseButton) -> Self {
-        match m {
-            crate::MouseButton::None => PointerButton::None,
-            crate::MouseButton::Primary => PointerButton::Primary,
-            crate::MouseButton::Secondary => PointerButton::Secondary,
-            crate::MouseButton::Auxiliary => PointerButton::Auxiliary,
-            crate::MouseButton::X1 => PointerButton::X1,
-            crate::MouseButton::X2 => PointerButton::X2,
-        }
-    }
-}
-
 impl PointerButton {
     /// Returns `true` if this is [`PointerButton::Primary`].
     #[inline]
@@ -390,12 +377,6 @@ impl PointerButtons {
     }
 }
 
-impl From<crate::MouseButtons> for PointerButtons {
-    fn from(m: crate::MouseButtons) -> Self {
-        PointerButtons(m.0)
-    }
-}
-
 impl std::fmt::Debug for PointerButtons {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "PointerButtons({:05b})", self.0 >> 1)
@@ -421,7 +402,7 @@ pub struct PointerEvent {
     pub button: PointerButton,
 
     /// Focus is `true` on macOS when the mouse-down event (or its companion mouse-up event)
-    /// with `MouseButton::Primary` was the event that caused the window to gain focus.
+    /// with `PointerButton::Primary` was the event that caused the window to gain focus.
     pub focus: bool,
 
     // TODO: Should this be here, or only in mouse/pen events?
@@ -444,24 +425,6 @@ impl Default for PointerEvent {
             pointer_type: PointerType::Mouse(MouseInfo {
                 wheel_delta: Vec2::ZERO,
             }),
-        }
-    }
-}
-
-impl From<crate::MouseEvent> for PointerEvent {
-    fn from(m: crate::MouseEvent) -> Self {
-        Self {
-            pointer_id: PointerId(0),
-            is_primary: true,
-            pointer_type: PointerType::Mouse(MouseInfo {
-                wheel_delta: m.wheel_delta,
-            }),
-            pos: m.pos,
-            buttons: m.buttons.into(),
-            modifiers: m.mods,
-            button: m.button.into(),
-            focus: m.focus,
-            count: m.count,
         }
     }
 }
