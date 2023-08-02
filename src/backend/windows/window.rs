@@ -19,7 +19,7 @@
 use std::cell::{Cell, RefCell};
 use std::mem;
 use std::panic::Location;
-use std::ptr::{null, null_mut};
+use std::ptr::{self, null, null_mut};
 use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -63,6 +63,7 @@ use crate::common_util::IdleCallback;
 use crate::dialog::{FileDialogOptions, FileDialogType, FileInfo};
 use crate::error::Error as ShellError;
 use crate::keyboard::{KbKey, KeyState};
+use super::text_input::TsfIntegration;
 use crate::mouse::{Cursor, CursorDesc, MouseButton, MouseButtons, MouseEvent};
 use crate::region::Region;
 use crate::scale::{Scalable, Scale, ScaledArea};
@@ -155,6 +156,14 @@ enum DeferredOp {
     SetResizable(bool),
     SetWindowState(window::WindowState),
     ReleaseMouseCapture,
+    TextFieldOp(TextFieldToken, TextFieldOp),
+}
+
+enum TextFieldOp {
+    Added,
+    Removed,
+    Focus,
+    Change(Event)
 }
 
 #[derive(Clone, Debug, Default)]
@@ -242,6 +251,7 @@ struct WindowState {
     uia_init_marker: UiaInitMarker, // zero size
     #[cfg(feature = "accesskit")]
     accesskit_adapter: OnceCell<AccessKitAdapter>,
+    tsf_integration: RefCell<TsfIntegration>,
 }
 
 impl std::fmt::Debug for WindowState {
@@ -316,6 +326,8 @@ const DS_RUN_IDLE: UINT = WM_USER;
 /// send this message to request destroying the window, so that at the
 /// time it is handled, we can successfully borrow the handler.
 pub(crate) const DS_REQUEST_DESTROY: UINT = WM_USER + 1;
+pub(crate) const DS_REQUEST_LOCK: UINT = WM_USER + 2;
+pub(crate) const DS_DESTROY_LOCK: UINT = WM_USER + 3;
 
 /// Extract the buttons that are being held down from wparam in mouse events.
 fn get_buttons(wparam: WPARAM) -> MouseButtons {
@@ -613,6 +625,17 @@ impl MyWndProc {
                         }
                     }
                 },
+                // TODO: DO STUFF
+                DeferredOp::TextFieldOp(token, op) => match op {
+                    TextFieldOp::Added => self.with_window_state(|ws| {
+                        self.tsf_integration.borrow_mut().register_text_field(ws.hwnd.get(), token).unwrap();
+                    }),
+                    TextFieldOp::Focus => {
+                        self.tsf_integration.borrow().focus(token).unwrap();
+                    }
+                    TextFieldOp::Removed => self.tsf_integration.borrow_mut().unregister_text_field(token),
+                    TextFieldOp::Change(event) => self.tsf_integration.borrow().update(token, event).unwrap(),
+                }
             }
         } else {
             warn!("Could not get HWND");
@@ -1158,6 +1181,23 @@ impl WndProc for MyWndProc {
                 });
                 Some(0)
             }
+            DS_REQUEST_LOCK => {
+                let token = TextFieldToken::from_raw(wparam as u64);
+                let mutable = lparam != 0; 
+
+                self.with_wnd_state(|w| {
+                    let lock = Box::into_raw(Box::new(w.handler.acquire_input_lock(token, mutable)));
+                    lock as isize
+                })
+            }
+            DS_DESTROY_LOCK => {
+                let token = TextFieldToken::from_raw(wparam as u64);
+
+                self.with_wnd_state(|w| {
+                    w.handler.release_input_lock(token);
+                    0
+                })
+            }
             DS_RUN_IDLE => self
                 .with_wnd_state(|s| {
                     let queue = self.handle.borrow().take_idle_queue();
@@ -1295,6 +1335,10 @@ impl WindowBuilder {
 
     pub fn build(self) -> Result<WindowHandle, Error> {
         unsafe {
+            use windows::Win32::System::Com::*;
+            // TODO: INVESTIGATE WHY MULTITHREADED WONT WORK
+            CoInitializeEx(ptr::null(), COINIT_APARTMENTTHREADED)?;
+
             let class_name = util::CLASS_NAME.to_wide();
             let wndproc = MyWndProc {
                 app: self.app.clone(),
@@ -1384,6 +1428,7 @@ impl WindowBuilder {
                 uia_init_marker: UiaInitMarker::new(),
                 #[cfg(feature = "accesskit")]
                 accesskit_adapter: OnceCell::new(),
+                tsf_integration: RefCell::new(TsfIntegration::new()?)
             };
             let win = Rc::new(window);
             let handle = WindowHandle {
@@ -1852,7 +1897,10 @@ impl WindowHandle {
     }
 
     pub fn add_text_field(&self) -> TextFieldToken {
-        TextFieldToken::next()
+        let new_token = TextFieldToken::next();
+        self.defer(DeferredOp::TextFieldOp(new_token, TextFieldOp::Added));
+
+        new_token
     }
 
     pub fn remove_text_field(&self, token: TextFieldToken) {
@@ -1860,17 +1908,21 @@ impl WindowHandle {
             if state.active_text_input.get() == Some(token) {
                 state.active_text_input.set(None);
             }
+            self.defer(DeferredOp::TextFieldOp(token, TextFieldOp::Removed));
         }
     }
 
     pub fn set_focused_text_field(&self, active_field: Option<TextFieldToken>) {
         if let Some(state) = self.state.upgrade() {
             state.active_text_input.set(active_field);
+            if let Some(token) = active_field {
+                self.defer(DeferredOp::TextFieldOp(token, TextFieldOp::Focus));
+            }
         }
     }
 
-    pub fn update_text_field(&self, _token: TextFieldToken, _update: Event) {
-        // noop until we get a real text input implementation
+    pub fn update_text_field(&self, token: TextFieldToken, update: Event) {
+        self.defer(DeferredOp::TextFieldOp(token, TextFieldOp::Change(update)))
     }
 
     /// Request a timer event.
@@ -2085,4 +2137,9 @@ impl accesskit::ActionHandler for AccessKitActionHandler {
             handler.accesskit_action(request);
         });
     }
+}
+
+pub(crate) unsafe fn get_hwnd_scale(hwnd: HWND) -> Scale {
+    let wnd_state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const WindowState;
+    (*wnd_state).scale.get()
 }
