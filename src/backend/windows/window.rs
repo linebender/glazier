@@ -63,7 +63,10 @@ use crate::common_util::IdleCallback;
 use crate::dialog::{FileDialogOptions, FileDialogType, FileInfo};
 use crate::error::Error as ShellError;
 use crate::keyboard::{KbKey, KeyState};
-use crate::mouse::{Cursor, CursorDesc, MouseButton, MouseButtons, MouseEvent};
+use crate::mouse::{Cursor, CursorDesc};
+use crate::pointer::{
+    MouseInfo, PointerButton, PointerButtons, PointerEvent, PointerId, PointerType,
+};
 use crate::region::Region;
 use crate::scale::{Scalable, Scale, ScaledArea};
 use crate::text::{simulate_input, Event};
@@ -276,10 +279,10 @@ struct WndState {
     handler: Box<dyn WinHandler>,
     min_size: Option<Size>,
     keyboard_state: KeyboardState,
-    // Stores a set of all mouse buttons that are currently holding mouse
-    // capture. When the first mouse button is down on our window we enter
-    // capture, and we hold it until the last mouse button is up.
-    captured_mouse_buttons: MouseButtons,
+    // Stores a set of all pointer buttons that are currently holding pointer
+    // capture. When the first pointer button is down on our window we enter
+    // capture, and we hold it until the last pointer button is up.
+    captured_pointer_buttons: PointerButtons,
     // Is this window the topmost window under the mouse cursor
     has_mouse_focus: bool,
     //TODO: track surrogate orphan
@@ -317,23 +320,23 @@ const DS_RUN_IDLE: UINT = WM_USER;
 /// time it is handled, we can successfully borrow the handler.
 pub(crate) const DS_REQUEST_DESTROY: UINT = WM_USER + 1;
 
-/// Extract the buttons that are being held down from wparam in mouse events.
-fn get_buttons(wparam: WPARAM) -> MouseButtons {
-    let mut buttons = MouseButtons::new();
+/// Extract the buttons that are being held down from `wparam` in pointer events.
+fn get_buttons(wparam: WPARAM) -> PointerButtons {
+    let mut buttons = PointerButtons::new();
     if wparam & MK_LBUTTON != 0 {
-        buttons.insert(MouseButton::Primary);
+        buttons.insert(PointerButton::Primary);
     }
     if wparam & MK_RBUTTON != 0 {
-        buttons.insert(MouseButton::Secondary);
+        buttons.insert(PointerButton::Secondary);
     }
     if wparam & MK_MBUTTON != 0 {
-        buttons.insert(MouseButton::Auxiliary);
+        buttons.insert(PointerButton::Auxiliary);
     }
     if wparam & MK_XBUTTON1 != 0 {
-        buttons.insert(MouseButton::X1);
+        buttons.insert(PointerButton::X1);
     }
     if wparam & MK_XBUTTON2 != 0 {
-        buttons.insert(MouseButton::X2);
+        buttons.insert(PointerButton::X2);
     }
     buttons
 }
@@ -411,18 +414,18 @@ impl WndState {
         self.handler.paint(invalid);
     }
 
-    fn enter_mouse_capture(&mut self, hwnd: HWND, button: MouseButton) {
-        if self.captured_mouse_buttons.is_empty() {
+    fn enter_pointer_capture(&mut self, hwnd: HWND, button: PointerButton) {
+        if self.captured_pointer_buttons.is_empty() {
             unsafe {
                 SetCapture(hwnd);
             }
         }
-        self.captured_mouse_buttons.insert(button);
+        self.captured_pointer_buttons.insert(button);
     }
 
-    fn exit_mouse_capture(&mut self, button: MouseButton) -> bool {
-        self.captured_mouse_buttons.remove(button);
-        self.captured_mouse_buttons.is_empty()
+    fn exit_pointer_capture(&mut self, button: PointerButton) -> bool {
+        self.captured_pointer_buttons.remove(button);
+        self.captured_pointer_buttons.is_empty()
     }
 }
 
@@ -939,8 +942,8 @@ impl WndProc for MyWndProc {
                 let handled = self.with_wnd_state(|s| {
                     let system_delta = HIWORD(wparam as u32) as i16 as f64;
                     let down_state = LOWORD(wparam as u32) as usize;
-                    let mods = s.keyboard_state.get_modifiers();
-                    let is_shift = mods.shift();
+                    let modifiers = s.keyboard_state.get_modifiers();
+                    let is_shift = modifiers.shift();
                     let wheel_delta = match msg {
                         WM_MOUSEWHEEL if is_shift => Vec2::new(-system_delta, 0.),
                         WM_MOUSEWHEEL => Vec2::new(0., -system_delta),
@@ -962,18 +965,18 @@ impl WndProc for MyWndProc {
                         }
                     }
 
-                    let pos = Point::new(p.x as f64, p.y as f64).to_dp(self.scale());
-                    let buttons = get_buttons(down_state);
-                    let event = MouseEvent {
-                        pos,
-                        buttons,
-                        mods,
-                        count: 0,
+                    let event = PointerEvent {
+                        pointer_id: PointerId(0),
+                        is_primary: true,
+                        pointer_type: PointerType::Mouse(MouseInfo { wheel_delta }),
+                        pos: Point::new(p.x as f64, p.y as f64).to_dp(self.scale()),
+                        buttons: get_buttons(down_state),
+                        modifiers,
+                        button: PointerButton::None,
                         focus: false,
-                        button: MouseButton::None,
-                        wheel_delta,
+                        count: 0,
                     };
-                    s.handler.mouse_wheel(&event);
+                    s.handler.wheel(&event);
                     true
                 });
                 if handled == Some(false) {
@@ -1010,26 +1013,27 @@ impl WndProc for MyWndProc {
                         }
                     }
 
-                    let pos = Point::new(x as f64, y as f64).to_dp(self.scale());
-                    let mods = s.keyboard_state.get_modifiers();
-                    let buttons = get_buttons(wparam);
-                    let event = MouseEvent {
-                        pos,
-                        buttons,
-                        mods,
-                        count: 0,
+                    let event = PointerEvent {
+                        pointer_id: PointerId(0),
+                        is_primary: true,
+                        pointer_type: PointerType::Mouse(MouseInfo {
+                            wheel_delta: Vec2::ZERO,
+                        }),
+                        pos: Point::new(x as f64, y as f64).to_dp(self.scale()),
+                        buttons: get_buttons(wparam),
+                        modifiers: s.keyboard_state.get_modifiers(),
+                        button: PointerButton::None,
                         focus: false,
-                        button: MouseButton::None,
-                        wheel_delta: Vec2::ZERO,
+                        count: 0,
                     };
-                    s.handler.mouse_move(&event);
+                    s.handler.pointer_move(&event);
                 });
                 Some(0)
             }
             WM_MOUSELEAVE => {
                 self.with_wnd_state(|s| {
                     s.has_mouse_focus = false;
-                    s.handler.mouse_leave();
+                    s.handler.pointer_leave();
                 });
                 Some(0)
             }
@@ -1041,17 +1045,19 @@ impl WndProc for MyWndProc {
             | WM_RBUTTONDOWN | WM_RBUTTONUP | WM_MBUTTONDBLCLK | WM_MBUTTONDOWN | WM_MBUTTONUP
             | WM_XBUTTONDBLCLK | WM_XBUTTONDOWN | WM_XBUTTONUP => {
                 if let Some(button) = match msg {
-                    WM_LBUTTONDBLCLK | WM_LBUTTONDOWN | WM_LBUTTONUP => Some(MouseButton::Primary),
+                    WM_LBUTTONDBLCLK | WM_LBUTTONDOWN | WM_LBUTTONUP => {
+                        Some(PointerButton::Primary)
+                    }
                     WM_RBUTTONDBLCLK | WM_RBUTTONDOWN | WM_RBUTTONUP => {
-                        Some(MouseButton::Secondary)
+                        Some(PointerButton::Secondary)
                     }
                     WM_MBUTTONDBLCLK | WM_MBUTTONDOWN | WM_MBUTTONUP => {
-                        Some(MouseButton::Auxiliary)
+                        Some(PointerButton::Auxiliary)
                     }
                     WM_XBUTTONDBLCLK | WM_XBUTTONDOWN | WM_XBUTTONUP => {
                         match HIWORD(wparam as u32) {
-                            XBUTTON1 => Some(MouseButton::X1),
-                            XBUTTON2 => Some(MouseButton::X2),
+                            XBUTTON1 => Some(PointerButton::X1),
+                            XBUTTON2 => Some(PointerButton::X2),
                             w => {
                                 // Should never happen with current Windows
                                 warn!("Received an unknown XBUTTON event ({})", w);
@@ -1075,11 +1081,8 @@ impl WndProc for MyWndProc {
                         );
                         let x = LOWORD(lparam as u32) as i16 as i32;
                         let y = HIWORD(lparam as u32) as i16 as i32;
-                        let pos = Point::new(x as f64, y as f64).to_dp(self.scale());
-                        let mods = s.keyboard_state.get_modifiers();
-                        let buttons = get_buttons(wparam);
-                        let dct = unsafe { GetDoubleClickTime() };
                         let count = if down {
+                            let dct = unsafe { GetDoubleClickTime() };
                             // TODO: it may be more precise to use the timestamp from the event.
                             let this_click = Instant::now();
                             let thresh_x = self.get_system_metric(SM_CXDOUBLECLK);
@@ -1097,21 +1100,25 @@ impl WndProc for MyWndProc {
                         } else {
                             0
                         };
-                        let event = MouseEvent {
-                            pos,
-                            buttons,
-                            mods,
-                            count,
-                            focus: false,
+                        let event = PointerEvent {
+                            pointer_id: PointerId(0),
+                            is_primary: true,
+                            pointer_type: PointerType::Mouse(MouseInfo {
+                                wheel_delta: Vec2::ZERO,
+                            }),
+                            pos: Point::new(x as f64, y as f64).to_dp(self.scale()),
+                            buttons: get_buttons(wparam),
+                            modifiers: s.keyboard_state.get_modifiers(),
                             button,
-                            wheel_delta: Vec2::ZERO,
+                            focus: false,
+                            count,
                         };
                         if count > 0 {
-                            s.enter_mouse_capture(hwnd, button);
-                            s.handler.mouse_down(&event);
+                            s.enter_pointer_capture(hwnd, button);
+                            s.handler.pointer_down(&event);
                         } else {
-                            s.handler.mouse_up(&event);
-                            if s.exit_mouse_capture(button) {
+                            s.handler.pointer_up(&event);
+                            if s.exit_pointer_capture(button) {
                                 self.handle.borrow().defer(DeferredOp::ReleaseMouseCapture);
                             }
                         }
@@ -1144,7 +1151,7 @@ impl WndProc for MyWndProc {
                 Some(1)
             }
             WM_CAPTURECHANGED => {
-                self.with_wnd_state(|s| s.captured_mouse_buttons.clear());
+                self.with_wnd_state(|s| s.captured_pointer_buttons.clear());
                 Some(0)
             }
             WM_GETMINMAXINFO => {
@@ -1394,7 +1401,7 @@ impl WindowBuilder {
                 handler: self.handler.unwrap(),
                 min_size: self.min_size,
                 keyboard_state: KeyboardState::new(),
-                captured_mouse_buttons: MouseButtons::new(),
+                captured_pointer_buttons: PointerButtons::new(),
                 has_mouse_focus: false,
                 last_click_time: Instant::now(),
                 last_click_pos: (0, 0),
