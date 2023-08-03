@@ -82,7 +82,7 @@ impl InputState {
     /// Move between different text inputs
     ///
     /// Used alongside the enable request, or in response to the leave event
-    pub(super) fn reset(&mut self, token: Option<TextFieldToken>) {
+    fn reset(&mut self) {
         self.commit_string = None;
         self.preedit_string = None;
         self.delete_surrounding_before = 0;
@@ -90,13 +90,21 @@ impl InputState {
         self.new_cursor_begin = 0;
         self.new_cursor_end = 0;
         self.buffer_start = None;
-        self.token = token;
-        if token.is_some() {
-            self.text_input.enable();
-        } else {
-            self.text_input.disable();
-            self.commit();
-        }
+    }
+
+    pub(super) fn set_field(&mut self, token: TextFieldToken) {
+        debug_assert!(self.token.is_none());
+        self.reset();
+        self.token = Some(token);
+
+        self.text_input.enable();
+        // Don't commit the enabling
+    }
+
+    pub(super) fn remove_field(&mut self) {
+        self.token = None;
+        self.text_input.disable();
+        self.commit();
     }
 
     pub(super) fn sync_state(
@@ -338,8 +346,8 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
         match event {
             zwp_text_input_v3::Event::Enter { surface } => {
                 let window_id = WindowId::of_surface(&surface);
-                let win = state.windows.get_mut(&window_id).unwrap();
-                win.set_input_seat(data.0);
+                let seat = input_state(&mut state.seats, data.0);
+                seat.window_focus_enter(windows, new_window);
                 let input_state = text_input(&mut state.input_states, data);
                 input_state.active_window = Some(window_id);
                 input_state.token = win.get_text_field();
@@ -355,8 +363,11 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 let window_id = WindowId::of_surface(&surface);
                 let Some(win) = state.windows.get_mut(&window_id) else {return;};
                 win.remove_input_seat(data.0);
-                let text_input = text_input(&mut state.input_states, data);
-                text_input.reset(None);
+                let seat = input_state(&mut state.input_states, data.0);
+                seat.window_focus_leave(&mut state.windows);
+                let mut text_input = seat
+                    .input_state
+                    .expect("Only getting text input events if input exists");
                 text_input.active_window = None;
                 text_input.state_might_have_changed = true;
                 // These seem to be invalid here, as the surface no longer exists
