@@ -51,7 +51,7 @@ use crate::backend::shared::Timer;
 use crate::common_util::IdleCallback;
 use crate::dialog::FileDialogOptions;
 use crate::error::Error as ShellError;
-use crate::keyboard::{KeyState, Modifiers};
+use crate::keyboard::{KeyState, Modifiers, ModifiersExt};
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 use crate::mouse::{Cursor, CursorDesc};
 use crate::region::Region;

@@ -62,7 +62,7 @@ use super::util::{self, ToWide, OPTIONAL_FUNCTIONS};
 use crate::common_util::IdleCallback;
 use crate::dialog::{FileDialogOptions, FileDialogType, FileInfo};
 use crate::error::Error as ShellError;
-use crate::keyboard::{KbKey, KeyState};
+use crate::keyboard::{KbKey, KeyState, ModifiersExt};
 use crate::mouse::{Cursor, CursorDesc};
 use crate::pointer::{
     MouseInfo, PointerButton, PointerButtons, PointerEvent, PointerId, PointerType,
