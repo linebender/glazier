@@ -158,11 +158,11 @@ impl WinHandler for WindowState {
         println!("keyup: {event:?}");
     }
 
-    fn wheel(&mut self, event: &PointerEvent) {
+    fn wheel(&mut self, event: PointerEvent) {
         println!("wheel {event:?}");
     }
 
-    fn pointer_move(&mut self, event: &PointerEvent) {
+    fn pointer_move(&mut self, event: PointerEvent) {
         self.handle.set_cursor(&Cursor::Arrow);
         match &event.pointer_type {
             PointerType::Pen(info) => {
@@ -183,7 +183,7 @@ impl WinHandler for WindowState {
         }
     }
 
-    fn pointer_down(&mut self, event: &PointerEvent) {
+    fn pointer_down(&mut self, event: PointerEvent) {
         if let PointerType::Touch(_) = &event.pointer_type {
             let color = if event.is_primary {
                 Color::RED
@@ -198,7 +198,7 @@ impl WinHandler for WindowState {
         }
     }
 
-    fn pointer_up(&mut self, event: &PointerEvent) {
+    fn pointer_up(&mut self, event: PointerEvent) {
         if let PointerType::Touch(_) = &event.pointer_type {
             self.touch_state.points.remove(&event.pointer_id);
         }

@@ -925,7 +925,7 @@ impl Window {
         pointer_ev.buttons = pointer_ev.buttons.with(pointer_ev.button);
         // TODO: detect the count
         pointer_ev.count = 1;
-        self.with_handler(|h| h.pointer_down(&pointer_ev));
+        self.with_handler(|h| h.pointer_down(pointer_ev));
         Ok(())
     }
 
@@ -934,27 +934,27 @@ impl Window {
         // The xcb state includes the newly released button, but druid
         // doesn't want it.
         pointer_ev.buttons = pointer_ev.buttons.without(pointer_ev.button);
-        self.with_handler(|h| h.pointer_up(&pointer_ev));
+        self.with_handler(|h| h.pointer_up(pointer_ev));
         Ok(())
     }
 
     pub fn handle_touch_begin(&self, ev: &xinput::TouchBeginEvent) -> Result<(), Error> {
         let mut pointer_ev = self.pointer_touch_event(ev);
         pointer_ev.buttons = pointer_ev.buttons.with(pointer_ev.button);
-        self.with_handler(|h| h.pointer_down(&pointer_ev));
+        self.with_handler(|h| h.pointer_down(pointer_ev));
         Ok(())
     }
 
     pub fn handle_touch_update(&self, ev: &xinput::TouchBeginEvent) -> Result<(), Error> {
         let pointer_ev = self.pointer_touch_event(ev);
-        self.with_handler(|h| h.pointer_move(&pointer_ev));
+        self.with_handler(|h| h.pointer_move(pointer_ev));
         Ok(())
     }
 
     pub fn handle_touch_end(&self, ev: &xinput::TouchBeginEvent) -> Result<(), Error> {
         let mut pointer_ev = self.pointer_touch_event(ev);
         pointer_ev.buttons = pointer_ev.buttons.without(pointer_ev.button);
-        self.with_handler(|h| h.pointer_move(&pointer_ev));
+        self.with_handler(|h| h.pointer_move(pointer_ev));
         Ok(())
     }
 
@@ -977,14 +977,14 @@ impl Window {
         });
         pointer_ev.button = PointerButton::None;
 
-        self.with_handler(|h| h.wheel(&pointer_ev));
+        self.with_handler(|h| h.wheel(pointer_ev));
         Ok(())
     }
 
     pub fn handle_motion_notify(&self, ev: &xinput::ButtonPressEvent) -> Result<(), Error> {
         let mut pointer_ev = self.pointer_event(ev);
         pointer_ev.button = PointerButton::None;
-        self.with_handler(|h| h.pointer_move(&pointer_ev));
+        self.with_handler(|h| h.pointer_move(pointer_ev));
         Ok(())
     }
 
