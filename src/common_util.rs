@@ -124,7 +124,7 @@ impl<T> Clone for SharedEnqueuer<T> {
 /// A reference to a [`shared_queue`] that lets you dequeue and consume callbacks.
 #[allow(dead_code)]
 pub(crate) struct SharedDequeuer<T> {
-    // NOTE: All recieves must be done with the `empty_flag` lock held and updated.
+    // NOTE: All receives must be done with the `empty_flag` lock held and updated.
     receiver: mpsc::Receiver<T>,
     empty_flag: Arc<Mutex<bool>>,
 }

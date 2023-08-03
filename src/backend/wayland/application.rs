@@ -157,7 +157,7 @@ impl Application {
                     Ok(IdleAction::Token(window, token)) => match state.windows.get_mut(&window) {
                         Some(state) => state.handler.idle(token),
                         None => {
-                            tracing::debug!("Tried to run an idle token on a non-existant window")
+                            tracing::debug!("Tried to run an idle token on a non-existent window")
                         }
                     },
                     Err(TryRecvError::Empty) => break,
