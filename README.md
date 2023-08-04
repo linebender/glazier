@@ -124,16 +124,16 @@ explicit minimum supported rust version, but the latest stable version should
 work.
 
 On Linux and BSD, Glazier also requires `pkg-config` and `clang`,
-and the development packages of `libxkbcommon` and `libxcb`, to be installed.
+and the development packages of `wayland`, `libxkbcommon` and `libxcb`, to be installed.
 Some of the examples require `vulkan-loader`.
 
 Most distributions have `pkg-config` installed by default. To install the remaining packages on Fedora, run
-```
-sudo dnf install clang libxkbcommon-x11-devel libxcb-devel vulkan-loader-devel
+```sh
+sudo dnf install clang wayland-devel libxkbcommon-x11-devel libxcb-devel vulkan-loader-devel
 ```
 To install them on Debian or Ubuntu, run
-```
-sudo apt-get install clang libxkbcommon-x11-dev pkg-config libvulkan-dev
+```sh
+sudo apt-get install pkg-config clang libwayland-dev libxkbcommon-x11-dev libvulkan-dev
 ```
 
 ## Further reading
