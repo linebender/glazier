@@ -208,6 +208,7 @@ impl WindowHandle {
         let mut updated = false;
         if props.active_text_field.is_some_and(|it| it == token) {
             props.active_text_field = None;
+            props.active_text_field_updated = true;
             updated = true;
         }
         if props.next_text_field.is_some_and(|it| it == token) {

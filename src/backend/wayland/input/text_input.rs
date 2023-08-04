@@ -90,16 +90,20 @@ impl InputState {
         self.buffer_start = None;
     }
 
-    pub(super) fn set_field(&mut self, token: TextFieldToken) {
-        debug_assert!(self.token.is_none());
-        self.reset();
-        self.token = Some(token);
+    pub(super) fn set_field_if_needed(&mut self, token: TextFieldToken) {
+        if self.token.is_none() {
+            self.reset();
+            self.token = Some(token);
 
-        self.text_input.enable();
-        // Don't commit the enabling
+            self.text_input.enable();
+            tracing::warn!("enabling text input");
+        } else {
+            debug_assert!(self.token == Some(token))
+        }
     }
 
     pub(super) fn remove_field(&mut self) {
+        tracing::warn!("disabling text input");
         self.token = None;
         self.text_input.disable();
         self.commit();

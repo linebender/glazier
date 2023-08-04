@@ -84,6 +84,7 @@ pub(super) struct SeatInfo {
     text_field_owner: TextFieldOwner,
 }
 
+#[derive(Copy, Clone)]
 enum TextFieldOwner {
     Keyboard,
     TextInput,
@@ -167,13 +168,14 @@ impl SeatInfo {
                 // However, we need to update our state
                 self.force_release_preedit(None);
             }
+            self.keyboard_focused = None;
         }
     }
 
     fn update_active_text_input(
         &mut self,
         TextFieldDetails(handler, props_cell): &mut TextFieldDetails,
-        force: bool,
+        mut force: bool,
         should_update_text_input: bool,
     ) {
         let handler = &mut **handler;
@@ -198,6 +200,7 @@ impl SeatInfo {
                 }
             }
             if props.active_text_field_updated || force {
+                force = false;
                 if !focus_changed {
                     self.force_release_preedit(props.active_text_field.map(|it| FutureInputLock {
                         handler,
@@ -214,9 +217,10 @@ impl SeatInfo {
                     if should_update_text_input {
                         if let Some(input_state) = self.input_state.as_mut() {
                             // In force_release_preedit, which has definitely been called, we
-                            // cleared the field and disabled the text input.
+                            // might have cleared the field and disabled the text input, if it had any state
                             // See the comment there for explanation
-                            input_state.set_field(field);
+                            input_state.set_field_if_needed(field);
+
                             let mut ime = handler.acquire_input_lock(field, false);
                             input_state
                                 .sync_state(&mut *ime, zwp_text_input_v3::ChangeCause::Other);
@@ -311,25 +315,25 @@ impl SeatInfo {
                     // However, we choose not to do that for reasons discussed below
                     ime.set_composition_range(None);
                     handler.release_input_lock(token);
-                    if let Some(ime_state) = self.input_state.as_mut() {
-                        // We believe that GNOME's implementation of the text input protocol is not ideal.
-                        // It carries the same IME state between text fields and applications, until the IME is
-                        // complete or the otherwise cancelled.
-                        // Additionally, the design of our IME interface gives no opportunity for the IME to proactively
-                        // intercept e.g. a click event to reset the preedit content.
-                        // Because of these conditions, we are forced into one of two choices. If you are typing e.g.
-                        // `this is a [test]` (where test is the preedit text), then click at ` i|s `, we can either get
-                        // the result `this i[test]s a test`, or `this i|s a test`.
-                        // We choose the former, as it doesn't litter pre-edit text, or relayout the text. A valid alternative
-                        // choice would be `this i[test]s a`, which is implemented by GTK apps. However, this doesn't work
-                        // due to our method of reporting updates from the application.
-                        ime_state.remove_field();
-                    }
                 }
             }
             TextFieldOwner::Neither => {
                 // If there is no preedit text, we don't need to reset the preedit text
             }
+        }
+        if let Some(ime_state) = self.input_state.as_mut() {
+            // We believe that GNOME's implementation of the text input protocol is not ideal.
+            // It carries the same IME state between text fields and applications, until the IME is
+            // complete or the otherwise cancelled.
+            // Additionally, the design of our IME interface gives no opportunity for the IME to proactively
+            // intercept e.g. a click event to reset the preedit content.
+            // Because of these conditions, we are forced into one of two choices. If you are typing e.g.
+            // `this is a [test]` (where test is the preedit text), then click at ` i|s `, we can either get
+            // the result `this i[test]s a test`, or `this i|s a test`.
+            // We choose the former, as it doesn't litter pre-edit text, or relayout the text. A valid alternative
+            // choice would be `this i[test]s a`, which is implemented by GTK apps. However, this doesn't work
+            // due to our method of reporting updates from the application.
+            ime_state.remove_field();
         }
         // Release ownership of the field
         self.text_field_owner = TextFieldOwner::Neither;
@@ -456,6 +460,8 @@ impl SeatInfo {
         let has_preedit = op(self.input_state.as_mut().unwrap(), ime);
         if has_preedit {
             self.text_field_owner = TextFieldOwner::TextInput;
+        } else {
+            self.text_field_owner = TextFieldOwner::Neither;
         }
         handler.release_input_lock(field);
     }
