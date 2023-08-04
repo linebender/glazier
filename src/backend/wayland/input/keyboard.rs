@@ -71,7 +71,7 @@ impl WaylandState {
     /// Stop receiving events for the given keyboard
     fn delete_keyboard(&mut self, data: &KeyboardUserData) {
         let it = self.input_state(data.0);
-        it.keyboard_state = None;
+        it.destroy_keyboard();
     }
 }
 
@@ -118,8 +118,6 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
 
                     let keyboard = state.keyboard(data);
                     keyboard.xkb_state = Some((keymapstate, keymap));
-
-                    // TODO: Access the keymap. Will do so when changing to rust-x-bindings bindings
                 }
                 WEnum::Value(KeymapFormat::NoKeymap) => {
                     // TODO: What's the expected behaviour here? Is this just for embedded devices?
@@ -155,15 +153,15 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
             wl_keyboard::Event::Enter {
                 serial: _,
                 surface,
+                // TODO: How should we handle `keys`?
                 keys: _,
             } => {
-                // TODO: Handle `keys`
-                let seat = state.input_state(data.0);
-                seat.keyboard_focused = Some(WindowId::of_surface(&surface));
+                let seat = input_state(&mut state.input_states, data.0);
+                seat.window_focus_enter(&mut state.windows, WindowId::of_surface(&surface));
             }
             wl_keyboard::Event::Leave { .. } => {
-                let seat = state.input_state(data.0);
-                seat.keyboard_focused = None;
+                let seat = input_state(&mut state.input_states, data.0);
+                seat.window_focus_leave(&mut state.windows);
             }
             wl_keyboard::Event::Modifiers {
                 serial: _,
@@ -210,17 +208,13 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                 };
 
                 let key_state = match key_state {
-                    WEnum::Value(it) => match it {
-                        wl_keyboard::KeyState::Pressed => KeyState::Down,
-                        wl_keyboard::KeyState::Released => KeyState::Up,
-                        _ => todo!(),
-                    },
-                    WEnum::Unknown(_) => todo!(),
+                    WEnum::Value(wl_keyboard::KeyState::Pressed) => KeyState::Down,
+                    WEnum::Value(wl_keyboard::KeyState::Released) => KeyState::Up,
+                    WEnum::Value(_) => unreachable!("non_exhaustive enum extended"),
+                    WEnum::Unknown(_) => unreachable!(),
                 };
-                let window_id = seat.keyboard_focused.as_ref().unwrap().clone();
-                let window = state.windows.get_mut(&window_id).unwrap();
 
-                window.handle_key_event_full(seat, scancode, key_state, false, &window_id);
+                seat.handle_key_event(scancode, key_state, false, &mut state.windows);
                 // Handle repeating
                 match &key_state {
                     KeyState::Down => {

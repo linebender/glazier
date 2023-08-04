@@ -18,7 +18,6 @@ struct InputUserData(SeatName);
 
 pub(super) struct InputState {
     text_input: ZwpTextInputV3,
-    active_window: Option<WindowId>,
 
     commit_count: u32,
 
@@ -63,7 +62,6 @@ impl InputState {
     ) -> Self {
         InputState {
             text_input: manager.get_text_input(seat, qh, InputUserData(seat_name)),
-            active_window: None,
             commit_count: 0,
 
             delete_surrounding_after: 0,
@@ -346,33 +344,12 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
         match event {
             zwp_text_input_v3::Event::Enter { surface } => {
                 let window_id = WindowId::of_surface(&surface);
-                let seat = input_state(&mut state.seats, data.0);
-                seat.window_focus_enter(windows, new_window);
-                let input_state = text_input(&mut state.input_states, data);
-                input_state.active_window = Some(window_id);
-                input_state.token = win.get_text_field();
-                let input_lock = win.get_input_lock(false);
-                if let Some((mut handler, token)) = input_lock {
-                    input_state.text_input.enable();
-                    // ChangeCause is Other here, because the input editor has not sent the text
-                    input_state.sync_state(&mut *handler, zwp_text_input_v3::ChangeCause::Other);
-                    win.release_input_lock(token);
-                }
+                let seat = input_state(&mut state.input_states, data.0);
+                seat.window_focus_enter(&mut state.windows, window_id);
             }
             zwp_text_input_v3::Event::Leave { surface } => {
-                let window_id = WindowId::of_surface(&surface);
-                let Some(win) = state.windows.get_mut(&window_id) else {return;};
-                win.remove_input_seat(data.0);
                 let seat = input_state(&mut state.input_states, data.0);
                 seat.window_focus_leave(&mut state.windows);
-                let mut text_input = seat
-                    .input_state
-                    .expect("Only getting text input events if input exists");
-                text_input.active_window = None;
-                text_input.state_might_have_changed = true;
-                // These seem to be invalid here, as the surface no longer exists
-                // text_input.text_input.disable();
-                // text_input.commit();
             }
             zwp_text_input_v3::Event::PreeditString {
                 text,
@@ -404,8 +381,14 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
             zwp_text_input_v3::Event::Done { serial } => {
                 let input_state = input_state(&mut state.input_states, data.0);
                 let text_input = input_state.input_state.as_mut().unwrap();
+                if text_input.state_might_have_changed {
+                    // We need an input lock from input_state - call force_remove_preedit
+                    // TODO: Something here isn't right - force_remove_preedit invalidates the preedit text
+                }
                 let window_id = text_input.active_window.clone().unwrap();
-                let Some(win) = state.windows.get_mut(&window_id) else {return;};
+                let Some(win) = state.windows.get_mut(&window_id) else {
+                    return;
+                };
                 let input_lock = win.get_input_lock(true);
                 if let Some((mut handler, token)) = input_lock {
                     if Some(token) == text_input.token {

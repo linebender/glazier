@@ -783,12 +783,12 @@ impl Window {
                     let next_field = self.reset_text_fields_if_needed(xkb_state, handler);
 
                     let Some(field_token) = next_field else {
-                            // We're not in a text field, therefore, we don't want to compose
-                            // This does mean that we don't get composition outside of a text field
-                            // but that's expected, as there is no suitable `handler` method for that 
-                            // case. We get the same behaviour on macOS (?)
-                            return;
-                        };
+                        // We're not in a text field, therefore, we don't want to compose
+                        // This does mean that we don't get composition outside of a text field
+                        // but that's expected, as there is no suitable `handler` method for that
+                        // case. We get the same behaviour on macOS (?)
+                        return;
+                    };
                     let mut input_handler = handler.acquire_input_lock(field_token, true);
                     // Because there is no *other* IME on this backend, we meet the criteria for this method
                     xkb_simulate_input(xkb_state, keysym, &event, &mut *input_handler);

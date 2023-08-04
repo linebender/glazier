@@ -1,7 +1,9 @@
 use std::{cell::Cell, collections::HashMap, rc::Rc};
 
 use crate::{
-    backend::shared::xkb::xkb_simulate_input, text::Event, Counter, TextFieldToken, WinHandler,
+    backend::shared::xkb::{xkb_simulate_input, KeyboardHandled},
+    text::Event,
+    Counter, TextFieldToken, WinHandler,
 };
 
 use self::{keyboard::KeyboardState, text_input::InputState};
@@ -41,6 +43,7 @@ pub(in crate::backend::wayland) enum TextFieldChange {
     Changed { to: Option<TextFieldToken> },
 }
 
+#[cfg(never)]
 impl TextFieldChange {
     pub(in crate::backend::wayland) fn apply(
         self,
@@ -208,18 +211,20 @@ impl SeatInfo {
     /// or a window being closed
     fn window_focus_enter(&mut self, windows: &mut Windows, new_window: WindowId) {
         // We either had no focus, or were already focused on this window
-        // (Either text input is enabled, or not)
         debug_assert!(!self.keyboard_focused.is_some_and(|it| it != new_window));
         if self.keyboard_focused.is_none() {
             self.keyboard_focused = Some(new_window);
-            self.update_active_text_input(windows, &new_window, true);
+            let Some(handler) = handler(windows, &new_window) else {
+                return;
+            };
+            self.update_active_text_input(handler, true, true);
         }
     }
 
     fn window_focus_leave(&mut self, windows: &mut Windows) {
         if let Some(old_focus) = self.keyboard_focused {
             let handler = handler(windows, &old_focus);
-            if let Some((handler, props)) = handler {
+            if let Some(TextFieldDetails(handler, props)) = handler {
                 let props = props.get();
                 self.force_release_preedit(props.active_text_field.map(|it| FutureInputLock {
                     handler,
@@ -234,9 +239,12 @@ impl SeatInfo {
         }
     }
 
-    fn update_active_text_input(&mut self, windows: &mut Windows, window: &WindowId, force: bool) {
-        let handler = handler(windows, window);
-        let Some((handler, props_cell)) = handler else { return; };
+    fn update_active_text_input(
+        &mut self,
+        TextFieldDetails(handler, props_cell): TextFieldDetails,
+        force: bool,
+        should_update_text_input: bool,
+    ) {
         let mut props = props_cell.get();
         loop {
             let focus_changed;
@@ -271,15 +279,18 @@ impl SeatInfo {
                 props.active_text_layout_changed = false;
                 props_cell.set(props);
                 if let Some(field) = props.active_text_field {
-                    if let Some(input_state) = self.input_state.as_mut() {
-                        // In force_release_preedit, which has definitely been called, we
-                        // cleared the field and disabled the text input.
-                        // See the comment there for explanation
-                        input_state.set_field(field);
-                        let mut ime = handler.acquire_input_lock(field, false);
-                        input_state.sync_state(&mut *ime, zwp_text_input_v3::ChangeCause::Other);
-                        handler.release_input_lock(field);
-                        props = props_cell.get();
+                    if should_update_text_input {
+                        if let Some(input_state) = self.input_state.as_mut() {
+                            // In force_release_preedit, which has definitely been called, we
+                            // cleared the field and disabled the text input.
+                            // See the comment there for explanation
+                            input_state.set_field(field);
+                            let mut ime = handler.acquire_input_lock(field, false);
+                            input_state
+                                .sync_state(&mut *ime, zwp_text_input_v3::ChangeCause::Other);
+                            handler.release_input_lock(field);
+                            props = props_cell.get();
+                        }
                     }
                 }
                 // We need to continue the loop here, because the application may have changed the focused field
@@ -288,11 +299,13 @@ impl SeatInfo {
                 if props.active_text_layout_changed {
                     props.active_text_layout_changed = false;
                     if let Some(field) = props.active_text_field {
-                        if let Some(input_state) = self.input_state.as_mut() {
-                            let mut ime = handler.acquire_input_lock(field, false);
-                            input_state.sync_cursor_rectangle(&mut *ime);
-                            handler.release_input_lock(field);
-                            props = props_cell.get();
+                        if should_update_text_input {
+                            if let Some(input_state) = self.input_state.as_mut() {
+                                let mut ime = handler.acquire_input_lock(field, false);
+                                input_state.sync_cursor_rectangle(&mut *ime);
+                                handler.release_input_lock(field);
+                                props = props_cell.get();
+                            }
                         }
                     }
                 } else {
@@ -364,6 +377,20 @@ impl SeatInfo {
                     // However, we choose not to do that for reasons discussed below
                     ime.set_composition_range(None);
                     handler.release_input_lock(token);
+                    if let Some(ime_state) = self.input_state.as_mut() {
+                        // We believe that GNOME's implementation of the text input protocol is not ideal.
+                        // It carries the same IME state between text fields and applications, until the IME is
+                        // complete or the otherwise cancelled.
+                        // Additionally, the design of our IME interface gives no opportunity for the IME to proactively
+                        // intercept e.g. a click event to reset the preedit content.
+                        // Because of these conditions, we are forced into one of two choices. If you are typing e.g.
+                        // `this is a [test]` (where test is the preedit text), then click at ` i|s `, we can either get
+                        // the result `this i[test]s a test`, or `this i|s a test`.
+                        // We choose the former, as it doesn't litter pre-edit text, or relayout the text. A valid alternative
+                        // choice would be `this i[test]s a`, which is implemented by GTK apps. However, this doesn't work
+                        // due to our method of reporting updates from the application.
+                        ime_state.remove_field();
+                    }
                 }
             }
             TextFieldOwner::Neither => {
@@ -372,30 +399,16 @@ impl SeatInfo {
         }
         // Release ownership of the field
         self.text_field_owner = TextFieldOwner::Neither;
-        if let Some(ime_state) = self.input_state.as_mut() {
-            // We believe that GNOME's implementation of the text input protocol is not ideal.
-            // It carries the same IME state between text fields and applications, until the IME is
-            // complete or the otherwise cancelled.
-            // Additionally, the design of our IME interface gives no opportunity for the IME to proactively
-            // intercept e.g. a click event to reset the preedit content.
-            // Because of these conditions, we are forced into one of two choices. If you are typing e.g.
-            // `this is a [test]` (where test is the preedit text), then click at ` i|s `, we can either get
-            // the result `this i[test]s a test`, or `this i|s a test`.
-            // We choose the former, as it doesn't litter pre-edit text, or relayout the text. A valid alternative
-            // choice would be `this i[test]s a`, which is implemented by GTK apps. However, this doesn't work
-            // due to our method of reporting updates from the application.
-            ime_state.remove_field();
-        }
     }
 
-    /// Stop receiving events for the given keyboard
+    /// Stop receiving events for the keyboard of this seat
     fn destroy_keyboard(&mut self) {
         self.keyboard_state = None;
 
         if matches!(self.text_field_owner, TextFieldOwner::Keyboard) {
-            // TODO: Reset the active text field
             self.text_field_owner = TextFieldOwner::Neither;
-            self.force_release_preedit(self);
+            // TODO: Reset the active text field?
+            // self.force_release_preedit(Some(..));
         }
     }
 }
@@ -406,10 +419,11 @@ impl SeatInfo {
         scancode: u32,
         key_state: KeyState,
         is_repeat: bool,
-        text_field: Option<TextFieldToken>,
-        handler: &mut dyn WinHandler,
-        window: &WindowId,
+        windows: &mut Windows,
     ) {
+        let Some(window) = self.keyboard_focused.as_ref() else {
+            return;
+        };
         let keyboard = self
             .keyboard_state
             .as_mut()
@@ -422,52 +436,71 @@ impl SeatInfo {
             .expect("Has xkb state by the time keyboard events are arriving")
             .0;
         let keysym = xkb_state.get_one_sym(scancode);
+        let event = xkb_state.key_event(scancode, keysym, key_state, is_repeat);
 
+        let Some(handler) = handler(windows, window) else {
+            return;
+        };
         match key_state {
             KeyState::Down => {
-                if !matches!(
+                if handler.0.key_down(event) {
+                    return;
+                }
+                let update_can_do_nothing = matches!(
                     self.text_field_owner,
                     TextFieldOwner::Keyboard | TextFieldOwner::Neither
-                ) {
-                    self.force_release_preedit(text_field);
-                    let result = xkb_simulate_input(
-                        &mut keyboard
-                            .xkb_state
-                            .as_mut()
-                            .expect("Has xkb state by the time keyboard events are arriving")
-                            .0,
-                        scancode,
-                        key_state,
-                        is_repeat,
-                    );
-                    match result {
-                        crate::backend::shared::xkb::KeyboardHandled::UpdatedReleasingCompose => {
-                            todo!()
-                        }
-                        crate::backend::shared::xkb::KeyboardHandled::UpdatedClaimingCompose => {
-                            todo!()
-                        }
-                        crate::backend::shared::xkb::KeyboardHandled::UpdatedRetainingCompose => {
-                            todo!()
-                        }
-                        crate::backend::shared::xkb::KeyboardHandled::UpdatedNoCompose => todo!(),
-                        crate::backend::shared::xkb::KeyboardHandled::NoUpdate => todo!(),
+                );
+                self.update_active_text_input(handler, !update_can_do_nothing, false);
+
+                let Some(field) = handler.1.get().active_text_field else {
+                    return;
+                };
+                let handler = handler.0;
+                let mut ime = handler.acquire_input_lock(field, true);
+                let result = xkb_simulate_input(
+                    &mut keyboard
+                        .xkb_state
+                        .as_mut()
+                        .expect("Has xkb state by the time keyboard events are arriving")
+                        .0,
+                    keysym,
+                    &event,
+                    &mut *ime,
+                );
+                if let Some(ime_state) = self.input_state {
+                    // In theory, this sync could be skipped if we got exactly KeyboardHandled::NoUpdate
+                    // However, that is incorrect in the case where `update_active_text_input` did make a change
+                    // so this is probably fine
+                    ime_state.sync_state(&mut *ime, zwp_text_input_v3::ChangeCause::Other)
+                }
+                handler.release_input_lock(field);
+                match result {
+                    KeyboardHandled::UpdatedReleasingCompose => {
+                        debug_assert!(matches!(self.text_field_owner, TextFieldOwner::Keyboard));
+                        self.text_field_owner = TextFieldOwner::Neither;
                     }
+                    KeyboardHandled::UpdatedClaimingCompose => {
+                        debug_assert!(matches!(self.text_field_owner, TextFieldOwner::Neither));
+                        self.text_field_owner = TextFieldOwner::Keyboard;
+                    }
+                    KeyboardHandled::UpdatedRetainingCompose => {
+                        debug_assert!(matches!(self.text_field_owner, TextFieldOwner::Keyboard));
+                    }
+                    KeyboardHandled::UpdatedNoCompose => {
+                        debug_assert!(matches!(self.text_field_owner, TextFieldOwner::Neither));
+                    }
+                    KeyboardHandled::NoUpdate => {}
                 }
             }
-            KeyState::Up => {
-                let event = xkb_state.key_event(scancode, keysym, key_state, is_repeat);
-                handler.key_up(event)
-            }
+            KeyState::Up => handler.0.key_up(event),
         };
     }
 }
 
+struct TextFieldDetails<'a>(&'a mut dyn WinHandler, TextInputCell);
+
 /// Get the text input information for the given window
-fn handler<'a>(
-    windows: &'a mut Windows,
-    window: &WindowId,
-) -> Option<(&'a mut dyn WinHandler, TextInputCell)> {
+fn handler<'a>(windows: &'a mut Windows, window: &WindowId) -> Option<TextFieldDetails<'a>> {
     let window = &mut *windows.get_mut(&window)?;
     todo!()
 }

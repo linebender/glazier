@@ -18,7 +18,6 @@ use std::os::raw::c_void;
 use std::rc::{Rc, Weak};
 use std::sync::mpsc::{self, Sender};
 
-use keyboard_types::KeyState;
 use raw_window_handle::{
     HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
     WaylandDisplayHandle, WaylandWindowHandle,
@@ -38,7 +37,7 @@ use tracing;
 use wayland_backend::client::ObjectId;
 
 use super::application::{self};
-use super::input::{input_state, SeatInfo, SeatName, TextFieldChange, TextFieldChangeCause};
+use super::input::{input_state, SeatName, TextFieldChange, TextFieldChangeCause};
 use super::menu::Menu;
 use super::{ActiveAction, IdleAction, WaylandState};
 
@@ -697,28 +696,6 @@ impl WaylandWindowState {
         self.handler.paint(&region);
     }
 
-    pub(super) fn handle_key_event_full(
-        &mut self,
-        seat: &mut SeatInfo,
-        scancode: u32,
-        key_state: KeyState,
-        // Note that we repeat scancodes instead of Keys, to allow
-        // aaaAAAAAaaa to all be a single 'A' press. The correct behaviour here isn't clear
-        is_repeat: bool,
-        // TODO: Make WindowId a u64 wrapper, so we can just pass it around
-        my_id: &WindowId,
-    ) {
-        let field_token = self.get_text_field();
-        seat.handle_key_event(
-            scancode,
-            key_state,
-            is_repeat,
-            field_token,
-            &mut *self.handler,
-            my_id,
-        );
-    }
-
     pub(super) fn set_input_seat(&mut self, seat: SeatName) {
         assert!(self.text_input_seat.is_none());
         self.text_input_seat = Some(seat);
@@ -792,7 +769,9 @@ impl CompositorHandler for WaylandState {
         surface: &protocol::wl_surface::WlSurface,
         _time: u32,
     ) {
-        let Some(window) = self.windows.get_mut(&WindowId::of_surface(surface)) else { return };
+        let Some(window) = self.windows.get_mut(&WindowId::of_surface(surface)) else {
+            return;
+        };
         window.do_paint(false, PaintContext::Frame);
     }
 }
@@ -804,7 +783,9 @@ impl WindowHandler for WaylandState {
         _: &QueueHandle<Self>,
         wl_window: &smithay_client_toolkit::shell::xdg::window::Window,
     ) {
-        let Some(window)= self.windows.get_mut(&WindowId::new(wl_window)) else { return };
+        let Some(window) = self.windows.get_mut(&WindowId::new(wl_window)) else {
+            return;
+        };
         window.handler.request_close();
     }
 
@@ -852,7 +833,9 @@ impl WindowAction {
     pub(super) fn run(self, state: &mut WaylandState, window_id: WindowId) {
         match self {
             WindowAction::ResizeRequested => {
-                let Some(window) = state.windows.get_mut(&window_id) else { return };
+                let Some(window) = state.windows.get_mut(&window_id) else {
+                    return;
+                };
                 let size = {
                     let mut props = window.properties.borrow_mut();
                     props.calculate_size()
@@ -882,14 +865,18 @@ impl WindowAction {
                 ));
             }
             WindowAction::AnimationRequested => {
-                let Some(window) = state.windows.get_mut(&window_id) else { return };
+                let Some(window) = state.windows.get_mut(&window_id) else {
+                    return;
+                };
                 window.do_paint(false, PaintContext::Requested);
             }
             WindowAction::TextField(change) => {
                 let Some(props) = state.windows.get_mut(&window_id) else {
                     return;
                 };
-                let Some(seat) = props.text_input_seat else {return;};
+                let Some(seat) = props.text_input_seat else {
+                    return;
+                };
                 change.apply(
                     input_state(&mut state.input_states, seat),
                     &mut *props.handler,
