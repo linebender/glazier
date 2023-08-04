@@ -13,7 +13,7 @@
 
 #![allow(clippy::single_match)]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::os::raw::c_void;
 use std::rc::{Rc, Weak};
 use std::sync::mpsc::{self, Sender};
@@ -37,11 +37,12 @@ use tracing;
 use wayland_backend::client::ObjectId;
 
 use super::application::{self};
-use super::input::{input_state, SeatName, TextFieldChange, TextFieldChangeCause};
+use super::input::{
+    input_state, SeatName, TextFieldChange, TextInputCell, TextInputProperties, WeakTextInputCell,
+};
 use super::menu::Menu;
 use super::{ActiveAction, IdleAction, WaylandState};
 
-use crate::text::InputHandler;
 use crate::{
     dialog::FileDialogOptions,
     error::Error as ShellError,
@@ -59,6 +60,7 @@ pub struct WindowHandle {
     idle_sender: Sender<IdleAction>,
     loop_sender: channel::Sender<ActiveAction>,
     properties: Weak<RefCell<WindowProperties>>,
+    text: WeakTextInputCell,
     // Safety: Points to a wl_display instance
     raw_display_handle: Option<*mut c_void>,
 }
@@ -201,33 +203,45 @@ impl WindowHandle {
     }
 
     pub fn remove_text_field(&self, token: TextFieldToken) {
-        let props = self.properties();
-        let mut props = props.borrow_mut();
+        let props_cell = self.text.upgrade().unwrap();
+        let mut props = props_cell.get();
+        let mut updated = false;
         if props.active_text_field.is_some_and(|it| it == token) {
-            props.text_field_valid = false;
-            drop(props);
-            self.defer(WindowAction::TextField(TextFieldChange::Changed {
-                // The text field no longer exists, so it isn't meaningful to say we moved from it
-                to: None,
-            }));
+            props.active_text_field = None;
+            updated = true;
+        }
+        if props.next_text_field.is_some_and(|it| it == token) {
+            props.next_text_field = None;
+            updated = true;
+        }
+
+        if updated {
+            props_cell.set(props);
+
+            self.defer(WindowAction::TextField(TextFieldChange));
         }
     }
 
     pub fn set_focused_text_field(&self, active_field: Option<TextFieldToken>) {
-        let props = self.properties();
-        let props = props.borrow();
-        let from = props.active_text_field;
-        self.defer(WindowAction::TextField(TextFieldChange::Changed {
-            to: active_field,
-        }));
+        let props_cell = self.text.upgrade().unwrap();
+        let mut props = props_cell.get();
+        props.next_text_field = active_field;
+        props_cell.set(props);
+
+        self.defer(WindowAction::TextField(TextFieldChange));
     }
 
     pub fn update_text_field(&self, token: TextFieldToken, update: Event) {
-        self.defer(WindowAction::TextField(TextFieldChange::Updated(
-            token,
-            update,
-            TextFieldChangeCause::Application,
-        )));
+        let props_cell = self.text.upgrade().unwrap();
+        let mut props = props_cell.get();
+        if props.active_text_field.is_some_and(|it| it == token) {
+            match update {
+                Event::LayoutChanged => props.active_text_layout_changed = true,
+                Event::SelectionChanged | Event::Reset => props.active_text_field_updated = true,
+            }
+            props_cell.set(props);
+            self.defer(WindowAction::TextField(TextFieldChange));
+        }
     }
 
     pub fn request_timer(&self, _deadline: std::time::Instant) -> TimerToken {
@@ -310,6 +324,7 @@ impl Default for WindowHandle {
             raw_display_handle: None,
             idle_sender,
             loop_sender,
+            text: Weak::default(),
         }
     }
 }
@@ -514,16 +529,22 @@ impl WindowBuilder {
             will_repaint: false,
             pending_frame_callback: false,
             configured: false,
-            active_text_field: None,
         };
         let properties_strong = Rc::new(RefCell::new(properties));
 
         let properties = Rc::downgrade(&properties_strong);
+        let text = Rc::new(Cell::new(TextInputProperties {
+            active_text_field: None,
+            next_text_field: None,
+            active_text_field_updated: false,
+            active_text_layout_changed: false,
+        }));
         let handle = WindowHandle {
             idle_sender: self.idle_sender,
             loop_sender: self.loop_sender.clone(),
             raw_display_handle: Some(self.raw_display_handle),
             properties,
+            text: Rc::downgrade(&text),
         };
         // TODO: When should Window::commit be called? This feels fragile
         self.loop_sender
@@ -534,6 +555,7 @@ impl WindowBuilder {
                         handler: self.handler.unwrap(),
                         properties: properties_strong,
                         text_input_seat: None,
+                        text,
                     },
                     handle.clone(),
                 ),
@@ -564,6 +586,7 @@ pub(super) struct WaylandWindowState {
     // TODO: This refcell is too strong - most of the fields can just be Cells
     properties: Rc<RefCell<WindowProperties>>,
     text_input_seat: Option<SeatName>,
+    pub text: TextInputCell,
 }
 
 struct WindowProperties {
@@ -595,11 +618,6 @@ struct WindowProperties {
     pending_frame_callback: bool,
     // We can't draw before being configured
     configured: bool,
-
-    /// The text field which is currently *being* edited
-    active_text_field: Option<TextFieldToken>,
-
-    text_field_valid: bool,
 }
 
 impl WindowProperties {
@@ -703,27 +721,6 @@ impl WaylandWindowState {
     pub(super) fn remove_input_seat(&mut self, seat: SeatName) {
         assert_eq!(self.text_input_seat, Some(seat));
         self.text_input_seat = None;
-    }
-    pub(super) fn get_text_field(&mut self) -> Option<TextFieldToken> {
-        let props = self.properties.borrow();
-        props.active_text_field
-    }
-
-    pub(super) fn get_input_lock(
-        &mut self,
-        mutable: bool,
-    ) -> Option<(Box<dyn InputHandler + 'static>, TextFieldToken)> {
-        let focused_field = {
-            let props = self.properties.borrow();
-            props.active_text_field?
-        };
-        Some((
-            self.handler.acquire_input_lock(focused_field, mutable),
-            focused_field,
-        ))
-    }
-    pub(super) fn release_input_lock(&mut self, token: TextFieldToken) {
-        self.handler.release_input_lock(token)
     }
 }
 
@@ -879,7 +876,7 @@ impl WindowAction {
                 };
                 change.apply(
                     input_state(&mut state.input_states, seat),
-                    &mut *props.handler,
+                    &mut state.windows,
                     &window_id,
                 );
             }

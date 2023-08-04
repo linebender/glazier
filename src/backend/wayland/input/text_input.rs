@@ -7,7 +7,7 @@ use smithay_client_toolkit::reexports::{
 };
 
 use crate::{
-    backend::wayland::{input::TextFieldChange, window::WindowId, WaylandState},
+    backend::wayland::{window::WindowId, WaylandState},
     text::{Affinity, InputHandler, Selection},
     TextFieldToken,
 };
@@ -35,7 +35,7 @@ pub(super) struct InputState {
     /// active
     new_cursor_begin: i32,
     new_cursor_end: i32,
-    state_might_have_changed: bool,
+    needs_to_own_preedit: bool,
 
     // The bookkeeping state
     /// Used for sanity checking - the token we believe we're operating on,
@@ -70,7 +70,7 @@ impl InputState {
             preedit_string: None,
             new_cursor_begin: 0,
             new_cursor_end: 0,
-            state_might_have_changed: false,
+            needs_to_own_preedit: false,
 
             buffer_start: None,
             token: None,
@@ -257,15 +257,15 @@ impl InputState {
     }
 
     fn done(&mut self, handler: &mut dyn InputHandler) -> bool {
-        let mut made_change = false;
         //  The application must proceed by evaluating the changes in the following order:
         let pre_edit_range = handler.composition_range();
         let mut selection = handler.selection();
+        let mut has_preedit = false;
         // 1. Replace existing preedit string with the cursor.
         if let Some(range) = pre_edit_range {
             selection.active = range.start;
             selection.anchor = range.start;
-            made_change = true;
+
             handler.replace_range(range, "");
         }
         // 2. Delete requested surrounding text.
@@ -280,11 +280,9 @@ impl InputState {
             selection.active = delete_range.start;
 
             handler.replace_range(delete_range, "");
-            made_change = true;
         }
         // 3. Insert commit string with the cursor at its end.
         if let Some(commit) = self.commit_string.take() {
-            made_change = true;
             handler.replace_range(selection.range(), &commit);
             selection = handler.selection();
         }
@@ -292,7 +290,6 @@ impl InputState {
         // We skip this step, because we compute it in sync_state.
         // 5. Insert new preedit text in cursor position.
         if let Some(preedit) = self.preedit_string.take() {
-            made_change = true;
             let range = selection.range();
 
             let selection_start = range.start;
@@ -304,6 +301,7 @@ impl InputState {
                 (selection_start + self.new_cursor_begin) as usize,
                 (selection_start + self.new_cursor_end) as usize,
             ));
+            has_preedit = true;
         } else {
             handler.set_composition_range(None);
         }
@@ -311,7 +309,7 @@ impl InputState {
         // TODO: Confirm this affinity
         let active_line = handler.line_range(selection.active, Affinity::Upstream);
         self.sync_cursor_line(handler, active_line);
-        made_change
+        has_preedit
     }
 }
 
@@ -347,7 +345,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 let seat = input_state(&mut state.input_states, data.0);
                 seat.window_focus_enter(&mut state.windows, window_id);
             }
-            zwp_text_input_v3::Event::Leave { surface } => {
+            zwp_text_input_v3::Event::Leave { .. } => {
                 let seat = input_state(&mut state.input_states, data.0);
                 seat.window_focus_leave(&mut state.windows);
             }
@@ -360,6 +358,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 input_state.preedit_string = text;
                 input_state.new_cursor_begin = cursor_begin;
                 input_state.new_cursor_end = cursor_end;
+                input_state.needs_to_own_preedit = true;
             }
             zwp_text_input_v3::Event::CommitString { text } => {
                 if text.is_none() {
@@ -367,7 +366,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 }
                 let input_state = state.text_input(data);
                 input_state.commit_string = text;
-                input_state.state_might_have_changed = true;
+                input_state.needs_to_own_preedit = true;
             }
             zwp_text_input_v3::Event::DeleteSurroundingText {
                 after_length,
@@ -376,47 +375,24 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 let input_state = state.text_input(data);
                 input_state.delete_surrounding_after = after_length;
                 input_state.delete_surrounding_before = before_length;
-                input_state.state_might_have_changed = true;
+                input_state.needs_to_own_preedit = true;
             }
             zwp_text_input_v3::Event::Done { serial } => {
                 let input_state = input_state(&mut state.input_states, data.0);
                 let text_input = input_state.input_state.as_mut().unwrap();
-                if text_input.state_might_have_changed {
-                    // We need an input lock from input_state - call force_remove_preedit
-                    // TODO: Something here isn't right - force_remove_preedit invalidates the preedit text
-                }
-                let window_id = text_input.active_window.clone().unwrap();
-                let Some(win) = state.windows.get_mut(&window_id) else {
-                    return;
-                };
-                let input_lock = win.get_input_lock(true);
-                if let Some((mut handler, token)) = input_lock {
-                    if Some(token) == text_input.token {
-                        let changed_input = text_input.done(&mut *handler);
-                        if serial == text_input.commit_count && text_input.state_might_have_changed
-                        {
-                            text_input.sync_state(
-                                &mut *handler,
-                                zwp_text_input_v3::ChangeCause::InputMethod,
-                            );
-                            text_input.state_might_have_changed = false;
+                if text_input.needs_to_own_preedit {
+                    // We need an input lock from input_state - call force_remove_preedit if the owner is conflicting
+                    // TODO: Something here isn't right - force_remove_preedit might change the content of the field
+                    // if it cancels a composition, which means that the IME input isn't what you want
+                    text_input.needs_to_own_preedit = false;
+                    input_state.prepare_for_ime(&mut state.windows, |this, mut ime| {
+                        let res = this.done(&mut *ime);
+                        if serial == this.commit_count {
+                            this.sync_state(&mut *ime, zwp_text_input_v3::ChangeCause::InputMethod);
+                            this.needs_to_own_preedit = false;
                         }
-                        win.release_input_lock(token);
-                        if changed_input {
-                            TextFieldChange::Updated(
-                                token,
-                                crate::text::Event::Reset,
-                                crate::backend::wayland::input::TextFieldChangeCause::TextInput,
-                            )
-                            .apply(
-                                input_state,
-                                &mut *win.handler,
-                                &window_id,
-                            );
-                        }
-                    } else {
-                        win.release_input_lock(token);
-                    }
+                        res
+                    });
                 }
             }
             _ => todo!(),
