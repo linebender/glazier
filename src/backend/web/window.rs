@@ -24,7 +24,10 @@ use tracing::{error, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, WebWindowHandle};
+use raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle, WebDisplayHandle,
+    WebWindowHandle,
+};
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 
@@ -91,6 +94,12 @@ impl PartialEq for WindowHandle {
     }
 }
 impl Eq for WindowHandle {}
+
+unsafe impl HasRawDisplayHandle for WindowHandle {
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        RawDisplayHandle::Web(WebDisplayHandle::empty())
+    }
+}
 
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
