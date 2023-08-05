@@ -20,7 +20,7 @@ use std::convert::TryInto;
 use std::mem;
 use std::ops::RangeInclusive;
 
-use crate::keyboard::{Code, KbKey, KeyEvent, KeyState, Location, Modifiers};
+use crate::keyboard::{Code, KbKey, KeyEvent, KeyState, Location, Modifiers, ModifiersExt};
 
 use winapi::shared::minwindef::{HKL, INT, LPARAM, UINT, WPARAM};
 use winapi::shared::ntdef::SHORT;

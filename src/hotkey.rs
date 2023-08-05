@@ -18,7 +18,7 @@ use std::borrow::Borrow;
 
 use tracing::warn;
 
-use crate::{IntoKey, KbKey, KeyEvent, Modifiers};
+use crate::keyboard::{IntoKey, KbKey, KeyEvent, Modifiers, ModifiersExt};
 
 // TODO: fix docstring
 
