@@ -316,6 +316,7 @@ impl WinHandler for WindowState {
     fn release_input_lock(&mut self, _token: TextFieldToken) {
         // no action required; this example is simple enough that this
         // state is not actually shared.
+        eprintln!("{:?}", &self.document.borrow().text)
     }
 
     fn key_down(&mut self, event: KeyEvent) -> bool {
