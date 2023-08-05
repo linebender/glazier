@@ -153,7 +153,7 @@ impl SeatInfo {
 
     fn window_focus_leave(&mut self, windows: &mut Windows) {
         if let Some(old_focus) = self.keyboard_focused.as_ref() {
-            let window = windows.get_mut(&old_focus);
+            let window = windows.get_mut(old_focus);
             if let Some(window) = window {
                 window.remove_input_seat(self.id);
                 let TextFieldDetails(handler, props) = window_handler(window);
@@ -231,23 +231,21 @@ impl SeatInfo {
                 }
                 // We need to continue the loop here, because the application may have changed the focused field
                 // (although this seems rather unlikely)
-            } else {
-                if props.active_text_layout_changed {
-                    props.active_text_layout_changed = false;
-                    if let Some(field) = props.active_text_field {
-                        if should_update_text_input {
-                            if let Some(input_state) = self.input_state.as_mut() {
-                                let mut ime = handler.acquire_input_lock(field, false);
-                                input_state.sync_cursor_rectangle(&mut *ime);
-                                handler.release_input_lock(field);
-                                props = props_cell.get();
-                            }
+            } else if props.active_text_layout_changed {
+                props.active_text_layout_changed = false;
+                if let Some(field) = props.active_text_field {
+                    if should_update_text_input {
+                        if let Some(input_state) = self.input_state.as_mut() {
+                            let mut ime = handler.acquire_input_lock(field, false);
+                            input_state.sync_cursor_rectangle(&mut *ime);
+                            handler.release_input_lock(field);
+                            props = props_cell.get();
                         }
                     }
-                } else {
-                    // If there were no other updates from the application, then we can finish the loop
-                    break;
                 }
+            } else {
+                // If there were no other updates from the application, then we can finish the loop
+                break;
             }
         }
     }
@@ -471,11 +469,11 @@ struct TextFieldDetails<'a>(&'a mut dyn WinHandler, TextInputCell);
 
 /// Get the text input information for the given window
 fn handler<'a>(windows: &'a mut Windows, window: &WindowId) -> Option<TextFieldDetails<'a>> {
-    let window = &mut *windows.get_mut(&window)?;
+    let window = &mut *windows.get_mut(window)?;
     Some(window_handler(window))
 }
 
-fn window_handler<'a>(window: &'a mut WaylandWindowState) -> TextFieldDetails<'a> {
+fn window_handler(window: &mut WaylandWindowState) -> TextFieldDetails {
     TextFieldDetails(&mut *window.handler, window.text.clone())
 }
 
