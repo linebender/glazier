@@ -88,33 +88,33 @@ jobs:
       - name: cargo test glazier
         run: cargo test --features wayland --no-default-features
 
-#  test-stable-wasm:
-#    runs-on: macOS-latest
-#    name: cargo test (wasm32)
-#    steps:
-#      - uses: actions/checkout@v3
-#
-#      - name: install wasm-pack
-#        uses: jetli/wasm-pack-action@v0.3.0
-#        with:
-#          version: latest
-#
-#      - name: install stable toolchain
-#        uses: dtolnay/rust-toolchain@master
-#        with:
-#          toolchain: ${{ env.RUST_STABLE_VER }}
-#          targets: wasm32-unknown-unknown
-#          components: clippy
-#
-#      - name: restore cache
-#        uses: Swatinem/rust-cache@v2
-#
-#      - name: cargo clippy glazier (wasm)
-#        run: cargo clippy --all-targets --target wasm32-unknown-unknown -- -D warnings
-#
-#      # TODO: Find a way to make tests work. Until then the tests are merely compiled.
-#      - name: cargo test compile glazier
-#        run: cargo test --no-run --target wasm32-unknown-unknown
+  test-stable-wasm:
+    runs-on: ubuntu-latest
+    name: cargo test (wasm32)
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: install wasm-pack
+        uses: jetli/wasm-pack-action@v0.3.0
+        with:
+          version: latest
+
+      - name: install stable toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_STABLE_VER }}
+          targets: wasm32-unknown-unknown
+          components: clippy
+
+      - name: restore cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo clippy glazier (wasm)
+        run: cargo clippy --all-targets --target wasm32-unknown-unknown -- -D warnings
+
+      # TODO: Find a way to make tests work. Until then the tests are merely compiled.
+      - name: cargo test compile glazier
+        run: cargo test --no-run --target wasm32-unknown-unknown
 
   doctest-stable:
     runs-on: macOS-latest
