@@ -210,25 +210,26 @@ impl WindowBuilder {
         let id = conn.generate_id()?;
         let setup = conn.setup();
 
-        let env_dpi = std::env::var("DRUID_X11_DPI")
+        let scale_override = std::env::var("GLAZIER_OVERRIDE_SCALE")
             .ok()
             .map(|x| x.parse::<f64>());
 
-        let scale = match env_dpi.or_else(|| self.app.rdb.get_value("Xft.dpi", "").transpose()) {
-            Some(Ok(dpi)) => {
-                let scale = dpi / 96.;
-                Scale::new(scale, scale)
-            }
-            None => Scale::default(),
-            Some(Err(err)) => {
-                let default = Scale::default();
-                warn!(
-                    "Unable to parse dpi: {:?}, defaulting to {:?}",
-                    err, default
-                );
-                default
-            }
-        };
+        let scale =
+            match scale_override.or_else(|| self.app.rdb.get_value("Xft.dpi", "").transpose()) {
+                Some(Ok(dpi)) => {
+                    let scale = dpi / 96.;
+                    Scale::new(scale, scale)
+                }
+                None => Scale::default(),
+                Some(Err(err)) => {
+                    let default = Scale::default();
+                    warn!(
+                        "Unable to parse dpi: {:?}, defaulting to {:?}",
+                        err, default
+                    );
+                    default
+                }
+            };
 
         let size_px = self.size.to_px(scale);
         let screen = setup
