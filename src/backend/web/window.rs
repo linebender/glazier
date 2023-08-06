@@ -31,7 +31,7 @@ use raw_window_handle::{
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 
-use crate::piet::{PietText, RenderContext};
+use crate::piet::RenderContext;
 
 use super::application::Application;
 use super::error::Error;
