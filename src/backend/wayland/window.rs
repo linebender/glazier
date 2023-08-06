@@ -271,8 +271,10 @@ impl WindowHandle {
         tracing::warn!("show_context_menu not implement for wayland");
     }
 
-    pub fn set_title(&self, _title: impl Into<String>) {
-        todo!()
+    pub fn set_title(&self, title: &str) {
+        let props = self.properties();
+        let props = props.borrow();
+        props.wayland_window.set_title(title)
     }
 
     #[cfg(feature = "accesskit")]
