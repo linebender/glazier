@@ -44,6 +44,7 @@ fn main() {
     let window = glazier::WindowBuilder::new(app.clone())
         .resizable(true)
         .size((WIDTH as f64 / 2., HEIGHT as f64 / 2.).into())
+        .title("Edit Text - Glazier Example")
         .handler(Box::new(WindowState::new()))
         .build()
         .unwrap();
