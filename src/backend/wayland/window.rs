@@ -86,7 +86,7 @@ impl WindowHandle {
         tracing::debug!("show initiated");
         let props = self.properties();
         let props = props.borrow();
-        // TODO: Is this valid? Do we instead need to
+        // TODO: Is this valid?
         props.wayland_window.commit();
     }
 
@@ -583,6 +583,8 @@ impl WindowId {
 
 /// The state associated with each window, stored in [`WaylandState`]
 pub(super) struct WaylandWindowState {
+    // Drop the window handler before the properties
+    // This helps to make it feasible for surfaces to be dropped before their
     pub handler: Box<dyn WinHandler>,
     // TODO: This refcell is too strong - most of the fields can just be Cells
     properties: Rc<RefCell<WindowProperties>>,
@@ -846,10 +848,16 @@ impl WindowAction {
             }
             WindowAction::Close => {
                 // Remove the window from tracking
-                let Some(_) = state.windows.remove(&window_id) else {
+                {
+                    let Some(win) = state.windows.remove(&window_id) else {
                     tracing::error!("Tried to close the same window twice");
                     return;
-                };
+                    };
+                    if let Some(seat) = win.text_input_seat {
+                        let seat = input_state(&mut state.input_states, seat);
+                        seat.window_deleted(&mut state.windows);
+                    }
+                }
                 // We will drop the proper wayland window later when we Drop window.props
                 if state.windows.is_empty() {
                     state.loop_signal.stop();

@@ -69,6 +69,10 @@ type IdleCallback = Box<dyn FnOnce(&mut WaylandState) + Send>;
 /// wayland events
 // All fields are public, as this type is *not* exported above this module
 struct WaylandState {
+    // Drop the handler as early as possible, in case there are any Wgpu surfaces owned by it
+    pub handler: Option<Box<dyn AppHandler>>,
+    pub windows: HashMap<WindowId, WaylandWindowState>,
+
     pub registry_state: RegistryState,
 
     pub output_state: OutputState,
@@ -80,7 +84,6 @@ struct WaylandState {
     pub wayland_queue: QueueHandle<Self>,
 
     pub event_loop: Option<EventLoop<'static, Self>>,
-    pub handler: Option<Box<dyn AppHandler>>,
     pub idle_actions: Receiver<IdleAction>,
     // TODO: Should we keep this around here?
     pub _idle_sender: Sender<IdleAction>,
@@ -90,8 +93,6 @@ struct WaylandState {
 
     // TODO: Should we keep this around here?
     pub _loop_sender: channel::Sender<ActiveAction>,
-
-    pub windows: HashMap<WindowId, WaylandWindowState>,
 
     pub seats: SeatState,
     pub input_states: Vec<SeatInfo>,

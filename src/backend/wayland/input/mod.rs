@@ -146,17 +146,24 @@ impl SeatInfo {
             };
             window.set_input_seat(self.id);
             let mut handler = window_handler(window);
+            handler.0.got_focus();
             self.keyboard_focused = Some(new_window);
             self.update_active_text_input(&mut handler, true, true);
         }
     }
 
+    // Called once the window has been deleted
+    pub(super) fn window_deleted(&mut self, windows: &mut Windows) {
+        self.window_focus_leave(windows)
+    }
+
     fn window_focus_leave(&mut self, windows: &mut Windows) {
-        if let Some(old_focus) = self.keyboard_focused.as_ref() {
-            let window = windows.get_mut(old_focus);
+        if let Some(old_focus) = self.keyboard_focused.take() {
+            let window = windows.get_mut(&old_focus);
             if let Some(window) = window {
                 window.remove_input_seat(self.id);
                 let TextFieldDetails(handler, props) = window_handler(window);
+                handler.lost_focus();
                 let props = props.get();
                 self.force_release_preedit(props.active_text_field.map(|it| FutureInputLock {
                     handler,
@@ -168,7 +175,6 @@ impl SeatInfo {
                 // However, we need to update our state
                 self.force_release_preedit(None);
             }
-            self.keyboard_focused = None;
         }
     }
 

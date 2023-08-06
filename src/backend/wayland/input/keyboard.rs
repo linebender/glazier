@@ -167,6 +167,11 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
             wl_keyboard::Event::Leave { .. } => {
                 let seat = input_state(&mut state.input_states, data.0);
                 seat.window_focus_leave(&mut state.windows);
+                if let Some(keyboard_state) = seat.keyboard_state.as_mut() {
+                    if let Some((token, _)) = keyboard_state.repeat_details.take() {
+                        state.loop_handle.remove(token);
+                    }
+                }
             }
             wl_keyboard::Event::Modifiers {
                 serial: _,
@@ -234,7 +239,8 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                     let delay: u32 = delay
                         .try_into()
                         .expect("Negative delay is invalid in wayland protocol");
-                    // The new rate is instantly recorded, as the
+                    // The new rate is instantly recorded, as the running repeat (if there is one)
+                    // will pick this up
                     keyboard.repeat_settings = RepeatInfo::Repeat {
                         // We confirmed non-zero and positive above
                         rate: Duration::from_secs_f64(1f64 / rate as f64),
