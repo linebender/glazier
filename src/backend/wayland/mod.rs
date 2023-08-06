@@ -25,7 +25,7 @@ use smithay_client_toolkit::{
     delegate_registry,
     output::OutputState,
     reexports::{
-        calloop::{channel, EventLoop, LoopSignal},
+        calloop::{channel, EventLoop, LoopHandle, LoopSignal},
         client::QueueHandle,
         protocols::wp::text_input::zv3::client::zwp_text_input_manager_v3::ZwpTextInputManagerV3,
     },
@@ -85,6 +85,8 @@ struct WaylandState {
     // TODO: Should we keep this around here?
     pub _idle_sender: Sender<IdleAction>,
     pub loop_signal: LoopSignal,
+    // Used for timers and keyboard repeating - not yet implemented
+    loop_handle: LoopHandle<'static, WaylandState>,
 
     // TODO: Should we keep this around here?
     pub _loop_sender: channel::Sender<ActiveAction>,

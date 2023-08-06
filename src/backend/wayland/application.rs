@@ -26,7 +26,7 @@ use smithay_client_toolkit::{
     compositor::CompositorState,
     output::OutputState,
     reexports::{
-        calloop::{channel, EventLoop, LoopHandle, LoopSignal},
+        calloop::{channel, EventLoop, LoopSignal},
         client::{
             globals::{registry_queue_init, BindError},
             protocol::wl_compositor,
@@ -56,9 +56,6 @@ pub struct Application {
     pub(super) compositor: wl_compositor::WlCompositor,
     pub(super) wayland_queue: QueueHandle<WaylandState>,
     pub(super) xdg_shell: Weak<XdgShell>,
-    // Used for timers and keyboard repeating - not yet implemented
-    #[allow(unused)]
-    loop_handle: LoopHandle<'static, WaylandState>,
     loop_signal: LoopSignal,
     pub(super) idle_sender: Sender<IdleAction>,
     pub(super) loop_sender: channel::Sender<ActiveAction>,
@@ -129,13 +126,13 @@ impl Application {
             seats: SeatState::new(&globals, &qh),
             xkb_context: Context::new(),
             text_input: text_input_global,
+            loop_handle,
         };
         state.initial_seats();
         Ok(Application {
             state: Rc::new(RefCell::new(Some(state))),
             compositor,
             wayland_queue: qh,
-            loop_handle,
             loop_signal,
             idle_sender,
             loop_sender,

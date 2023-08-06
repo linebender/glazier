@@ -1,4 +1,4 @@
-use std::{num::NonZeroU32, os::fd::AsRawFd};
+use std::os::fd::AsRawFd;
 
 use crate::backend::{
     shared::xkb::{ActiveModifiers, KeyEventsState, Keymap},
@@ -6,9 +6,13 @@ use crate::backend::{
 };
 
 use super::{input_state, SeatInfo, SeatName, WaylandState};
+use instant::Duration;
 use keyboard_types::KeyState;
 use smithay_client_toolkit::reexports::{
-    calloop::RegistrationToken,
+    calloop::{
+        timer::{TimeoutAction, Timer},
+        RegistrationToken,
+    },
     client::{
         protocol::{
             wl_keyboard::{self, KeymapFormat},
@@ -27,8 +31,8 @@ mod mmap;
 pub enum RepeatInfo {
     /// Keys will be repeated at the specified rate and delay.
     Repeat {
-        /// The number of repetitions per second that should occur.
-        rate: NonZeroU32,
+        /// The time between each repetition
+        rate: Duration,
 
         /// Delay (in milliseconds) between a key press and the start of repetition.
         delay: u32,
@@ -46,7 +50,8 @@ pub(super) struct KeyboardState {
     keyboard: wl_keyboard::WlKeyboard,
 
     repeat_settings: RepeatInfo,
-    _repeat_token: Option<RegistrationToken>,
+    // The token, and scancode which is currently being repeated
+    repeat_details: Option<(RegistrationToken, u32)>,
 }
 
 impl KeyboardState {
@@ -59,7 +64,7 @@ impl KeyboardState {
             xkb_state: None,
             keyboard: seat.get_keyboard(qh, KeyboardUserData(name)),
             repeat_settings: RepeatInfo::Disable,
-            _repeat_token: None,
+            repeat_details: None,
         }
     }
 }
@@ -192,20 +197,10 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                 state: key_state,
             } => {
                 // Need to add 8 as per wayland spec
-                // TODO: Point to canonical link here
+                // See https://wayland.app/protocols/wayland#wl_keyboard:enum:keymap_format:entry:xkb_v1
                 let scancode = key + 8;
 
                 let seat = input_state(&mut state.input_states, data.0);
-                let key_repeats = {
-                    let (_, xkb_keymap) = seat
-                        .keyboard_state
-                        .as_mut()
-                        .unwrap()
-                        .xkb_state
-                        .as_mut()
-                        .unwrap();
-                    xkb_keymap.repeats(scancode)
-                };
 
                 let key_state = match key_state {
                     WEnum::Value(wl_keyboard::KeyState::Pressed) => KeyState::Down,
@@ -215,17 +210,19 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                 };
 
                 seat.handle_key_event(scancode, key_state, false, &mut state.windows);
-                // Handle repeating
-                match &key_state {
-                    KeyState::Down => {
-                        if key_repeats {
-                            // Start repeating. Exact choice of repeating behaviour varies - see
-                            // discussion in #glazier > Key Repeat Behaviour
-                        }
+                let keyboard_info = seat.keyboard_state.as_mut().unwrap();
+                match keyboard_info.repeat_settings {
+                    RepeatInfo::Repeat { delay, .. } => {
+                        handle_repeat(
+                            key_state,
+                            keyboard_info,
+                            scancode,
+                            &mut state.loop_handle,
+                            delay,
+                            data,
+                        );
                     }
-                    KeyState::Up => {
-                        // Stop repeating
-                    }
+                    RepeatInfo::Disable => {}
                 }
             }
             wl_keyboard::Event::RepeatInfo { rate, delay } => {
@@ -237,14 +234,73 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
                     let delay: u32 = delay
                         .try_into()
                         .expect("Negative delay is invalid in wayland protocol");
+                    // The new rate is instantly recorded, as the
                     keyboard.repeat_settings = RepeatInfo::Repeat {
-                        // We confirmed non-zero above
-                        rate: rate.try_into().unwrap(),
+                        // We confirmed non-zero and positive above
+                        rate: Duration::from_secs_f64(1f64 / rate as f64),
                         delay,
+                    }
+                } else {
+                    keyboard.repeat_settings = RepeatInfo::Disable;
+                    if let Some((token, _)) = keyboard.repeat_details {
+                        state.loop_handle.remove(token);
                     }
                 }
             }
             _ => todo!(),
+        }
+    }
+}
+
+fn handle_repeat(
+    key_state: KeyState,
+    keyboard_info: &mut KeyboardState,
+    scancode: u32,
+    loop_handle: &mut smithay_client_toolkit::reexports::calloop::LoopHandle<'_, WaylandState>,
+    delay: u32,
+    data: &KeyboardUserData,
+) {
+    match &key_state {
+        KeyState::Down => {
+            let (_, xkb_keymap) = keyboard_info.xkb_state.as_mut().unwrap();
+            if xkb_keymap.repeats(scancode) {
+                // Start repeating. Exact choice of repeating behaviour varies - see
+                // discussion in [#glazier > Key Repeat Behaviour](https://xi.zulipchat.com/#narrow/stream/351333-glazier/topic/Key.20repeat.20behaviour)
+                // We currently choose to repeat based on scancode - this is the behaviour of Chromium apps
+                if let Some((existing, _)) = keyboard_info.repeat_details.take() {
+                    loop_handle.remove(existing);
+                }
+                // Ideally, we'd produce the deadline based on the `time` parameter
+                // However, it's not clear how to convert that into a Rust instant - it has "undefined base"
+                let timer = Timer::from_duration(Duration::from_millis(delay.into()));
+                let seat = data.0;
+                let token = loop_handle.insert_source(timer, move |deadline, _, state| {
+                    let seat = input_state(&mut state.input_states, seat);
+                    seat.handle_key_event(
+                        scancode,
+                        KeyState::Down,
+                        true,
+                        &mut state.windows,
+                    );
+                    let keyboard_info = seat.keyboard_state.as_mut().unwrap();
+                    let RepeatInfo::Repeat { rate, .. } = keyboard_info.repeat_settings else {
+                        tracing::error!("During repeat, found that repeating was disabled. Calloop Timer didn't unregister in time (?)");
+                        return TimeoutAction::Drop;
+                    };
+                    // We use the instant of the deadline + rate rather than a Instant::now to ensure consistency, 
+                    // even with a really inaccurate implementation of timers
+                    TimeoutAction::ToInstant(deadline + rate)
+                }).expect("Can insert into loop");
+                keyboard_info.repeat_details = Some((token, scancode));
+            }
+        }
+        KeyState::Up => {
+            if let Some((token, old_code)) = keyboard_info.repeat_details {
+                if old_code == scancode {
+                    keyboard_info.repeat_details.take();
+                    loop_handle.remove(token);
+                }
+            }
         }
     }
 }
