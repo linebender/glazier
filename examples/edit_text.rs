@@ -18,13 +18,10 @@ use unicode_segmentation::GraphemeCursor;
 use vello::util::{RenderContext, RenderSurface};
 use vello::Renderer;
 use vello::{
-    glyph::{
-        pinot::{types::Tag, FontRef},
-        GlyphContext,
-    },
+    glyph::{fello::raw::FontRef, GlyphContext},
     kurbo::{Affine, Point, Rect},
     peniko::{Brush, Color, Fill},
-    Scene, SceneBuilder,
+    RenderParams, RendererOptions, Scene, SceneBuilder,
 };
 
 const WIDTH: usize = 2048;
@@ -159,11 +156,10 @@ impl WindowState {
     fn render(&mut self) {
         let (width, height) = self.surface_size();
         if self.surface.is_none() {
-            self.surface = Some(pollster::block_on(self.render.create_surface(
-                &self.handle,
-                width,
-                height,
-            )));
+            self.surface = Some(
+                pollster::block_on(self.render.create_surface(&self.handle, width, height))
+                    .expect("failed to create surface"),
+            );
         }
 
         self.render_anim_frame();
@@ -176,9 +172,18 @@ impl WindowState {
             let dev_id = surface.dev_id;
             let device = &self.render.devices[dev_id].device;
             let queue = &self.render.devices[dev_id].queue;
+            let renderer_options = RendererOptions {
+                surface_format: Some(surface.format),
+                timestamp_period: queue.get_timestamp_period(),
+            };
+            let render_params = RenderParams {
+                base_color: Color::BLACK,
+                width,
+                height,
+            };
             self.renderer
-                .get_or_insert_with(|| Renderer::new(device).unwrap())
-                .render_to_surface(device, queue, &self.scene, &surface_texture, width, height)
+                .get_or_insert_with(|| Renderer::new(device, &renderer_options).unwrap())
+                .render_to_surface(device, queue, &self.scene, &surface_texture, &render_params)
                 .unwrap();
             surface_texture.present();
             device.poll(wgpu::Maintain::Poll);
@@ -374,31 +379,32 @@ impl PartialEq<ParleyBrush> for ParleyBrush {
 
 impl parley::style::Brush for ParleyBrush {}
 
+// NOTE for Glazier maintenance: If this function needs an update, keep in mind that this is copied from xilem/src/text.rs.
 pub fn render_text(builder: &mut SceneBuilder, transform: Affine, layout: &Layout<ParleyBrush>) {
     let mut gcx = GlyphContext::new();
-    let only_line = layout.lines().next().unwrap();
-    for glyph_run in only_line.glyph_runs() {
-        let mut x = glyph_run.offset();
-        let y = glyph_run.baseline();
-        let run = glyph_run.run();
-        let font = run.font().as_ref();
-        let font_size = run.font_size();
-        let font_ref = FontRef {
-            data: font.data,
-            offset: font.offset,
-        };
-        let style = glyph_run.style();
-        let vars: [(Tag, f32); 0] = [];
-        let mut gp = gcx.new_provider(&font_ref, None, font_size, false, vars);
-        for glyph in glyph_run.glyphs() {
-            if let Some(fragment) = gp.get(glyph.id, Some(&style.brush.0)) {
-                let gx = x + glyph.x;
-                let gy = y - glyph.y;
-                let xform = Affine::translate((gx as f64, gy as f64))
-                    * Affine::scale_non_uniform(1.0, -1.0);
-                builder.append(&fragment, Some(transform * xform));
+    for line in layout.lines() {
+        for glyph_run in line.glyph_runs() {
+            let mut x = glyph_run.offset();
+            let y = glyph_run.baseline();
+            let run = glyph_run.run();
+            let font = run.font();
+            let font_size = run.font_size();
+            let font_ref = font.as_ref();
+            if let Ok(font_ref) = FontRef::from_index(font_ref.data, font.index()) {
+                let style = glyph_run.style();
+                let vars: [(&str, f32); 0] = [];
+                let mut gp = gcx.new_provider(&font_ref, None, font_size, false, vars);
+                for glyph in glyph_run.glyphs() {
+                    if let Some(fragment) = gp.get(glyph.id, Some(&style.brush.0)) {
+                        let gx = x + glyph.x;
+                        let gy = y - glyph.y;
+                        let xform = Affine::translate((gx as f64, gy as f64))
+                            * Affine::scale_non_uniform(1.0, -1.0);
+                        builder.append(&fragment, Some(transform * xform));
+                    }
+                    x += glyph.advance;
+                }
             }
-            x += glyph.advance;
         }
     }
 }
