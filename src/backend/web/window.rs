@@ -722,9 +722,9 @@ impl WindowHandle {
         warn!("show_context_menu unimplemented for web");
     }
 
-    pub fn set_title(&self, title: impl Into<String>) {
+    pub fn set_title(&self, title: &str) {
         if let Some(state) = self.0.upgrade() {
-            state.canvas.set_title(&(title.into()))
+            state.canvas.set_title(title)
         }
     }
 
