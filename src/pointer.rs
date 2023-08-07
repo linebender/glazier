@@ -379,7 +379,7 @@ impl PointerButtons {
 
 impl std::fmt::Debug for PointerButtons {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "PointerButtons({:05b})", self.0 >> 1)
+        write!(f, "PointerButtons({:05b})", self.0)
     }
 }
 
