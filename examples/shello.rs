@@ -1,22 +1,23 @@
+use std::any::Any;
+
+use parley::FontContext;
+use tracing_subscriber::EnvFilter;
+use vello::util::{RenderContext, RenderSurface};
+use vello::Renderer;
+use vello::{
+    kurbo::{Affine, PathEl, Point, Rect},
+    peniko::{Brush, Color, Fill, Mix, Stroke},
+    RenderParams, RendererOptions, Scene, SceneBuilder,
+};
+
 use glazier::kurbo::Size;
 use glazier::{
     Application, Cursor, FileDialogToken, FileInfo, IdleToken, KeyEvent, PointerEvent, Region,
     Scalable, TimerToken, WinHandler, WindowHandle,
 };
-use parley::{FontContext, Layout};
-use std::any::Any;
-use tracing_subscriber::EnvFilter;
-use vello::util::{RenderContext, RenderSurface};
-use vello::Renderer;
-use vello::{
-    glyph::{
-        pinot::{types::Tag, FontRef},
-        GlyphContext,
-    },
-    kurbo::{Affine, PathEl, Point, Rect},
-    peniko::{Brush, Color, Fill, Mix, Stroke},
-    Scene, SceneBuilder,
-};
+
+mod common;
+use common::text::{self, ParleyBrush};
 
 const WIDTH: usize = 2048;
 const HEIGHT: usize = 1536;
@@ -78,11 +79,10 @@ impl WindowState {
     fn render(&mut self) {
         let (width, height) = self.surface_size();
         if self.surface.is_none() {
-            self.surface = Some(pollster::block_on(self.render.create_surface(
-                &self.handle,
-                width,
-                height,
-            )));
+            self.surface = Some(
+                pollster::block_on(self.render.create_surface(&self.handle, width, height))
+                    .expect("failed to create surface"),
+            );
         }
 
         render_anim_frame(&mut self.scene, &mut self.font_context, self.counter);
@@ -96,9 +96,18 @@ impl WindowState {
             let dev_id = surface.dev_id;
             let device = &self.render.devices[dev_id].device;
             let queue = &self.render.devices[dev_id].queue;
+            let renderer_options = RendererOptions {
+                surface_format: Some(surface.format),
+                timestamp_period: queue.get_timestamp_period(),
+            };
+            let render_params = RenderParams {
+                base_color: Color::BLACK,
+                width,
+                height,
+            };
             self.renderer
-                .get_or_insert_with(|| Renderer::new(device).unwrap())
-                .render_to_surface(device, queue, &self.scene, &surface_texture, width, height)
+                .get_or_insert_with(|| Renderer::new(device, &renderer_options).unwrap())
+                .render_to_surface(device, queue, &self.scene, &surface_texture, &render_params)
                 .unwrap();
             surface_texture.present();
         }
@@ -185,53 +194,6 @@ impl WinHandler for WindowState {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ParleyBrush(pub Brush);
-
-impl Default for ParleyBrush {
-    fn default() -> ParleyBrush {
-        ParleyBrush(Brush::Solid(Color::rgb8(0, 0, 0)))
-    }
-}
-
-impl PartialEq<ParleyBrush> for ParleyBrush {
-    fn eq(&self, _other: &ParleyBrush) -> bool {
-        true // FIXME
-    }
-}
-
-impl parley::style::Brush for ParleyBrush {}
-
-pub fn render_text(builder: &mut SceneBuilder, transform: Affine, layout: &Layout<ParleyBrush>) {
-    let mut gcx = GlyphContext::new();
-    for line in layout.lines() {
-        for glyph_run in line.glyph_runs() {
-            let mut x = glyph_run.offset();
-            let y = glyph_run.baseline();
-            let run = glyph_run.run();
-            let font = run.font().as_ref();
-            let font_size = run.font_size();
-            let font_ref = FontRef {
-                data: font.data,
-                offset: font.offset,
-            };
-            let style = glyph_run.style();
-            let vars: [(Tag, f32); 0] = [];
-            let mut gp = gcx.new_provider(&font_ref, None, font_size, false, vars);
-            for glyph in glyph_run.glyphs() {
-                if let Some(fragment) = gp.get(glyph.id, Some(&style.brush.0)) {
-                    let gx = x + glyph.x;
-                    let gy = y - glyph.y;
-                    let xform = Affine::translate((gx as f64, gy as f64))
-                        * Affine::scale_non_uniform(1.0, -1.0);
-                    builder.append(&fragment, Some(transform * xform));
-                }
-                x += glyph.advance;
-            }
-        }
-    }
-}
-
 pub fn render_anim_frame(scene: &mut Scene, fcx: &mut FontContext, i: u64) {
     let mut sb = SceneBuilder::for_scene(scene);
     let rect = Rect::from_origin_size(Point::new(0.0, 0.0), (1000.0, 1000.0));
@@ -262,7 +224,7 @@ pub fn render_anim_frame(scene: &mut Scene, fcx: &mut FontContext, i: u64) {
     )));
     let mut layout = layout_builder.build();
     layout.break_all_lines(None, parley::layout::Alignment::Start);
-    render_text(&mut sb, Affine::translate((100.0, 400.0)), &layout);
+    text::render_text(&mut sb, Affine::translate((100.0, 400.0)), &layout);
 
     let th = (std::f64::consts::PI / 180.0) * (i as f64);
     let center = Point::new(500.0, 500.0);
