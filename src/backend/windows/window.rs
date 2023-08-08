@@ -292,7 +292,7 @@ struct WndState {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct CustomCursor(Arc<HCursor>);
+pub struct CustomCursor(Rc<HCursor>);
 
 #[derive(PartialEq, Eq)]
 struct HCursor(HCURSOR);
@@ -1962,7 +1962,7 @@ impl WindowHandle {
                 };
                 let icon = CreateIconIndirect(&mut icon_info);
 
-                Some(Cursor::Custom(CustomCursor(Arc::new(HCursor(icon)))))
+                Some(Cursor::Custom(CustomCursor(Rc::new(HCursor(icon)))))
             }
         } else {
             None
