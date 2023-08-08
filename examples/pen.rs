@@ -1,20 +1,20 @@
+use std::any::Any;
+use std::collections::HashMap;
+use std::f64::consts::PI;
+
+use kurbo::Ellipse;
+use vello::util::{RenderContext, RenderSurface};
+use vello::Renderer;
+use vello::{
+    kurbo::{Affine, BezPath, Point, Rect},
+    peniko::{Brush, Color, Fill, Stroke},
+    RenderParams, RendererOptions, Scene, SceneBuilder,
+};
+
 use glazier::kurbo::Size;
 use glazier::{
     Application, Cursor, FileDialogToken, FileInfo, IdleToken, KeyEvent, PenInclination,
     PointerEvent, PointerId, PointerType, Region, Scalable, TimerToken, WinHandler, WindowHandle,
-};
-use kurbo::Ellipse;
-use parley::Layout;
-use std::any::Any;
-use std::collections::HashMap;
-use std::f64::consts::PI;
-use vello::util::{RenderContext, RenderSurface};
-use vello::Renderer;
-use vello::{
-    glyph::{fello::raw::FontRef, GlyphContext},
-    kurbo::{Affine, BezPath, Point, Rect},
-    peniko::{Brush, Color, Fill, Stroke},
-    RenderParams, RendererOptions, Scene, SceneBuilder,
 };
 
 const WIDTH: usize = 2048;
@@ -239,47 +239,6 @@ impl WinHandler for WindowState {
 
     fn as_any(&mut self) -> &mut dyn Any {
         self
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ParleyBrush(pub Brush);
-
-impl Default for ParleyBrush {
-    fn default() -> ParleyBrush {
-        ParleyBrush(Brush::Solid(Color::rgb8(0, 0, 0)))
-    }
-}
-
-impl parley::style::Brush for ParleyBrush {}
-
-// NOTE for Glazier maintenance: If this function needs an update, keep in mind that this is copied from xilem/src/text.rs.
-pub fn render_text(builder: &mut SceneBuilder, transform: Affine, layout: &Layout<ParleyBrush>) {
-    let mut gcx = GlyphContext::new();
-    for line in layout.lines() {
-        for glyph_run in line.glyph_runs() {
-            let mut x = glyph_run.offset();
-            let y = glyph_run.baseline();
-            let run = glyph_run.run();
-            let font = run.font();
-            let font_size = run.font_size();
-            let font_ref = font.as_ref();
-            if let Ok(font_ref) = FontRef::from_index(font_ref.data, font.index()) {
-                let style = glyph_run.style();
-                let vars: [(&str, f32); 0] = [];
-                let mut gp = gcx.new_provider(&font_ref, None, font_size, false, vars);
-                for glyph in glyph_run.glyphs() {
-                    if let Some(fragment) = gp.get(glyph.id, Some(&style.brush.0)) {
-                        let gx = x + glyph.x;
-                        let gy = y - glyph.y;
-                        let xform = Affine::translate((gx as f64, gy as f64))
-                            * Affine::scale_non_uniform(1.0, -1.0);
-                        builder.append(&fragment, Some(transform * xform));
-                    }
-                    x += glyph.advance;
-                }
-            }
-        }
     }
 }
 

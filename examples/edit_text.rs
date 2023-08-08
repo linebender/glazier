@@ -1,3 +1,20 @@
+use std::any::Any;
+use std::borrow::Cow;
+use std::cell::RefCell;
+use std::ops::Range;
+use std::rc::Rc;
+
+use parley::FontContext;
+use tracing_subscriber::EnvFilter;
+use unicode_segmentation::GraphemeCursor;
+use vello::util::{RenderContext, RenderSurface};
+use vello::Renderer;
+use vello::{
+    kurbo::{Affine, Point, Rect},
+    peniko::{Brush, Color, Fill},
+    RenderParams, RendererOptions, Scene, SceneBuilder,
+};
+
 use glazier::kurbo::Size;
 use glazier::{
     text::{
@@ -7,22 +24,9 @@ use glazier::{
     Application, KeyEvent, Region, Scalable, TextFieldToken, WinHandler, WindowHandle,
 };
 use glazier::{HotKey, SysMods};
-use parley::{FontContext, Layout};
-use std::any::Any;
-use std::borrow::Cow;
-use std::cell::RefCell;
-use std::ops::Range;
-use std::rc::Rc;
-use tracing_subscriber::EnvFilter;
-use unicode_segmentation::GraphemeCursor;
-use vello::util::{RenderContext, RenderSurface};
-use vello::Renderer;
-use vello::{
-    glyph::{fello::raw::FontRef, GlyphContext},
-    kurbo::{Affine, Point, Rect},
-    peniko::{Brush, Color, Fill},
-    RenderParams, RendererOptions, Scene, SceneBuilder,
-};
+
+mod common;
+use common::text::{self, ParleyBrush};
 
 const WIDTH: usize = 2048;
 const HEIGHT: usize = 1536;
@@ -203,7 +207,7 @@ impl WindowState {
             &rect,
         );
         let doc = self.document.borrow();
-        render_text(&mut sb, Affine::translate((TEXT_X, TEXT_Y)), &doc.layout);
+        text::render_text(&mut sb, Affine::translate((TEXT_X, TEXT_Y)), &doc.layout);
         let selection_start_x =
             parley::layout::Cursor::from_position(&doc.layout, doc.selection.min(), true).offset()
                 as f64
@@ -359,53 +363,6 @@ impl WinHandler for WindowState {
 
     fn as_any(&mut self) -> &mut dyn Any {
         self
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ParleyBrush(pub Brush);
-
-impl Default for ParleyBrush {
-    fn default() -> ParleyBrush {
-        ParleyBrush(Brush::Solid(Color::rgb8(0, 0, 0)))
-    }
-}
-
-impl PartialEq<ParleyBrush> for ParleyBrush {
-    fn eq(&self, _other: &ParleyBrush) -> bool {
-        true // FIXME
-    }
-}
-
-impl parley::style::Brush for ParleyBrush {}
-
-// NOTE for Glazier maintenance: If this function needs an update, keep in mind that this is copied from xilem/src/text.rs.
-pub fn render_text(builder: &mut SceneBuilder, transform: Affine, layout: &Layout<ParleyBrush>) {
-    let mut gcx = GlyphContext::new();
-    for line in layout.lines() {
-        for glyph_run in line.glyph_runs() {
-            let mut x = glyph_run.offset();
-            let y = glyph_run.baseline();
-            let run = glyph_run.run();
-            let font = run.font();
-            let font_size = run.font_size();
-            let font_ref = font.as_ref();
-            if let Ok(font_ref) = FontRef::from_index(font_ref.data, font.index()) {
-                let style = glyph_run.style();
-                let vars: [(&str, f32); 0] = [];
-                let mut gp = gcx.new_provider(&font_ref, None, font_size, false, vars);
-                for glyph in glyph_run.glyphs() {
-                    if let Some(fragment) = gp.get(glyph.id, Some(&style.brush.0)) {
-                        let gx = x + glyph.x;
-                        let gy = y - glyph.y;
-                        let xform = Affine::translate((gx as f64, gy as f64))
-                            * Affine::scale_non_uniform(1.0, -1.0);
-                        builder.append(&fragment, Some(transform * xform));
-                    }
-                    x += glyph.advance;
-                }
-            }
-        }
     }
 }
 
