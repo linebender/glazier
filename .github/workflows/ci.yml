@@ -56,6 +56,8 @@ jobs:
 
       - name: cargo clippy (no default features)
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
+        # No default features means no backend on Linux, so we won't run it
+        if: contains(matrix.os, 'ubuntu') == false
       
       - name: cargo clippy (default features)
         run: cargo clippy --workspace --all-targets -- -D warnings
