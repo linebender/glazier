@@ -42,7 +42,7 @@ jobs:
       - name: install additional linux dependencies
         run: |
           sudo apt update
-          sudo apt install libwayland-dev libxkbcommon-x11-dev libx11-dev libpango1.0-dev
+          sudo apt install libwayland-dev libxkbcommon-x11-dev
         if: contains(matrix.os, 'ubuntu')
 
       - name: install stable toolchain
@@ -108,7 +108,7 @@ jobs:
       - name: install additional linux dependencies
         run: |
           sudo apt update
-          sudo apt install libwayland-dev libxkbcommon-x11-dev libx11-dev libpango1.0-dev
+          sudo apt install libwayland-dev libxkbcommon-x11-dev
         if: contains(matrix.os, 'ubuntu')
 
       - name: install nightly toolchain
