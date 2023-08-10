@@ -243,5 +243,7 @@ fn main() {
         .build()
         .unwrap();
 
+    window.show();
+
     app.run(None);
 }
