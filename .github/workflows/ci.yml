@@ -1,8 +1,8 @@
-# We aim to always test with the latest stable Rust toolchain, however we pin to a specific version
-# like 1.70. Note that we only specify MAJOR.MINOR and not PATCH so that bugfixes still come
-# automatically. If the version specified here is no longer the latest stable version,
-# then please feel free to submit a PR that adjusts it along with the potential clippy fixes.
 env:
+  # We aim to always test with the latest stable Rust toolchain, however we pin to a specific
+  # version like 1.70. Note that we only specify MAJOR.MINOR and not PATCH so that bugfixes still
+  # come automatically. If the version specified here is no longer the latest stable version,
+  # then please feel free to submit a PR that adjusts it along with the potential clippy fixes.
   RUST_STABLE_VER: "1.71" # In quotes because otherwise 1.70 would be interpreted as 1.7
 
 name: CI
@@ -34,7 +34,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macOS-latest, windows-2019, ubuntu-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     name: cargo clippy + test
     steps:
       - uses: actions/checkout@v3
@@ -101,7 +101,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macOS-latest, windows-2019, ubuntu-latest]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v3
 
