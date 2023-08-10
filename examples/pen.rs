@@ -2,6 +2,8 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
+#[cfg(feature = "accesskit")]
+use accesskit::TreeUpdate;
 use kurbo::Ellipse;
 use vello::util::{RenderContext, RenderSurface};
 use vello::Renderer;
@@ -137,6 +139,12 @@ impl WinHandler for WindowState {
     fn paint(&mut self, _: &Region) {
         self.render();
         self.schedule_render();
+    }
+
+    #[cfg(feature = "accesskit")]
+    fn accesskit_tree(&mut self) -> TreeUpdate {
+        // TODO: Construct a real TreeUpdate
+        TreeUpdate::default()
     }
 
     fn idle(&mut self, _: IdleToken) {
