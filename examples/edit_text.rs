@@ -4,6 +4,8 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 
+#[cfg(feature = "accesskit")]
+use accesskit::TreeUpdate;
 use parley::FontContext;
 use tracing_subscriber::EnvFilter;
 use unicode_segmentation::GraphemeCursor;
@@ -279,6 +281,12 @@ impl WinHandler for WindowState {
     fn paint(&mut self, _: &Region) {
         self.render();
         self.schedule_render();
+    }
+
+    #[cfg(feature = "accesskit")]
+    fn accesskit_tree(&mut self) -> TreeUpdate {
+        // TODO: Construct a real TreeUpdate
+        TreeUpdate::default()
     }
 
     fn size(&mut self, size: Size) {

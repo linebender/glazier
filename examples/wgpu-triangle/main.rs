@@ -1,6 +1,10 @@
+use std::any::Any;
+
+#[cfg(feature = "accesskit")]
+use accesskit::TreeUpdate;
+
 use glazier::kurbo::Size;
 use glazier::{Application, IdleToken, Region, Scalable, WinHandler, WindowHandle};
-use std::any::Any;
 
 const WIDTH: usize = 2048;
 const HEIGHT: usize = 1536;
@@ -179,6 +183,12 @@ impl WinHandler for WindowState {
         let inner = self.inner.as_mut().unwrap();
         inner.draw();
         inner.schedule_render();
+    }
+
+    #[cfg(feature = "accesskit")]
+    fn accesskit_tree(&mut self) -> TreeUpdate {
+        // TODO: Construct a real TreeUpdate
+        TreeUpdate::default()
     }
 
     fn idle(&mut self, _: IdleToken) {}

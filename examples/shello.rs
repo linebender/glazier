@@ -1,5 +1,7 @@
 use std::any::Any;
 
+#[cfg(feature = "accesskit")]
+use accesskit::TreeUpdate;
 use parley::FontContext;
 use tracing_subscriber::EnvFilter;
 use vello::util::{RenderContext, RenderSurface};
@@ -125,6 +127,12 @@ impl WinHandler for WindowState {
     fn paint(&mut self, _: &Region) {
         self.render();
         self.schedule_render();
+    }
+
+    #[cfg(feature = "accesskit")]
+    fn accesskit_tree(&mut self) -> TreeUpdate {
+        // TODO: Construct a real TreeUpdate
+        TreeUpdate::default()
     }
 
     fn idle(&mut self, _: IdleToken) {}

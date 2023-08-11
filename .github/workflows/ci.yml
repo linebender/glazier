@@ -1,9 +1,11 @@
-# We aim to always test with the latest stable Rust toolchain, however we pin to a specific version
-# like 1.70. Note that we only specify MAJOR.MINOR and not PATCH so that bugfixes still come
-# automatically. If the version specified here is no longer the latest stable version,
-# then please feel free to submit a PR that adjusts it along with the potential clippy fixes.
 env:
+  # We aim to always test with the latest stable Rust toolchain, however we pin to a specific
+  # version like 1.70. Note that we only specify MAJOR.MINOR and not PATCH so that bugfixes still
+  # come automatically. If the version specified here is no longer the latest stable version,
+  # then please feel free to submit a PR that adjusts it along with the potential clippy fixes.
   RUST_STABLE_VER: "1.71" # In quotes because otherwise 1.70 would be interpreted as 1.7
+
+name: CI
 
 on:
   push:
@@ -26,21 +28,21 @@ jobs:
           components: rustfmt
 
       - name: cargo fmt
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all --check
 
   test-stable:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macOS-latest, windows-2019, ubuntu-latest]
-    name: cargo clippy+test
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    name: cargo clippy + test
     steps:
       - uses: actions/checkout@v3
 
-      - name: install libx11-dev
+      - name: install additional linux dependencies
         run: |
           sudo apt update
-          sudo apt install libx11-dev libpango1.0-dev libxkbcommon-dev libxkbcommon-x11-dev
+          sudo apt install libwayland-dev libxkbcommon-x11-dev
         if: contains(matrix.os, 'ubuntu')
 
       - name: install stable toolchain
@@ -52,41 +54,19 @@ jobs:
       - name: restore cache
         uses: Swatinem/rust-cache@v2
 
-      - name: cargo clippy glazier
-        run: cargo clippy --all-targets --features=x11 --no-default-features -- -D warnings
+      - name: cargo clippy (no default features)
+        run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
+        # No default features means no backend on Linux, so we won't run it
+        if: contains(matrix.os, 'ubuntu') == false
+      
+      - name: cargo clippy (default features)
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: cargo test glazier
-        run: cargo test --no-default-features --features=x11
+      - name: cargo clippy (all features)
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
-      - name: cargo build accesskit example
-        run: cargo build --features accesskit --example accesskit
-
-  # we test the wayland backend as a separate job
-  test-stable-wayland:
-    runs-on: ubuntu-latest
-    name: cargo clippy+test (wayland)
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: install wayland
-        run: |
-          sudo apt update
-          sudo apt install libwayland-dev libpango1.0-dev libxkbcommon-dev
-
-      - name: install stable toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_STABLE_VER }}
-          components: clippy
-
-      - name: restore cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: cargo clippy glazier
-        run: cargo clippy --all-targets --features=wayland --no-default-features -- -D warnings
-
-      - name: cargo test glazier
-        run: cargo test --features wayland --no-default-features
+      - name: cargo test
+        run: cargo test --workspace --all-features
 
 #  test-stable-wasm:
 #    runs-on: macOS-latest
@@ -116,95 +96,26 @@ jobs:
 #      - name: cargo test compile glazier
 #        run: cargo test --no-run --target wasm32-unknown-unknown
 
-  doctest-stable:
-    runs-on: macOS-latest
-    name: glazier doctests
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: install stable toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_STABLE_VER }}
-
-      - name: restore cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: cargo test glazier --doc
-        run: cargo test --doc --no-default-features --features=accesskit
-
-  # This tests the future rust compiler to catch errors ahead of time without
-  # breaking CI
-  # We only run on a single OS to save time; this might let some errors go
-  # undetected until the compiler updates and they break CI; but that should
-  # happen rarely, and not pose too much of a problem when it does.
-  test-beta:
-    runs-on: macOS-latest
-    name: cargo clippy+test beta
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: install beta toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "beta"
-          components: clippy
-
-      - name: restore cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: cargo clippy glazier
-        run: cargo clippy --all-targets -- -D warnings
-        continue-on-error: true
-
-      - name: cargo test glazier
-        run: cargo test --no-default-features --features=x11
-        continue-on-error: true
-
-  doctest-beta:
-    runs-on: macOS-latest
-    name: glazier doctests beta
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: install beta toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "beta"
-
-      - name: restore cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: cargo test glazier --doc
-        run: cargo test --doc --features=accesskit
-
-  check-docs:
-    name: Docs
+  docs:
+    name: cargo doc
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macOS-latest, windows-2019]
+        os: [windows-latest, macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v3
 
-      - name: install dependencies
+      - name: install additional linux dependencies
         run: |
           sudo apt update
-          sudo apt install libxkbcommon-dev libxkbcommon-x11-dev
+          sudo apt install libwayland-dev libxkbcommon-x11-dev
         if: contains(matrix.os, 'ubuntu')
 
-      - name: install stable toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ env.RUST_STABLE_VER }}
+      - name: install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
 
       - name: restore cache
         uses: Swatinem/rust-cache@v2
 
-      - name: cargo doc glazier
-        run: cargo doc --no-deps --document-private-items
-
-      # On Linux also attempt docs for X11.
-      - name: cargo doc glazier (X11)
-        run: cargo doc --features=x11 --no-deps --document-private-items
-        if: contains(matrix.os, 'ubuntu')
+      - name: cargo doc
+        run: cargo doc --workspace --all-features --no-deps --document-private-items -Zunstable-options -Zrustdoc-scrape-examples
