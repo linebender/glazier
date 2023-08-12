@@ -42,7 +42,7 @@ use super::pointer::{DeviceInfo, PointersState};
 use super::util;
 use super::window::Window;
 use crate::backend::shared::linux;
-use crate::backend::shared::xkb;
+use crate::backend::shared::xkb::{self};
 
 // This creates a `struct WindowAtoms` containing the specified atoms as members (along with some
 // convenience methods to intern and query those atoms). We use the following atoms:
@@ -214,7 +214,7 @@ struct State {
     quitting: bool,
     /// A collection of all the `Application` windows.
     windows: HashMap<u32, Rc<Window>>,
-    xkb_state: xkb::State,
+    xkb_state: xkb::KeyEventsState,
 }
 
 #[derive(Clone, Debug)]
@@ -288,8 +288,7 @@ impl AppInner {
         // https://github.com/linebender/druid/pull/1025#discussion_r442777892
         let (connection, screen_num) = XCBConnection::connect(None)?;
         let rdb = new_resource_db_from_default(&connection)?;
-        let xkb_context = xkb::Context::new();
-        xkb_context.set_log_level(tracing::Level::DEBUG);
+        let mut xkb_context = xkb::Context::new();
         use x11rb::protocol::xkb::ConnectionExt;
         connection
             .xkb_use_extension(1, 0)?
@@ -300,7 +299,7 @@ impl AppInner {
             .context("get core keyboard device id")?;
 
         let keymap = xkb_context
-            .keymap_from_device(&connection, &device_id)
+            .keymap_from_x11_device(&connection, &device_id)
             .context("key map from device")?;
 
         connection
@@ -583,13 +582,15 @@ impl AppInner {
                     .context("KEY_PRESS - failed to get window")?;
                 let hw_keycode = ev.detail;
                 let mut state = borrow_mut!(self.state)?;
-                let key_event = state.xkb_state.key_event(
-                    hw_keycode as _,
+
+                w.handle_key_event(
+                    hw_keycode as u32,
+                    &mut state.xkb_state,
                     keyboard_types::KeyState::Down,
+                    // Detecting whether the key press is a repeat is a massive pain on x11
+                    // so just don't do it and hope that's fine
                     false,
                 );
-
-                w.handle_key_event(key_event);
             }
             Event::XkbStateNotify(ev) => {
                 let mut state = borrow_mut!(self.state)?;
@@ -607,13 +608,14 @@ impl AppInner {
                     .window(ev.event)
                     .context("KEY_PRESS - failed to get window")?;
                 let hw_keycode = ev.detail;
-                let mut state = borrow_mut!(self.state)?;
-                let key_event =
-                    state
-                        .xkb_state
-                        .key_event(hw_keycode as _, keyboard_types::KeyState::Up, false);
 
-                w.handle_key_event(key_event);
+                let mut state = borrow_mut!(self.state)?;
+                w.handle_key_event(
+                    hw_keycode as u32,
+                    &mut state.xkb_state,
+                    keyboard_types::KeyState::Up,
+                    false,
+                );
             }
             Event::XinputHierarchy(_) => {
                 self.reinitialize_pointers();
@@ -743,10 +745,15 @@ impl AppInner {
                 w.handle_got_focus();
             }
             Event::FocusOut(ev) => {
-                let w = self
-                    .window(ev.event)
+                let mut state = borrow_mut!(self.state)?;
+                let w = state
+                    .windows
+                    .get(&ev.event)
+                    .cloned()
+                    .ok_or_else(|| anyhow!("No window with id {}", ev.event))
                     .context("FOCUS_OUT - failed to get window")?;
-                w.handle_lost_focus();
+
+                w.handle_lost_focus(&mut state.xkb_state);
             }
             Event::Error(e) => {
                 // TODO: if an error is caused by the present extension, disable it and fall back

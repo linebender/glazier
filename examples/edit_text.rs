@@ -44,6 +44,7 @@ fn main() {
     let window = glazier::WindowBuilder::new(app.clone())
         .resizable(true)
         .size((WIDTH as f64 / 2., HEIGHT as f64 / 2.).into())
+        .title("Edit Text - Glazier Example")
         .handler(Box::new(WindowState::new()))
         .build()
         .unwrap();
@@ -91,6 +92,22 @@ struct DocumentState {
     composition: Option<Range<usize>>,
     layout: parley::Layout<ParleyBrush>,
     font_context: FontContext,
+}
+
+impl DocumentState {
+    fn update_selection(&mut self) {
+        let next_char_boundary = |mut idx| {
+            if idx > self.text.len() {
+                panic!("Tried to set selection outside of the string")
+            }
+            while !self.text.is_char_boundary(idx) {
+                idx += 1;
+            }
+            idx
+        };
+        self.selection.active = next_char_boundary(self.selection.active);
+        self.selection.anchor = next_char_boundary(self.selection.anchor);
+    }
 }
 
 impl Default for DocumentState {
@@ -247,11 +264,11 @@ impl WindowState {
             let rect = Rect::from_points(
                 Point::new(
                     composition_start.min(composition_end - 1.0),
-                    TEXT_Y + FONT_SIZE as f64 + 2.0,
+                    TEXT_Y + FONT_SIZE as f64 + 7.0,
                 ),
                 Point::new(
                     composition_start.max(composition_end + 1.0),
-                    TEXT_Y + FONT_SIZE as f64,
+                    TEXT_Y + FONT_SIZE as f64 + 5.0,
                 ),
             );
             sb.fill(
@@ -382,7 +399,9 @@ impl InputHandler for AppInputHandler {
         self.state.borrow().composition.clone()
     }
     fn set_selection(&mut self, range: Selection) {
-        self.state.borrow_mut().selection = range;
+        let mut state = self.state.borrow_mut();
+        state.selection = range;
+        state.update_selection();
         self.window_handle.request_anim_frame();
     }
     fn set_composition_range(&mut self, range: Option<Range<usize>>) {
@@ -403,6 +422,7 @@ impl InputHandler for AppInputHandler {
             doc.selection.anchor = range.start + text.len();
             doc.selection.active = range.start + text.len();
         }
+        doc.update_selection();
         doc.refresh_layout();
         doc.composition = None;
         self.window_handle.request_anim_frame();

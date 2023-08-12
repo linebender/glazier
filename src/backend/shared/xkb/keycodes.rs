@@ -2,7 +2,7 @@
 
 use keyboard_types::Key;
 
-use super::xkbcommon_sys::*;
+use super::{xkbcommon_sys::*, ComposeFeedSym};
 
 /// Map from an xkb_common key code to a key, if possible.
 pub fn map_key(keysym: u32) -> Key {
@@ -192,4 +192,50 @@ pub fn map_key(keysym: u32) -> Key {
         | XKB_KEY_dead_greek => Dead,
         _ => Unidentified,
     }
+}
+
+pub(super) fn map_for_compose(keysym: u32) -> Option<ComposeFeedSym> {
+    use ComposeFeedSym::*;
+    let sym = match keysym {
+        XKB_KEY_dead_grave => DeadGrave,
+        XKB_KEY_dead_acute => DeadAcute,
+        XKB_KEY_dead_circumflex => DeadCircumflex,
+        XKB_KEY_dead_tilde => DeadTilde,
+        XKB_KEY_dead_macron => DeadMacron,
+        XKB_KEY_dead_breve => DeadBreve,
+        XKB_KEY_dead_abovedot => DeadAbovedot,
+        XKB_KEY_dead_diaeresis => DeadDiaeresis,
+        XKB_KEY_dead_abovering => DeadAbovering,
+        XKB_KEY_dead_doubleacute => DeadDoubleacute,
+        XKB_KEY_dead_caron => DeadCaron,
+        XKB_KEY_dead_cedilla => DeadCedilla,
+        XKB_KEY_dead_ogonek => DeadOgonek,
+        XKB_KEY_dead_iota => DeadIota,
+        XKB_KEY_dead_voiced_sound => DeadVoicedSound,
+        XKB_KEY_dead_semivoiced_sound => DeadSemivoicedSound,
+        XKB_KEY_dead_belowdot => DeadBelowdot,
+        XKB_KEY_dead_hook => DeadHook,
+        XKB_KEY_dead_horn => DeadHorn,
+        XKB_KEY_dead_stroke => DeadStroke,
+        XKB_KEY_dead_abovecomma => DeadAbovecomma,
+        XKB_KEY_dead_abovereversedcomma => DeadAbovereversedcomma,
+        XKB_KEY_dead_doublegrave => DeadDoublegrave,
+        XKB_KEY_dead_belowring => DeadBelowring,
+        XKB_KEY_dead_belowmacron => DeadBelowmacron,
+        XKB_KEY_dead_belowcircumflex => DeadBelowcircumflex,
+        XKB_KEY_dead_belowtilde => DeadBelowtilde,
+        XKB_KEY_dead_belowbreve => DeadBelowbreve,
+        XKB_KEY_dead_belowdiaeresis => DeadBelowdiaeresis,
+        XKB_KEY_dead_invertedbreve => DeadInvertedbreve,
+        XKB_KEY_dead_belowcomma => DeadBelowcomma,
+        XKB_KEY_dead_currency => DeadCurrency,
+        XKB_KEY_dead_greek => DeadGreek,
+        XKB_KEY_Multi_key => Compose,
+        _ => return None,
+    };
+    Some(sym)
+}
+
+pub fn is_backspace(keysym: u32) -> bool {
+    keysym == XKB_KEY_BackSpace
 }

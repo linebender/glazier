@@ -13,7 +13,7 @@
 
 #![allow(clippy::single_match)]
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::os::raw::c_void;
 use std::rc::{Rc, Weak};
 use std::sync::mpsc::{self, Sender};
@@ -37,11 +37,12 @@ use tracing;
 use wayland_backend::client::ObjectId;
 
 use super::application::{self};
-use super::input::{SeatName, TextFieldChange};
+use super::input::{
+    input_state, SeatName, TextFieldChange, TextInputCell, TextInputProperties, WeakTextInputCell,
+};
 use super::menu::Menu;
 use super::{ActiveAction, IdleAction, WaylandState};
 
-use crate::text::{simulate_input, InputHandler};
 use crate::{
     dialog::FileDialogOptions,
     error::Error as ShellError,
@@ -52,13 +53,14 @@ use crate::{
     window::{self, FileDialogToken, TimerToken, WinHandler, WindowLevel},
     TextFieldToken,
 };
-use crate::{IdleToken, KeyEvent, Region, Scalable};
+use crate::{IdleToken, Region, Scalable};
 
 #[derive(Clone)]
 pub struct WindowHandle {
     idle_sender: Sender<IdleAction>,
     loop_sender: channel::Sender<ActiveAction>,
     properties: Weak<RefCell<WindowProperties>>,
+    text: WeakTextInputCell,
     // Safety: Points to a wl_display instance
     raw_display_handle: Option<*mut c_void>,
 }
@@ -84,7 +86,7 @@ impl WindowHandle {
         tracing::debug!("show initiated");
         let props = self.properties();
         let props = props.borrow();
-        // TODO: Is this valid? Do we instead need to
+        // TODO: Is this valid?
         props.wayland_window.commit();
     }
 
@@ -201,28 +203,46 @@ impl WindowHandle {
     }
 
     pub fn remove_text_field(&self, token: TextFieldToken) {
-        let props = self.properties();
-        let mut props = props.borrow_mut();
-        if props.focused_text_field.is_some_and(|it| it == token) {
-            props.focused_text_field = None;
-            drop(props);
-            self.defer(WindowAction::TextField(TextFieldChange::Changed));
+        let props_cell = self.text.upgrade().unwrap();
+        let mut props = props_cell.get();
+        let mut updated = false;
+        if props.active_text_field.is_some_and(|it| it == token) {
+            props.active_text_field = None;
+            props.active_text_field_updated = true;
+            updated = true;
+        }
+        if props.next_text_field.is_some_and(|it| it == token) {
+            props.next_text_field = None;
+            updated = true;
+        }
+
+        if updated {
+            props_cell.set(props);
+
+            self.defer(WindowAction::TextField(TextFieldChange));
         }
     }
 
     pub fn set_focused_text_field(&self, active_field: Option<TextFieldToken>) {
-        let props = self.properties();
-        let mut props = props.borrow_mut();
-        props.focused_text_field = active_field;
-        drop(props);
-        self.defer(WindowAction::TextField(TextFieldChange::Changed));
+        let props_cell = self.text.upgrade().unwrap();
+        let mut props = props_cell.get();
+        props.next_text_field = active_field;
+        props_cell.set(props);
+
+        self.defer(WindowAction::TextField(TextFieldChange));
     }
 
     pub fn update_text_field(&self, token: TextFieldToken, update: Event) {
-        self.defer(WindowAction::TextField(TextFieldChange::Updated(
-            token, update,
-        )));
-        // noop until we get a real text input implementation
+        let props_cell = self.text.upgrade().unwrap();
+        let mut props = props_cell.get();
+        if props.active_text_field.is_some_and(|it| it == token) {
+            match update {
+                Event::LayoutChanged => props.active_text_layout_changed = true,
+                Event::SelectionChanged | Event::Reset => props.active_text_field_updated = true,
+            }
+            props_cell.set(props);
+            self.defer(WindowAction::TextField(TextFieldChange));
+        }
     }
 
     pub fn request_timer(&self, _deadline: std::time::Instant) -> TimerToken {
@@ -305,6 +325,7 @@ impl Default for WindowHandle {
             raw_display_handle: None,
             idle_sender,
             loop_sender,
+            text: Weak::default(),
         }
     }
 }
@@ -499,7 +520,6 @@ impl WindowBuilder {
         // wayland_window.set_min_size(self.min_size);
         let window_id = WindowId::new(&wayland_window);
         let properties = WindowProperties {
-            window_id: window_id.clone(),
             configure: None,
             requested_size: self.size,
             // This is just used as the default sizes, as we don't call `size` until the requested size is used
@@ -510,16 +530,22 @@ impl WindowBuilder {
             will_repaint: false,
             pending_frame_callback: false,
             configured: false,
-            focused_text_field: None,
         };
         let properties_strong = Rc::new(RefCell::new(properties));
 
         let properties = Rc::downgrade(&properties_strong);
+        let text = Rc::new(Cell::new(TextInputProperties {
+            active_text_field: None,
+            next_text_field: None,
+            active_text_field_updated: false,
+            active_text_layout_changed: false,
+        }));
         let handle = WindowHandle {
             idle_sender: self.idle_sender,
             loop_sender: self.loop_sender.clone(),
             raw_display_handle: Some(self.raw_display_handle),
             properties,
+            text: Rc::downgrade(&text),
         };
         // TODO: When should Window::commit be called? This feels fragile
         self.loop_sender
@@ -530,7 +556,7 @@ impl WindowBuilder {
                         handler: self.handler.unwrap(),
                         properties: properties_strong,
                         text_input_seat: None,
-                        loop_sender: self.loop_sender.clone(),
+                        text,
                     },
                     handle.clone(),
                 ),
@@ -557,15 +583,16 @@ impl WindowId {
 
 /// The state associated with each window, stored in [`WaylandState`]
 pub(super) struct WaylandWindowState {
+    // Drop the window handler before the properties
+    // This helps to make it feasible for surfaces to be dropped before their
     pub handler: Box<dyn WinHandler>,
-    // TODO: Rc<RefCell>?
+    // TODO: This refcell is too strong - most of the fields can just be Cells
     properties: Rc<RefCell<WindowProperties>>,
     text_input_seat: Option<SeatName>,
-    loop_sender: channel::Sender<ActiveAction>,
+    pub text: TextInputCell,
 }
 
 struct WindowProperties {
-    window_id: WindowId,
     // Requested size is used in configure, if it's supported
     requested_size: Option<Size>,
 
@@ -594,8 +621,6 @@ struct WindowProperties {
     pending_frame_callback: bool,
     // We can't draw before being configured
     configured: bool,
-
-    focused_text_field: Option<TextFieldToken>,
 }
 
 impl WindowProperties {
@@ -692,32 +717,6 @@ impl WaylandWindowState {
         self.handler.paint(&region);
     }
 
-    pub(super) fn handle_key_event(&mut self, event: KeyEvent) {
-        let (focused_text_field, window) = {
-            let props = self.properties.borrow();
-            (props.focused_text_field, props.window_id.clone())
-        };
-        match event.state {
-            keyboard_types::KeyState::Down => {
-                let handled = simulate_input(&mut *self.handler, focused_text_field, event);
-                if handled {
-                    if let Some(token) = focused_text_field {
-                        self.loop_sender
-                            .send(ActiveAction::Window(
-                                window,
-                                WindowAction::TextField(TextFieldChange::Updated(
-                                    token,
-                                    Event::Reset,
-                                )),
-                            ))
-                            .expect("Loop should still be running when key event recieved");
-                    }
-                }
-            }
-            keyboard_types::KeyState::Up => self.handler.key_up(event),
-        }
-    }
-
     pub(super) fn set_input_seat(&mut self, seat: SeatName) {
         assert!(self.text_input_seat.is_none());
         self.text_input_seat = Some(seat);
@@ -725,27 +724,6 @@ impl WaylandWindowState {
     pub(super) fn remove_input_seat(&mut self, seat: SeatName) {
         assert_eq!(self.text_input_seat, Some(seat));
         self.text_input_seat = None;
-    }
-    pub(super) fn get_text_field(&mut self) -> Option<TextFieldToken> {
-        let props = self.properties.borrow();
-        props.focused_text_field
-    }
-
-    pub(super) fn get_input_lock(
-        &mut self,
-        mutable: bool,
-    ) -> Option<(Box<dyn InputHandler + 'static>, TextFieldToken)> {
-        let focused_field = {
-            let props = self.properties.borrow();
-            props.focused_text_field?
-        };
-        Some((
-            self.handler.acquire_input_lock(focused_field, mutable),
-            focused_field,
-        ))
-    }
-    pub(super) fn release_input_lock(&mut self, token: TextFieldToken) {
-        self.handler.release_input_lock(token)
     }
 }
 
@@ -791,7 +769,9 @@ impl CompositorHandler for WaylandState {
         surface: &protocol::wl_surface::WlSurface,
         _time: u32,
     ) {
-        let Some(window) = self.windows.get_mut(&WindowId::of_surface(surface)) else { return };
+        let Some(window) = self.windows.get_mut(&WindowId::of_surface(surface)) else {
+            return;
+        };
         window.do_paint(false, PaintContext::Frame);
     }
 }
@@ -803,7 +783,9 @@ impl WindowHandler for WaylandState {
         _: &QueueHandle<Self>,
         wl_window: &smithay_client_toolkit::shell::xdg::window::Window,
     ) {
-        let Some(window)= self.windows.get_mut(&WindowId::new(wl_window)) else { return };
+        let Some(window) = self.windows.get_mut(&WindowId::new(wl_window)) else {
+            return;
+        };
         window.handler.request_close();
     }
 
@@ -851,7 +833,9 @@ impl WindowAction {
     pub(super) fn run(self, state: &mut WaylandState, window_id: WindowId) {
         match self {
             WindowAction::ResizeRequested => {
-                let Some(window) = state.windows.get_mut(&window_id) else { return };
+                let Some(window) = state.windows.get_mut(&window_id) else {
+                    return;
+                };
                 let size = {
                     let mut props = window.properties.borrow_mut();
                     props.calculate_size()
@@ -864,10 +848,16 @@ impl WindowAction {
             }
             WindowAction::Close => {
                 // Remove the window from tracking
-                let Some(_) = state.windows.remove(&window_id) else {
+                {
+                    let Some(win) = state.windows.remove(&window_id) else {
                     tracing::error!("Tried to close the same window twice");
                     return;
-                };
+                    };
+                    if let Some(seat) = win.text_input_seat {
+                        let seat = input_state(&mut state.input_states, seat);
+                        seat.window_deleted(&mut state.windows);
+                    }
+                }
                 // We will drop the proper wayland window later when we Drop window.props
                 if state.windows.is_empty() {
                     state.loop_signal.stop();
@@ -881,15 +871,23 @@ impl WindowAction {
                 ));
             }
             WindowAction::AnimationRequested => {
-                let Some(window) = state.windows.get_mut(&window_id) else { return };
+                let Some(window) = state.windows.get_mut(&window_id) else {
+                    return;
+                };
                 window.do_paint(false, PaintContext::Requested);
             }
             WindowAction::TextField(change) => {
                 let Some(props) = state.windows.get_mut(&window_id) else {
                     return;
                 };
-                let Some(seat) = props.text_input_seat else {return;};
-                change.apply(props, &mut state.input_states, seat);
+                let Some(seat) = props.text_input_seat else {
+                    return;
+                };
+                change.apply(
+                    input_state(&mut state.input_states, seat),
+                    &mut state.windows,
+                    &window_id,
+                );
             }
         }
     }

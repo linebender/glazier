@@ -53,6 +53,10 @@ fn main() {
         // we use FILE from libc
         .blocklist_type("FILE")
         .blocklist_type("va_list")
+        .default_enum_style(bindgen::EnumVariation::NewType {
+            is_bitfield: true,
+            is_global: false,
+        })
         .generate()
         .expect("Unable to generate bindings");
 

@@ -6,7 +6,13 @@ license = "Apache-2.0"
 repository = "https://github.com/linebender/glazier"
 description = "Cross-platform native API abstraction for building GUI applications."
 keywords = ["gui", "native", "window", "menu", "winit"]
-categories = ["gui", "os", "os::windows-apis", "os::macos-apis", "os::linux-apis"]
+categories = [
+    "gui",
+    "os",
+    "os::windows-apis",
+    "os::macos-apis",
+    "os::linux-apis",
+]
 exclude = ["/.github/"]
 publish = false # Until it's ready
 
@@ -18,7 +24,7 @@ default-target = "x86_64-pc-windows-msvc"
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [features]
-default = ["x11"]
+default = ["x11", "wayland"]
 x11 = ["ashpd", "bindgen", "futures", "nix", "pkg-config", "x11rb"]
 wayland = [
     # Required for XKBCommon
@@ -116,8 +122,11 @@ x11rb = { version = "0.12", features = [
 rand = { version = "0.8.0", optional = true }
 log = { version = "0.4.14", optional = true }
 
+smithay-client-toolkit = { version = "0.17.0", optional = true, default-features = false, features = [
+    # Don't use the built-in xkb handling
+    "calloop",
+] }
 # Wayland dependencies
-smithay-client-toolkit = { version = "0.17.0", optional = true }
 # Needed for supporting RawWindowHandle
 wayland-backend = { version = "0.1.0", default_features = false, features = [
     "client_system",
@@ -151,7 +160,7 @@ pollster = "0.3.0"
 wgpu = "0.17.0"
 
 [target.'cfg(any(target_os = "freebsd", target_os="linux", target_os="openbsd"))'.build-dependencies]
-bindgen = { version = "0.60.1", optional = true }
+bindgen = { version = "0.66", optional = true }
 pkg-config = { version = "0.3.25", optional = true }
 
 [[example]]

@@ -7,79 +7,17 @@ use smithay_client_toolkit::reexports::{
 };
 
 use crate::{
-    backend::wayland::{
-        window::{WaylandWindowState, WindowId},
-        WaylandState,
-    },
-    text::{Affinity, Event, InputHandler, Selection},
+    backend::wayland::{window::WindowId, WaylandState},
+    text::{Affinity, InputHandler, Selection},
     TextFieldToken,
 };
 
 use super::{input_state, SeatInfo, SeatName};
 
-#[derive(Debug)]
-pub(in crate::backend::wayland) enum TextFieldChange {
-    Updated(TextFieldToken, Event),
-    Changed,
-}
-
-impl TextFieldChange {
-    pub(in crate::backend::wayland) fn apply(
-        self,
-        window: &mut WaylandWindowState,
-        input_states: &mut [SeatInfo],
-        seat: SeatName,
-    ) {
-        match self {
-            TextFieldChange::Updated(event_token, event) => {
-                let state = seat_text_input(input_states, seat);
-                if let Some((mut handler, token)) = window.get_input_lock(false) {
-                    if token != event_token {
-                        window.release_input_lock(token);
-                        return;
-                    }
-                    match event {
-                        Event::LayoutChanged => {
-                            let selection = handler.selection();
-                            let selection_range = selection.range();
-                            state.sync_cursor_rectangle(
-                                selection,
-                                selection_range.clone(),
-                                handler.line_range(selection_range.start, Affinity::Upstream),
-                                handler.line_range(selection_range.end, Affinity::Downstream),
-                                &mut *handler,
-                            );
-                        }
-                        // Wayland doesn't distinguish between these cases
-                        Event::SelectionChanged | Event::Reset => {
-                            state.sync_state(&mut *handler, zwp_text_input_v3::ChangeCause::Other);
-                        }
-                    }
-                    window.release_input_lock(token);
-                }
-            }
-            TextFieldChange::Changed => {
-                let state = seat_text_input(input_states, seat);
-                if let Some((mut handler, token)) = window.get_input_lock(false) {
-                    state.reset();
-                    state.token = Some(token);
-                    state.text_input.enable();
-                    state.sync_state(&mut *handler, zwp_text_input_v3::ChangeCause::Other);
-                    window.release_input_lock(token);
-                } else {
-                    state.text_input.disable();
-                    state.reset();
-                }
-            }
-        }
-    }
-}
-
 struct InputUserData(SeatName);
 
 pub(super) struct InputState {
     text_input: ZwpTextInputV3,
-    active_window: Option<WindowId>,
 
     commit_count: u32,
 
@@ -97,7 +35,7 @@ pub(super) struct InputState {
     /// active
     new_cursor_begin: i32,
     new_cursor_end: i32,
-    state_might_have_changed: bool,
+    needs_to_own_preedit: bool,
 
     // The bookkeeping state
     /// Used for sanity checking - the token we believe we're operating on,
@@ -124,7 +62,6 @@ impl InputState {
     ) -> Self {
         InputState {
             text_input: manager.get_text_input(seat, qh, InputUserData(seat_name)),
-            active_window: None,
             commit_count: 0,
 
             delete_surrounding_after: 0,
@@ -133,7 +70,7 @@ impl InputState {
             preedit_string: None,
             new_cursor_begin: 0,
             new_cursor_end: 0,
-            state_might_have_changed: false,
+            needs_to_own_preedit: false,
 
             buffer_start: None,
             token: None,
@@ -151,10 +88,28 @@ impl InputState {
         self.new_cursor_begin = 0;
         self.new_cursor_end = 0;
         self.buffer_start = None;
-        self.token = None;
     }
 
-    fn sync_state(
+    pub(super) fn set_field_if_needed(&mut self, token: TextFieldToken) {
+        if self.token.is_none() {
+            self.reset();
+            self.token = Some(token);
+
+            self.text_input.enable();
+            tracing::warn!("enabling text input");
+        } else {
+            debug_assert!(self.token == Some(token))
+        }
+    }
+
+    pub(super) fn remove_field(&mut self) {
+        tracing::warn!("disabling text input");
+        self.token = None;
+        self.text_input.disable();
+        self.commit();
+    }
+
+    pub(super) fn sync_state(
         &mut self,
         handler: &mut dyn InputHandler,
         cause: zwp_text_input_v3::ChangeCause,
@@ -241,7 +196,7 @@ impl InputState {
             self.buffer_start = Some(buffer_start);
         }
 
-        self.sync_cursor_rectangle(selection, selection_range, start_line, end_line, handler);
+        self.sync_cursor_rectangle_inner(selection, selection_range, start_line, end_line, handler);
 
         // We always set a text change cause to make sure
         self.text_input.set_text_change_cause(cause);
@@ -249,7 +204,23 @@ impl InputState {
         self.commit();
     }
 
-    fn sync_cursor_rectangle(
+    pub(super) fn sync_cursor_rectangle(&mut self, handler: &mut dyn InputHandler) {
+        let selection = handler.selection();
+        let selection_range = selection.range();
+        self.sync_cursor_rectangle_inner(
+            selection,
+            selection_range.clone(),
+            handler.line_range(selection_range.start, Affinity::Upstream),
+            handler.line_range(selection_range.end, Affinity::Downstream),
+            handler,
+        );
+        // We don't set the change cause because the "text, cursor or anchor" positions haven't changed
+        // self.text_input
+        //     .set_text_change_cause(zwp_text_input_v3::ChangeCause::Other);
+        self.commit();
+    }
+
+    fn sync_cursor_rectangle_inner(
         &mut self,
         selection: Selection,
         selection_range: std::ops::Range<usize>,
@@ -289,14 +260,16 @@ impl InputState {
         self.text_input.commit();
     }
 
-    fn done(&mut self, handler: &mut dyn InputHandler) {
+    fn done(&mut self, handler: &mut dyn InputHandler) -> bool {
         //  The application must proceed by evaluating the changes in the following order:
         let pre_edit_range = handler.composition_range();
         let mut selection = handler.selection();
+        let mut has_preedit = false;
         // 1. Replace existing preedit string with the cursor.
         if let Some(range) = pre_edit_range {
             selection.active = range.start;
             selection.anchor = range.start;
+
             handler.replace_range(range, "");
         }
         // 2. Delete requested surrounding text.
@@ -332,6 +305,7 @@ impl InputState {
                 (selection_start + self.new_cursor_begin) as usize,
                 (selection_start + self.new_cursor_end) as usize,
             ));
+            has_preedit = true;
         } else {
             handler.set_composition_range(None);
         }
@@ -339,6 +313,7 @@ impl InputState {
         // TODO: Confirm this affinity
         let active_line = handler.line_range(selection.active, Affinity::Upstream);
         self.sync_cursor_line(handler, active_line);
+        has_preedit
     }
 }
 
@@ -371,30 +346,12 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
         match event {
             zwp_text_input_v3::Event::Enter { surface } => {
                 let window_id = WindowId::of_surface(&surface);
-                let win = state.windows.get_mut(&window_id).unwrap();
-                win.set_input_seat(data.0);
-                let input_state = text_input(&mut state.input_states, data);
-                input_state.active_window = Some(window_id);
-                input_state.token = win.get_text_field();
-                let input_lock = win.get_input_lock(false);
-                if let Some((mut handler, token)) = input_lock {
-                    input_state.text_input.enable();
-                    // ChangeCause is Other here, because the input editor has not sent the text
-                    input_state.sync_state(&mut *handler, zwp_text_input_v3::ChangeCause::Other);
-                    win.release_input_lock(token);
-                }
+                let seat = input_state(&mut state.input_states, data.0);
+                seat.window_focus_enter(&mut state.windows, window_id);
             }
-            zwp_text_input_v3::Event::Leave { surface } => {
-                let window_id = WindowId::of_surface(&surface);
-                let Some(win) = state.windows.get_mut(&window_id) else {return;};
-                win.remove_input_seat(data.0);
-                let text_input = text_input(&mut state.input_states, data);
-                text_input.reset();
-                text_input.active_window = None;
-                text_input.state_might_have_changed = true;
-                // These seem to be invalid here, as the surface no longer exists
-                // text_input.text_input.disable();
-                // text_input.commit();
+            zwp_text_input_v3::Event::Leave { .. } => {
+                let seat = input_state(&mut state.input_states, data.0);
+                seat.window_focus_leave(&mut state.windows);
             }
             zwp_text_input_v3::Event::PreeditString {
                 text,
@@ -405,6 +362,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 input_state.preedit_string = text;
                 input_state.new_cursor_begin = cursor_begin;
                 input_state.new_cursor_end = cursor_end;
+                input_state.needs_to_own_preedit = true;
             }
             zwp_text_input_v3::Event::CommitString { text } => {
                 if text.is_none() {
@@ -412,7 +370,7 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 }
                 let input_state = state.text_input(data);
                 input_state.commit_string = text;
-                input_state.state_might_have_changed = true;
+                input_state.needs_to_own_preedit = true;
             }
             zwp_text_input_v3::Event::DeleteSurroundingText {
                 after_length,
@@ -421,25 +379,24 @@ impl Dispatch<ZwpTextInputV3, InputUserData> for WaylandState {
                 let input_state = state.text_input(data);
                 input_state.delete_surrounding_after = after_length;
                 input_state.delete_surrounding_before = before_length;
-                input_state.state_might_have_changed = true;
+                input_state.needs_to_own_preedit = true;
             }
             zwp_text_input_v3::Event::Done { serial } => {
-                let input_state = text_input(&mut state.input_states, data);
-                let Some(win) = state.windows.get_mut(input_state.active_window.as_ref().unwrap()) else {return;};
-                let input_lock = win.get_input_lock(true);
-                if let Some((mut handler, token)) = input_lock {
-                    if Some(token) == input_state.token {
-                        input_state.done(&mut *handler);
-                        if serial == input_state.commit_count
-                            && input_state.state_might_have_changed
-                        {
-                            input_state.sync_state(
-                                &mut *handler,
-                                zwp_text_input_v3::ChangeCause::InputMethod,
-                            );
-                            input_state.state_might_have_changed = false;
+                let input_state = input_state(&mut state.input_states, data.0);
+                let text_input = input_state.input_state.as_mut().unwrap();
+                if text_input.needs_to_own_preedit {
+                    // We need an input lock from input_state - call force_remove_preedit if the owner is conflicting
+                    // TODO: Something here isn't right - force_remove_preedit might change the content of the field
+                    // if it cancels a composition, which means that the IME input isn't what you want
+                    text_input.needs_to_own_preedit = false;
+                    input_state.prepare_for_ime(&mut state.windows, |this, mut ime| {
+                        let res = this.done(&mut *ime);
+                        if serial == this.commit_count {
+                            this.sync_state(&mut *ime, zwp_text_input_v3::ChangeCause::InputMethod);
+                            this.needs_to_own_preedit = false;
                         }
-                    }
+                        res
+                    });
                 }
             }
             _ => todo!(),
