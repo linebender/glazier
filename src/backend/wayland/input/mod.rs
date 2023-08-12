@@ -132,8 +132,6 @@ struct FutureInputLock<'a> {
 }
 
 impl SeatInfo {
-    /// Called when the text input focused window might have changed (due to a keyboard focus leave/enter event)
-    /// or a window being closed
     fn window_focus_enter(&mut self, windows: &mut Windows, new_window: WindowId) {
         // We either had no focus, or were already focused on this window
         debug_assert!(!self
@@ -144,6 +142,14 @@ impl SeatInfo {
             let Some(window) = windows.get_mut(&new_window) else {
                 return;
             };
+            if let Some(input_state) = self.input_state.as_mut() {
+                // We accepted the existing pre-edit on unfocus, and so text input being
+                // active doesn't make sense
+                // However, at that time the window was unfocused, so the disable request
+                // then was not respected.
+                // Because of this, we disable again upon refocus
+                input_state.remove_field();
+            }
             window.set_input_seat(self.id);
             let mut handler = window_handler(window);
             handler.0.got_focus();
@@ -326,17 +332,17 @@ impl SeatInfo {
             }
         }
         if let Some(ime_state) = self.input_state.as_mut() {
-            // We believe that GNOME's implementation of the text input protocol is not ideal.
-            // It carries the same IME state between text fields and applications, until the IME is
-            // complete or the otherwise cancelled.
-            // Additionally, the design of our IME interface gives no opportunity for the IME to proactively
+            // The design of our IME interface gives no opportunity for the IME to proactively
             // intercept e.g. a click event to reset the preedit content.
             // Because of these conditions, we are forced into one of two choices. If you are typing e.g.
             // `this is a [test]` (where test is the preedit text), then click at ` i|s `, we can either get
             // the result `this i[test]s a test`, or `this i|s a test`.
-            // We choose the former, as it doesn't litter pre-edit text, or relayout the text. A valid alternative
-            // choice would be `this i[test]s a`, which is implemented by GTK apps. However, this doesn't work
-            // due to our method of reporting updates from the application.
+            // We would like to choose the latter, where the pre-edit text is not repeated.
+            // At least on GNOME, this is not possible - GNOME does not respect the application's
+            // request to cease text input under any circumstances.
+            // Given these contraints, the best possible implementation on GNOME
+            // would be `this i[test]s a`, which is implemented by GTK apps. However,
+            // this doesn't work due to our method of reporting updates from the application.
             ime_state.remove_field();
         }
         // Release ownership of the field
@@ -390,6 +396,9 @@ impl SeatInfo {
                     self.text_field_owner,
                     TextFieldOwner::Keyboard | TextFieldOwner::Neither
                 );
+                // TODO: It's possible that some text input implementations would
+                // pass certain keys (through to us - not for text input purposes)
+                // For example, a
                 self.update_active_text_input(&mut handler, !update_can_do_nothing, false);
                 let keyboard = self
                     .keyboard_state
