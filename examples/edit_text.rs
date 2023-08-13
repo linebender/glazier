@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 #[cfg(feature = "accesskit")]
 use accesskit::TreeUpdate;
+use instant::Duration;
 use parley::FontContext;
 use tracing_subscriber::EnvFilter;
 use unicode_segmentation::GraphemeCursor;
@@ -25,7 +26,7 @@ use glazier::{
     },
     Application, KeyEvent, Region, Scalable, TextFieldToken, WinHandler, WindowHandle,
 };
-use glazier::{HotKey, SysMods};
+use glazier::{HotKey, SysMods, TimerToken};
 
 mod common;
 use common::text::{self, ParleyBrush};
@@ -35,6 +36,8 @@ const HEIGHT: usize = 1536;
 const FONT_SIZE: f32 = 36.0;
 const TEXT_X: f64 = 100.0;
 const TEXT_Y: f64 = 100.0;
+// TODO: We need to get this from the user's system, as most (all?) desktops have a setting for this
+const CURSOR_BLINK_INTERVAL: Duration = Duration::from_millis(600);
 
 fn main() {
     tracing_subscriber::fmt()
@@ -84,6 +87,9 @@ struct WindowState {
     document: Rc<RefCell<DocumentState>>,
     text_input_token: Option<TextFieldToken>,
     hotkeys: HotKeys,
+
+    cursor_blink_token: Option<TimerToken>,
+    cursor_shown: bool,
 }
 
 struct DocumentState {
@@ -159,6 +165,8 @@ impl WindowState {
             size: Size::new(800.0, 600.0),
             text_input_token: None,
             hotkeys: Default::default(),
+            cursor_blink_token: None,
+            cursor_shown: true,
         }
     }
 
@@ -227,28 +235,44 @@ impl WindowState {
         );
         let doc = self.document.borrow();
         text::render_text(&mut sb, Affine::translate((TEXT_X, TEXT_Y)), &doc.layout);
-        let selection_start_x =
-            parley::layout::Cursor::from_position(&doc.layout, doc.selection.min(), true).offset()
-                as f64
-                + TEXT_X;
-        let selection_end_x =
-            parley::layout::Cursor::from_position(&doc.layout, doc.selection.max(), true).offset()
-                as f64
-                + TEXT_X;
-        let rect = Rect::from_points(
-            Point::new(selection_start_x.min(selection_end_x - 1.0), TEXT_Y),
-            Point::new(
-                selection_end_x.max(selection_start_x + 1.0),
-                TEXT_Y + FONT_SIZE as f64,
-            ),
-        );
-        sb.fill(
-            Fill::NonZero,
-            Affine::IDENTITY,
-            &Brush::Solid(Color::rgba8(0, 0, 255, 100)),
-            None,
-            &rect,
-        );
+        if doc.selection.len() > 0 {
+            let selection_start_x =
+                parley::layout::Cursor::from_position(&doc.layout, doc.selection.min(), true)
+                    .offset() as f64
+                    + TEXT_X;
+            let selection_end_x =
+                parley::layout::Cursor::from_position(&doc.layout, doc.selection.max(), true)
+                    .offset() as f64
+                    + TEXT_X;
+            let rect = Rect::from_points(
+                Point::new(selection_start_x, TEXT_Y),
+                Point::new(selection_end_x, TEXT_Y + FONT_SIZE as f64),
+            );
+            sb.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                &Brush::Solid(Color::rgba8(0, 0, 255, 100)),
+                None,
+                &rect,
+            );
+        }
+        if self.cursor_shown {
+            let cursor_active_x =
+                parley::layout::Cursor::from_position(&doc.layout, doc.selection.active, true)
+                    .offset() as f64
+                    + TEXT_X;
+            let rect = Rect::from_points(
+                Point::new(cursor_active_x - 1.0, TEXT_Y),
+                Point::new(cursor_active_x + 1.0, TEXT_Y + FONT_SIZE as f64),
+            );
+            sb.fill(
+                Fill::NonZero,
+                Affine::IDENTITY,
+                &Brush::Solid(Color::BLACK),
+                None,
+                &rect,
+            );
+        }
         if let Some(composition) = &doc.composition {
             let composition_start = parley::layout::Cursor::from_position(
                 &doc.layout,
@@ -331,8 +355,15 @@ impl WinHandler for WindowState {
     }
 
     fn release_input_lock(&mut self, _token: TextFieldToken) {
-        // no action required; this example is simple enough that this
-        // state is not actually shared.
+        // Applications appear to only hide the cursor when there has been no change
+        // to the text. As a best attempt version of this, show the cursor
+        // when an input lock finishes. TODO: Should this only be on a mutable lock?
+
+        // This doesn't work for keypresses which don't do anything to the text (such as pressing escape
+        // for example), but this is good enough
+        self.cursor_shown = true;
+        // Ignore the previous request
+        self.cursor_blink_token = Some(self.handle.request_timer(CURSOR_BLINK_INTERVAL));
     }
 
     fn key_down(&mut self, event: KeyEvent) -> bool {
@@ -388,6 +419,24 @@ impl WinHandler for WindowState {
 
     fn as_any(&mut self) -> &mut dyn Any {
         self
+    }
+    fn got_focus(&mut self) {
+        self.cursor_blink_token = Some(self.handle.request_timer(CURSOR_BLINK_INTERVAL));
+        // The text field is always focused in this example, so start with it shown
+        self.cursor_shown = true;
+    }
+
+    fn lost_focus(&mut self) {
+        self.cursor_shown = false;
+        // Don't
+        self.cursor_blink_token = None;
+    }
+    fn timer(&mut self, token: TimerToken) {
+        if self.cursor_blink_token.is_some_and(|it| it == token) {
+            self.cursor_shown = !self.cursor_shown;
+            self.cursor_blink_token = Some(self.handle.request_timer(CURSOR_BLINK_INTERVAL));
+        }
+        // Ignore the token otherwise, as it's been superceded
     }
 }
 
