@@ -26,7 +26,7 @@ use smithay_client_toolkit::{
     compositor::CompositorState,
     output::OutputState,
     reexports::{
-        calloop::{channel, EventLoop, LoopSignal},
+        calloop::{channel, EventLoop, LoopHandle, LoopSignal},
         client::{
             globals::{registry_queue_init, BindError},
             protocol::wl_compositor,
@@ -57,6 +57,7 @@ pub struct Application {
     pub(super) wayland_queue: QueueHandle<WaylandState>,
     pub(super) xdg_shell: Weak<XdgShell>,
     loop_signal: LoopSignal,
+    pub(super) loop_handle: LoopHandle<'static, WaylandState>,
     pub(super) idle_sender: Sender<IdleAction>,
     pub(super) loop_sender: channel::Sender<ActiveAction>,
     pub(super) raw_display_handle: *mut c_void,
@@ -126,7 +127,7 @@ impl Application {
             seats: SeatState::new(&globals, &qh),
             xkb_context: Context::new(),
             text_input: text_input_global,
-            loop_handle,
+            loop_handle: loop_handle.clone(),
         };
         state.initial_seats();
         Ok(Application {
@@ -136,6 +137,7 @@ impl Application {
             loop_signal,
             idle_sender,
             loop_sender,
+            loop_handle,
             xdg_shell: shell_ref,
             raw_display_handle: conn.backend().display_ptr().cast(),
         })

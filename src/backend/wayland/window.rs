@@ -23,7 +23,8 @@ use raw_window_handle::{
     WaylandDisplayHandle, WaylandWindowHandle,
 };
 use smithay_client_toolkit::compositor::CompositorHandler;
-use smithay_client_toolkit::reexports::calloop::channel;
+use smithay_client_toolkit::reexports::calloop::timer::{TimeoutAction, Timer};
+use smithay_client_toolkit::reexports::calloop::{channel, LoopHandle};
 use smithay_client_toolkit::reexports::client::protocol::wl_compositor::WlCompositor;
 use smithay_client_toolkit::reexports::client::protocol::wl_surface::WlSurface;
 use smithay_client_toolkit::reexports::client::{protocol, Connection, Proxy, QueueHandle};
@@ -245,12 +246,30 @@ impl WindowHandle {
         }
     }
 
-    pub fn request_timer(&self, _deadline: std::time::Instant) -> TimerToken {
-        todo!()
+    pub fn request_timer(&self, deadline: std::time::Instant) -> TimerToken {
+        let props = self.properties();
+        let props = props.borrow();
+        let window_id = WindowId::new(&props.wayland_window);
+        let token = TimerToken::next();
+        props
+            .loop_handle
+            .insert_source(
+                Timer::from_deadline(deadline),
+                move |_deadline, _, state| {
+                    let window = state.windows.get_mut(&window_id);
+                    if let Some(window) = window {
+                        window.handler.timer(token);
+                    }
+                    // In theory, we could get the `timer` request to give us a new deadline
+                    TimeoutAction::Drop
+                },
+            )
+            .expect("could add a timer loop");
+        token
     }
 
     pub fn set_cursor(&mut self, _cursor: &Cursor) {
-        todo!()
+        tracing::warn!("unimplemented set_cursor called")
     }
 
     pub fn make_cursor(&self, _desc: &CursorDesc) -> Option<Cursor> {
@@ -414,6 +433,7 @@ pub(crate) struct WindowBuilder {
     show_titlebar: bool,
     compositor: WlCompositor,
     wayland_queue: QueueHandle<WaylandState>,
+    loop_handle: LoopHandle<'static, WaylandState>,
     xdg_state: Weak<XdgShell>,
     idle_sender: Sender<IdleAction>,
     loop_sender: channel::Sender<ActiveAction>,
@@ -435,6 +455,7 @@ impl WindowBuilder {
             show_titlebar: true,
             compositor: app.compositor,
             wayland_queue: app.wayland_queue,
+            loop_handle: app.loop_handle,
             xdg_state: app.xdg_shell,
             idle_sender: app.idle_sender,
             loop_sender: app.loop_sender,
@@ -526,7 +547,8 @@ impl WindowBuilder {
             current_size: Size::new(600., 800.),
             current_scale: Scale::new(1., 1.), // TODO: NaN? - these values should (must?) not be used
             wayland_window,
-            wayland_queue: self.wayland_queue.clone(),
+            wayland_queue: self.wayland_queue,
+            loop_handle: self.loop_handle,
             will_repaint: false,
             pending_frame_callback: false,
             configured: false,
@@ -607,6 +629,7 @@ struct WindowProperties {
     // We make this the only handle, so we can definitely drop it
     wayland_window: Window,
     wayland_queue: QueueHandle<WaylandState>,
+    loop_handle: LoopHandle<'static, WaylandState>,
 
     /// Wayland requires frame (throttling) callbacks be requested *before* running commit.
     /// However, user code controls when commit is called (generally through wgpu's
