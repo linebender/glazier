@@ -264,7 +264,7 @@ impl WindowHandle {
                     TimeoutAction::Drop
                 },
             )
-            .expect("could add a timer loop");
+            .expect("adding a Timer to the calloop event loop is infallible");
         token
     }
 
