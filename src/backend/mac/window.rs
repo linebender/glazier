@@ -763,7 +763,7 @@ fn check_if_layer_delegate_install_needed(view: *mut Object, view_state: &mut Vi
         let layer: id = unsafe { msg_send![view, layer] };
         if layer != nil {
             // assume that the user is using a layer-backed view, and install our delegate on the layer.
-            // i expect that this code would break if the user was using a layer-hosting view, but unfortunatedly
+            // i expect that this code would break if the user was using a layer-hosting view, but unfortunately
             // i'm not aware of any way to check if a view is layer-backed or layer-hosting.
             let () = unsafe { msg_send![layer, setDelegate: view] };
             // always invalidate the layer when first installed; otherwise the user has to think hard about

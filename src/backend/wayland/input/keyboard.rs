@@ -104,7 +104,7 @@ impl Dispatch<wl_keyboard::WlKeyboard, KeyboardUserData> for WaylandState {
         match event {
             wl_keyboard::Event::Keymap { format, fd, size } => match format {
                 WEnum::Value(KeymapFormat::XkbV1) => {
-                    tracing::info!("Recieved new keymap");
+                    tracing::info!("Received new keymap");
                     let contents = unsafe {
                         mmap::Mmap::from_raw_private(
                             fd.as_raw_fd(),

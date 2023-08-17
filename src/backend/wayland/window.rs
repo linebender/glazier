@@ -824,7 +824,7 @@ impl WindowHandler for WaylandState {
             window
         } else {
             // Using let else here breaks formatting with rustfmt
-            tracing::warn!("Recieved configure event for unknown window");
+            tracing::warn!("Received configure event for unknown window");
             return;
         };
         // TODO: Actually use the suggestions from requested_size
