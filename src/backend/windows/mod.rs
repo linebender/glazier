@@ -17,35 +17,15 @@
 mod accels;
 pub mod application;
 pub mod clipboard;
-// pub mod dcomp;
 pub mod dialog;
 pub mod error;
 mod keyboard;
 pub mod menu;
 pub mod msgs;
-//pub mod paint;
 pub mod screen;
 mod timers;
 pub mod util;
 pub mod window;
-
-// https://docs.microsoft.com/en-us/windows/win32/direct2d/render-targets-overview
-// ID2D1RenderTarget is the interface. The other resources inherit from it.
-//
-// A Render Target creates resources for drawing and performs drawing operations.
-//
-// - ID2D1HwndRenderTarget objects render content to a window.
-// - ID2D1DCRenderTarget objects render to a GDI device context.
-// - bitmap render target objects render to off-screen bitmap.
-// - DXGI render target objects render to  a DXGI surface for use with Direct3D.
-//
-// https://docs.microsoft.com/en-us/windows/win32/direct2d/devices-and-device-contexts
-// A Device Context, ID2D1DeviceContext, is available as of windows 7 platform update. This
-// is the the minimum compatibility target for druid. We are not making an effort to do
-// RenderTarget only.
-//
-// Basically, go from HwndRenderTarget or DxgiSurfaceRenderTarget (2d or 3d) to a Device Context.
-// Go back up for particular needs.
 
 use std::fmt::{Debug, Display, Formatter};
 use winapi::shared::winerror::HRESULT;
