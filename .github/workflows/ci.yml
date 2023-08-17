@@ -52,8 +52,8 @@ jobs:
           toolchain: ${{ env.RUST_STABLE_VER }}
           components: clippy
 
-      - name: restore cache
-        uses: Swatinem/rust-cache@v2
+      #- name: restore cache
+      #  uses: Swatinem/rust-cache@v2
 
       - name: cargo clippy (no default features)
         run: cargo clippy --workspace --all-targets --no-default-features -- -D warnings
