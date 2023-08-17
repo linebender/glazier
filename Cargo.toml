@@ -83,7 +83,7 @@ features = [
     "fileapi",
     "processenv",
     "winbase",
-    #"winerror",
+    "winerror",
     "handleapi",
     "winnls",
 ]
