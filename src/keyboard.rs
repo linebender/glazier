@@ -75,39 +75,6 @@ impl KeyEvent {
     }
 }
 
-/// Extension methods for [`Modifiers`].
-pub trait ModifiersExt {
-    /// Determine whether Shift is set.
-    fn shift(&self) -> bool;
-
-    /// Determine whether Ctrl is set.
-    fn ctrl(&self) -> bool;
-
-    /// Determine whether Alt is set.
-    fn alt(&self) -> bool;
-
-    /// Determine whether Meta is set.
-    fn meta(&self) -> bool;
-}
-
-impl ModifiersExt for Modifiers {
-    fn shift(&self) -> bool {
-        self.contains(Modifiers::SHIFT)
-    }
-
-    fn ctrl(&self) -> bool {
-        self.contains(Modifiers::CONTROL)
-    }
-
-    fn alt(&self) -> bool {
-        self.contains(Modifiers::ALT)
-    }
-
-    fn meta(&self) -> bool {
-        self.contains(Modifiers::META)
-    }
-}
-
 impl IntoKey for KbKey {
     fn into_key(self) -> KbKey {
         self

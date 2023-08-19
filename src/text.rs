@@ -101,7 +101,7 @@
 //! `InputHandler` calls are simulated from keypresses on other platforms, which
 //! doesn't allow for IME input, dead keys, etc.
 
-use crate::keyboard::{KbKey, KeyEvent, ModifiersExt};
+use crate::keyboard::{KbKey, KeyEvent};
 use crate::kurbo::{Point, Rect};
 use crate::window::{TextFieldToken, WinHandler};
 use std::borrow::Cow;

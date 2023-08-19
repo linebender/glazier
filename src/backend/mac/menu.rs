@@ -22,7 +22,7 @@ use objc::{msg_send, sel, sel_impl};
 use super::util::make_nsstring;
 use crate::common_util::strip_access_key;
 use crate::hotkey::HotKey;
-use crate::keyboard::{KbKey, Modifiers, ModifiersExt};
+use crate::keyboard::{KbKey, Modifiers};
 
 pub struct Menu {
     pub menu: id,
