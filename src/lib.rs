@@ -68,7 +68,7 @@ pub use common_util::Counter;
 pub use dialog::{FileDialogOptions, FileInfo, FileSpec};
 pub use error::Error;
 pub use hotkey::{HotKey, RawMods, SysMods};
-pub use keyboard::{Code, IntoKey, KbKey, KeyEvent, KeyState, Location, Modifiers, ModifiersExt};
+pub use keyboard::{Code, IntoKey, KbKey, KeyEvent, KeyState, Location, Modifiers};
 pub use menu::Menu;
 pub use mouse::{Cursor, CursorDesc};
 pub use pointer::{
