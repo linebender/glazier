@@ -35,8 +35,6 @@ wayland = [
     "wayland-backend",
 ]
 
-serde = ["kurbo/serde"]
-
 accesskit = [
     "dep:accesskit",
     "accesskit_macos",
