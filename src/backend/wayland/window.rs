@@ -712,6 +712,13 @@ impl WaylandWindowState {
             if matches!(context, PaintContext::Frame) {
                 props.pending_frame_callback = false;
             }
+            if matches!(context, PaintContext::Requested) && props.pending_frame_callback && !force
+            {
+                // We'll handle this in the frame callback, when that occurs.
+                // This ensures throttling is respected
+                // This also prevents a hang on startup, although the reason for that occuring isn't clear
+                return;
+            }
             if !props.configured || (!props.will_repaint && !force) {
                 return;
             }
