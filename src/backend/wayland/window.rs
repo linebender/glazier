@@ -44,6 +44,7 @@ use super::input::{
 use super::menu::Menu;
 use super::{ActiveAction, IdleAction, WaylandState};
 
+use crate::{backend, IdleToken, Region, Scalable};
 use crate::{
     dialog::FileDialogOptions,
     error::Error as ShellError,
@@ -54,7 +55,6 @@ use crate::{
     window::{self, FileDialogToken, TimerToken, WinHandler, WindowLevel},
     TextFieldToken,
 };
-use crate::{IdleToken, Region, Scalable};
 
 #[derive(Clone)]
 pub struct WindowHandle {
@@ -573,15 +573,13 @@ impl WindowBuilder {
         self.loop_sender
             .send(ActiveAction::Window(
                 window_id,
-                WindowAction::Create(
-                    WaylandWindowState {
-                        handler: self.handler.unwrap(),
-                        properties: properties_strong,
-                        text_input_seat: None,
-                        text,
-                    },
-                    handle.clone(),
-                ),
+                WindowAction::Create(WaylandWindowState {
+                    handler: self.handler.unwrap(),
+                    properties: properties_strong,
+                    text_input_seat: None,
+                    text,
+                    handle: Some(handle.clone()),
+                }),
             ))
             .expect("Event loop should still be valid");
 
@@ -612,6 +610,11 @@ pub(super) struct WaylandWindowState {
     properties: Rc<RefCell<WindowProperties>>,
     text_input_seat: Option<SeatName>,
     pub text: TextInputCell,
+    // The handle which will be used to access this window
+    // Will be passed to the `connect` handler in initial configure
+    // Cheap to clone, but kept in an option to track whether
+    // `connect` has been sent
+    handle: Option<WindowHandle>,
 }
 
 struct WindowProperties {
@@ -827,6 +830,11 @@ impl WindowHandler for WaylandState {
             tracing::warn!("Received configure event for unknown window");
             return;
         };
+        if let Some(handle) = window.handle.take() {
+            window.handler.connect(&crate::WindowHandle(
+                backend::window::WindowHandle::Wayland(handle),
+            ));
+        }
         // TODO: Actually use the suggestions from requested_size
         let display_size;
         {
@@ -847,7 +855,7 @@ pub(super) enum WindowAction {
     ResizeRequested,
     /// Close the Window
     Close,
-    Create(WaylandWindowState, WindowHandle),
+    Create(WaylandWindowState),
     AnimationRequested,
     TextField(TextFieldChange),
 }
@@ -886,12 +894,8 @@ impl WindowAction {
                     state.loop_signal.stop();
                 }
             }
-            WindowAction::Create(win_state, handle) => {
-                let res = state.windows.entry(window_id);
-                let win_state = res.or_insert(win_state);
-                win_state.handler.connect(&crate::WindowHandle(
-                    crate::backend::window::WindowHandle::Wayland(handle),
-                ));
+            WindowAction::Create(win_state) => {
+                state.windows.insert(window_id, win_state);
             }
             WindowAction::AnimationRequested => {
                 let Some(window) = state.windows.get_mut(&window_id) else {
