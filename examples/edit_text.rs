@@ -602,11 +602,7 @@ fn direction_goes_downstream(direction: Direction) -> bool {
     }
 }
 
-fn apply_movement(
-    edit_lock: &mut AppInputHandler,
-    movement: Movement,
-    index: usize,
-) -> Option<usize> {
+fn apply_movement(edit_lock: &AppInputHandler, movement: Movement, index: usize) -> Option<usize> {
     match movement {
         Movement::Grapheme(dir) => {
             let doc_len = edit_lock.len();
