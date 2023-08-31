@@ -888,8 +888,8 @@ impl WindowAction {
                 // Remove the window from tracking
                 {
                     let Some(win) = state.windows.remove(&window_id) else {
-                    tracing::error!("Tried to close the same window twice");
-                    return;
+                        tracing::error!("Tried to close the same window twice");
+                        return;
                     };
                     if let Some(seat) = win.text_input_seat {
                         let seat = input_state(&mut state.input_states, seat);
