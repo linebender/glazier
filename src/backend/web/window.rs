@@ -24,11 +24,14 @@ use tracing::{error, warn};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle, WebWindowHandle};
+use raw_window_handle::{
+    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle, WebDisplayHandle,
+    WebWindowHandle,
+};
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 
-use crate::piet::{PietText, RenderContext};
+use crate::piet::RenderContext;
 
 use super::application::Application;
 use super::error::Error;
@@ -91,6 +94,12 @@ impl PartialEq for WindowHandle {
     }
 }
 impl Eq for WindowHandle {}
+
+unsafe impl HasRawDisplayHandle for WindowHandle {
+    fn raw_display_handle(&self) -> RawDisplayHandle {
+        RawDisplayHandle::Web(WebDisplayHandle::empty())
+    }
+}
 
 unsafe impl HasRawWindowHandle for WindowHandle {
     fn raw_window_handle(&self) -> RawWindowHandle {
@@ -623,7 +632,6 @@ impl WindowHandle {
     }
 
     pub fn request_timer(&self, deadline: Instant) -> TimerToken {
-        use std::convert::TryFrom;
         let interval = deadline.duration_since(Instant::now()).as_millis();
         let interval = match i32::try_from(interval) {
             Ok(iv) => iv,
