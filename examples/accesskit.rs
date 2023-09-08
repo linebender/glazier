@@ -167,7 +167,7 @@ impl WinHandler for HelloState {
         }
     }
 
-    fn key_down(&mut self, event: KeyEvent) -> bool {
+    fn key_down(&mut self, event: &KeyEvent) -> bool {
         if event.key == KbKey::Tab {
             self.focus = if self.focus == CHECKBOX_1_ID {
                 CHECKBOX_2_ID

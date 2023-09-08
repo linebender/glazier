@@ -920,7 +920,7 @@ impl WndProc for MyWndProc {
                                     }
                                 }
                                 KeyState::Up => {
-                                    s.handler.key_up(event);
+                                    s.handler.key_up(&event);
                                     if handle_menu {
                                         return true;
                                     }
@@ -976,7 +976,7 @@ impl WndProc for MyWndProc {
                         focus: false,
                         count: 0,
                     };
-                    s.handler.wheel(event);
+                    s.handler.wheel(&event);
                     true
                 });
                 if handled == Some(false) {
@@ -1026,7 +1026,7 @@ impl WndProc for MyWndProc {
                         focus: false,
                         count: 0,
                     };
-                    s.handler.pointer_move(event);
+                    s.handler.pointer_move(&event);
                 });
                 Some(0)
             }
@@ -1115,9 +1115,9 @@ impl WndProc for MyWndProc {
                         };
                         if count > 0 {
                             s.enter_pointer_capture(hwnd, button);
-                            s.handler.pointer_down(event);
+                            s.handler.pointer_down(&event);
                         } else {
-                            s.handler.pointer_up(event);
+                            s.handler.pointer_up(&event);
                             if s.exit_pointer_capture(button) {
                                 self.handle.borrow().defer(DeferredOp::ReleaseMouseCapture);
                             }

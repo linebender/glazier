@@ -389,7 +389,7 @@ impl SeatInfo {
         };
         match key_state {
             KeyState::Down => {
-                if handler.0.key_down(event.clone()) {
+                if handler.0.key_down(&event) {
                     return;
                 }
                 let update_can_do_nothing = matches!(
@@ -445,7 +445,7 @@ impl SeatInfo {
                     KeyboardHandled::NoUpdate => {}
                 }
             }
-            KeyState::Up => handler.0.key_up(event),
+            KeyState::Up => handler.0.key_up(&event),
         };
     }
 

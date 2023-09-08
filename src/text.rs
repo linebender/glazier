@@ -579,7 +579,7 @@ pub(crate) fn simulate_input<H: WinHandler + ?Sized>(
     token: Option<TextFieldToken>,
     event: KeyEvent,
 ) -> bool {
-    if handler.key_down(event.clone()) {
+    if handler.key_down(&event) {
         return true;
     }
 

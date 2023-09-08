@@ -653,14 +653,14 @@ pub trait WinHandler {
     ///
     /// Return `true` if the event is handled.
     #[allow(unused_variables)]
-    fn key_down(&mut self, event: KeyEvent) -> bool {
+    fn key_down(&mut self, event: &KeyEvent) -> bool {
         false
     }
 
     /// Called when a key is released. This corresponds to the `WM_KEYUP` message
     /// on Windows, or `keyUp(withEvent:)` on macOS.
     #[allow(unused_variables)]
-    fn key_up(&mut self, event: KeyEvent) {}
+    fn key_up(&mut self, event: &KeyEvent) {}
 
     /// Take a lock for the text document specified by `token`.
     ///
@@ -705,23 +705,23 @@ pub trait WinHandler {
     ///
     /// [WheelEvent]: https://w3c.github.io/uievents/#event-type-wheel
     #[allow(unused_variables)]
-    fn wheel(&mut self, event: PointerEvent) {}
+    fn wheel(&mut self, event: &PointerEvent) {}
 
     /// Called when a pointer moves.
     #[allow(unused_variables)]
-    fn pointer_move(&mut self, event: PointerEvent) {}
+    fn pointer_move(&mut self, event: &PointerEvent) {}
 
     /// Called when a pointer goes "down."
     ///
     /// This includes things like mouse button presses, and styli coming in contact with screens.
     #[allow(unused_variables)]
-    fn pointer_down(&mut self, event: PointerEvent) {}
+    fn pointer_down(&mut self, event: &PointerEvent) {}
 
     /// Called when a pointer goes "up."
     ///
     /// This includes things like mouse button releases, and styli lifting from screens.
     #[allow(unused_variables)]
-    fn pointer_up(&mut self, event: PointerEvent) {}
+    fn pointer_up(&mut self, event: &PointerEvent) {}
 
     /// Called when a pointer has left the application window.
     fn pointer_leave(&mut self) {}

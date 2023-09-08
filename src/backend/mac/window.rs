@@ -797,7 +797,7 @@ fn mouse_down(this: &mut Object, nsevent: id, button: PointerButton) {
         let count = nsevent.clickCount() as u8;
         let focus = view_state.focus_click && button == PointerButton::Primary;
         let event = mouse_pointer_event(nsevent, this as id, count, focus, button, Vec2::ZERO);
-        view_state.handler.pointer_down(event);
+        view_state.handler.pointer_down(&event);
     }
 }
 
@@ -828,14 +828,13 @@ fn mouse_up(this: &mut Object, nsevent: id, button: PointerButton) {
             false
         };
         let event = mouse_pointer_event(nsevent, this as id, 0, focus, button, Vec2::ZERO);
-        let buttons = event.buttons; // Copy for check after event is consumed.
-        view_state.handler.pointer_up(event);
+        view_state.handler.pointer_up(&event);
         // If we have already received a mouseExited event then that means
         // we're still receiving mouse events because some buttons are being held down.
         // When the last held button is released and we haven't received a mouseEntered event,
         // then we will no longer receive mouse events until the next mouseEntered event
         // and need to inform the handler of the mouse leaving.
-        if view_state.mouse_left && buttons.is_empty() {
+        if view_state.mouse_left && event.buttons.is_empty() {
             view_state.handler.pointer_leave();
         }
     }
@@ -853,7 +852,7 @@ extern "C" fn mouse_move(this: &mut Object, _: Sel, nsevent: id) {
             PointerButton::None,
             Vec2::ZERO,
         );
-        view_state.handler.pointer_move(event);
+        view_state.handler.pointer_move(&event);
     }
 }
 
@@ -863,7 +862,7 @@ extern "C" fn mouse_enter(this: &mut Object, _sel: Sel, nsevent: id) {
         let view_state = &mut *(view_state as *mut ViewState);
         view_state.mouse_left = false;
         let event = mouse_pointer_event(nsevent, this, 0, false, PointerButton::None, Vec2::ZERO);
-        view_state.handler.pointer_move(event);
+        view_state.handler.pointer_move(&event);
     }
 }
 
@@ -898,7 +897,7 @@ extern "C" fn scroll_wheel(this: &mut Object, _: Sel, nsevent: id) {
             PointerButton::None,
             Vec2::new(dx, dy),
         );
-        view_state.handler.wheel(event);
+        view_state.handler.wheel(&event);
     }
 }
 
@@ -918,7 +917,7 @@ extern "C" fn key_down(this: &mut Object, _: Sel, nsevent: id) {
         &mut *(view_state as *mut ViewState)
     };
     if let Some(event) = view_state.keyboard_state.process_native_event(nsevent) {
-        if !view_state.handler.key_down(event) {
+        if !view_state.handler.key_down(&event) {
             // key down not handled; forward to text input system
             unsafe {
                 let events = NSArray::arrayWithObjects(nil, &[nsevent]);
@@ -934,7 +933,7 @@ extern "C" fn key_up(this: &mut Object, _: Sel, nsevent: id) {
         &mut *(view_state as *mut ViewState)
     };
     if let Some(event) = view_state.keyboard_state.process_native_event(nsevent) {
-        view_state.handler.key_up(event);
+        view_state.handler.key_up(&event);
     }
 }
 
@@ -945,9 +944,9 @@ extern "C" fn mods_changed(this: &mut Object, _: Sel, nsevent: id) {
     };
     if let Some(event) = view_state.keyboard_state.process_native_event(nsevent) {
         if event.state == KeyState::Down {
-            view_state.handler.key_down(event);
+            view_state.handler.key_down(&event);
         } else {
-            view_state.handler.key_up(event);
+            view_state.handler.key_up(&event);
         }
     }
 }
