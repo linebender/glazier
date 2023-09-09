@@ -776,7 +776,7 @@ impl Window {
             let event = xkb_state.key_event(scancode, keysym, key_state, is_repeat);
             match key_state {
                 KeyState::Down => {
-                    if handler.key_down(event.clone()) {
+                    if handler.key_down(&event) {
                         // The keypress was handled by the user, nothing to do
                         return;
                     }
@@ -795,7 +795,7 @@ impl Window {
                     handler.release_input_lock(field_token);
                 }
                 KeyState::Up => {
-                    handler.key_up(event);
+                    handler.key_up(&event);
                     self.reset_text_fields_if_needed(xkb_state, handler);
                 }
             }
@@ -964,7 +964,7 @@ impl Window {
         pointer_ev.buttons = pointer_ev.buttons.with(pointer_ev.button);
         // TODO: detect the count
         pointer_ev.count = 1;
-        self.with_handler(|h| h.pointer_down(pointer_ev));
+        self.with_handler(|h| h.pointer_down(&pointer_ev));
         Ok(())
     }
 
@@ -973,27 +973,27 @@ impl Window {
         // The xcb state includes the newly released button, but druid
         // doesn't want it.
         pointer_ev.buttons = pointer_ev.buttons.without(pointer_ev.button);
-        self.with_handler(|h| h.pointer_up(pointer_ev));
+        self.with_handler(|h| h.pointer_up(&pointer_ev));
         Ok(())
     }
 
     pub fn handle_touch_begin(&self, ev: &xinput::TouchBeginEvent) -> Result<(), Error> {
         let mut pointer_ev = self.pointer_touch_event(ev);
         pointer_ev.buttons = pointer_ev.buttons.with(pointer_ev.button);
-        self.with_handler(|h| h.pointer_down(pointer_ev));
+        self.with_handler(|h| h.pointer_down(&pointer_ev));
         Ok(())
     }
 
     pub fn handle_touch_update(&self, ev: &xinput::TouchBeginEvent) -> Result<(), Error> {
         let pointer_ev = self.pointer_touch_event(ev);
-        self.with_handler(|h| h.pointer_move(pointer_ev));
+        self.with_handler(|h| h.pointer_move(&pointer_ev));
         Ok(())
     }
 
     pub fn handle_touch_end(&self, ev: &xinput::TouchBeginEvent) -> Result<(), Error> {
         let mut pointer_ev = self.pointer_touch_event(ev);
         pointer_ev.buttons = pointer_ev.buttons.without(pointer_ev.button);
-        self.with_handler(|h| h.pointer_move(pointer_ev));
+        self.with_handler(|h| h.pointer_move(&pointer_ev));
         Ok(())
     }
 
@@ -1016,14 +1016,14 @@ impl Window {
         });
         pointer_ev.button = PointerButton::None;
 
-        self.with_handler(|h| h.wheel(pointer_ev));
+        self.with_handler(|h| h.wheel(&pointer_ev));
         Ok(())
     }
 
     pub fn handle_motion_notify(&self, ev: &xinput::ButtonPressEvent) -> Result<(), Error> {
         let mut pointer_ev = self.pointer_event(ev);
         pointer_ev.button = PointerButton::None;
-        self.with_handler(|h| h.pointer_move(pointer_ev));
+        self.with_handler(|h| h.pointer_move(&pointer_ev));
         Ok(())
     }
 

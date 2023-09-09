@@ -366,16 +366,16 @@ impl WinHandler for WindowState {
         self.cursor_blink_token = Some(self.handle.request_timer(CURSOR_BLINK_INTERVAL));
     }
 
-    fn key_down(&mut self, event: KeyEvent) -> bool {
+    fn key_down(&mut self, event: &KeyEvent) -> bool {
         self.schedule_render();
-        if self.hotkeys.copy.matches(&event) {
+        if self.hotkeys.copy.matches(event) {
             let doc = self.document.borrow_mut();
             let text = &doc.text[doc.selection.range()];
             Application::global().clipboard().put_string(text); // return true prevents the keypress event from being handled as text input
 
             return true;
         }
-        if self.hotkeys.paste.matches(&event) {
+        if self.hotkeys.paste.matches(event) {
             println!("Pasting");
             let clipboard_contents = Application::global().clipboard().get_string();
             if let Some(mut contents) = clipboard_contents {
@@ -399,7 +399,7 @@ impl WinHandler for WindowState {
 
             return true;
         }
-        if self.hotkeys.select_all.matches(&event) {
+        if self.hotkeys.select_all.matches(event) {
             {
                 let mut doc = self.document.borrow_mut();
                 doc.selection = Selection::new(0, doc.text.len());

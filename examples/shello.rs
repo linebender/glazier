@@ -147,29 +147,29 @@ impl WinHandler for WindowState {
         println!("save file result: {file:?}");
     }
 
-    fn key_down(&mut self, event: KeyEvent) -> bool {
+    fn key_down(&mut self, event: &KeyEvent) -> bool {
         println!("keydown: {event:?}");
         false
     }
 
-    fn key_up(&mut self, event: KeyEvent) {
+    fn key_up(&mut self, event: &KeyEvent) {
         println!("keyup: {event:?}");
     }
 
-    fn wheel(&mut self, event: PointerEvent) {
+    fn wheel(&mut self, event: &PointerEvent) {
         println!("wheel {event:?}");
     }
 
-    fn pointer_move(&mut self, _event: PointerEvent) {
+    fn pointer_move(&mut self, _event: &PointerEvent) {
         self.handle.set_cursor(&Cursor::Arrow);
         //println!("pointer_move {event:?}");
     }
 
-    fn pointer_down(&mut self, event: PointerEvent) {
+    fn pointer_down(&mut self, event: &PointerEvent) {
         println!("pointer_down {event:?}");
     }
 
-    fn pointer_up(&mut self, event: PointerEvent) {
+    fn pointer_up(&mut self, event: &PointerEvent) {
         println!("pointer_up {event:?}");
     }
 

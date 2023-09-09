@@ -215,7 +215,7 @@ fn setup_mouse_down_callback(ws: &Rc<WindowState>) {
                 focus: false,
                 count,
             };
-            state.handler.borrow_mut().pointer_down(event);
+            state.handler.borrow_mut().pointer_down(&event);
         }
     });
 }
@@ -237,7 +237,7 @@ fn setup_mouse_up_callback(ws: &Rc<WindowState>) {
                 focus: false,
                 count: 0,
             };
-            state.handler.borrow_mut().pointer_up(event);
+            state.handler.borrow_mut().pointer_up(&event);
         }
     });
 }
@@ -258,7 +258,7 @@ fn setup_mouse_move_callback(ws: &Rc<WindowState>) {
             focus: false,
             count: 0,
         };
-        state.handler.borrow_mut().pointer_move(event);
+        state.handler.borrow_mut().pointer_move(&event);
     });
 }
 
@@ -295,7 +295,7 @@ fn setup_scroll_callback(ws: &Rc<WindowState>) {
             focus: false,
             count: 0,
         };
-        state.handler.borrow_mut().wheel(event);
+        state.handler.borrow_mut().wheel(&event);
     });
 }
 
@@ -314,7 +314,7 @@ fn setup_keyup_callback(ws: &Rc<WindowState>) {
     register_window_event_listener(ws, "keyup", move |event: web_sys::KeyboardEvent| {
         let modifiers = get_modifiers!(event);
         let kb_event = convert_keyboard_event(&event, modifiers, KeyState::Up);
-        state.handler.borrow_mut().key_up(kb_event);
+        state.handler.borrow_mut().key_up(&kb_event);
     });
 }
 
