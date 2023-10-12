@@ -9,11 +9,8 @@ fn main() {
     // Get a handle from the app
     let handle = app.get_handle().expect("failed to get app handle");
 
-    // Spawn a new thread where we will use the app handle
+    // Spawn a new thread and move the app handle there
     thread::spawn(move || {
-        // This just explicitly shows that the handle gets moved into this closure
-        let handle = handle;
-
         // Take a quick break
         println!("Starting sleep");
         thread::sleep(Duration::from_secs(5));
