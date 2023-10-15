@@ -16,6 +16,9 @@ categories = [
 exclude = ["/.github/"]
 publish = false # Until it's ready
 
+[workspace]
+members = ["v2"]
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
