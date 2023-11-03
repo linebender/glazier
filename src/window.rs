@@ -102,13 +102,13 @@ impl IdleHandle {
     where
         F: FnOnce(&mut dyn WinHandler) + Send + 'static,
     {
-        self.0.add_idle_callback(callback)
+        self.0.add_idle_callback(callback);
     }
 
     /// Request a callback from the runloop. Your [`WinHandler::idle`] method will
     /// be called with the `token` that was passed in.
     pub fn schedule_idle(&mut self, token: IdleToken) {
-        self.0.add_idle_token(token)
+        self.0.add_idle_token(token);
     }
 }
 
@@ -202,17 +202,17 @@ impl WindowHandle {
     /// This is part of the initialization process; it should only be called
     /// once, when a window is first created.
     pub fn show(&self) {
-        self.0.show()
+        self.0.show();
     }
 
     /// Close the window.
     pub fn close(&self) {
-        self.0.close()
+        self.0.close();
     }
 
     /// Set whether the window should be resizable
     pub fn resizable(&self, resizable: bool) {
-        self.0.resizable(resizable)
+        self.0.resizable(resizable);
     }
 
     /// Sets the state of the window.
@@ -237,7 +237,7 @@ impl WindowHandle {
 
     /// Set whether the window should show titlebar.
     pub fn show_titlebar(&self, show_titlebar: bool) {
-        self.0.show_titlebar(show_titlebar)
+        self.0.show_titlebar(show_titlebar);
     }
 
     /// Sets the position of the window.
@@ -247,7 +247,7 @@ impl WindowHandle {
     ///
     /// [display points]: crate::Scale
     pub fn set_position(&self, position: impl Into<Point>) {
-        self.0.set_position(position.into())
+        self.0.set_position(position.into());
     }
 
     /// Returns the position of the top left corner of the window.
@@ -287,7 +287,7 @@ impl WindowHandle {
     ///
     /// [display points]: crate::Scale
     pub fn set_size(&self, size: impl Into<Size>) {
-        self.0.set_size(size.into())
+        self.0.set_size(size.into());
     }
 
     /// Gets the window size, in [display points].
@@ -299,7 +299,7 @@ impl WindowHandle {
 
     /// Bring this window to the front of the window stack and give it focus.
     pub fn bring_to_front_and_focus(&self) {
-        self.0.bring_to_front_and_focus()
+        self.0.bring_to_front_and_focus();
     }
 
     /// Request that [`prepare_paint`] and [`paint`] be called next time there's the opportunity to
@@ -326,12 +326,12 @@ impl WindowHandle {
 
     /// Set the title for this menu.
     pub fn set_title(&self, title: &str) {
-        self.0.set_title(title)
+        self.0.set_title(title);
     }
 
     /// Set the top-level menu for this window.
     pub fn set_menu(&self, menu: Menu) {
-        self.0.set_menu(menu.into_inner())
+        self.0.set_menu(menu.into_inner());
     }
 
     /// Register a new text input receiver for this window.
@@ -352,7 +352,7 @@ impl WindowHandle {
     /// If `token` is the text field currently focused, the platform automatically
     /// sets the focused field to `None`.
     pub fn remove_text_field(&self, token: TextFieldToken) {
-        self.0.remove_text_field(token)
+        self.0.remove_text_field(token);
     }
 
     /// Notify the platform that the focused text input receiver has changed.
@@ -360,7 +360,7 @@ impl WindowHandle {
     /// This must be called any time focus changes to a different text input, or
     /// when focus switches away from a text input.
     pub fn set_focused_text_field(&self, active_field: Option<TextFieldToken>) {
-        self.0.set_focused_text_field(active_field)
+        self.0.set_focused_text_field(active_field);
     }
 
     /// Notify the platform that some text input state has changed, such as the
@@ -370,7 +370,7 @@ impl WindowHandle {
     /// `InputHandler`; only in response to changes from the application:
     /// scrolling, remote edits, etc.
     pub fn update_text_field(&self, token: TextFieldToken, update: Event) {
-        self.0.update_text_field(token, update)
+        self.0.update_text_field(token, update);
     }
 
     /// Schedule a timer.
@@ -389,7 +389,7 @@ impl WindowHandle {
 
     /// Set the cursor icon.
     pub fn set_cursor(&mut self, cursor: &Cursor) {
-        self.0.set_cursor(cursor)
+        self.0.set_cursor(cursor);
     }
 
     pub fn make_cursor(&self, desc: &CursorDesc) -> Option<Cursor> {
@@ -418,7 +418,7 @@ impl WindowHandle {
     ///
     /// `pos` is in the coordinate space of the window.
     pub fn show_context_menu(&self, menu: Menu, pos: Point) {
-        self.0.show_context_menu(menu.into_inner(), pos)
+        self.0.show_context_menu(menu.into_inner(), pos);
     }
 
     /// Get a handle that can be used to schedule an idle task.

@@ -132,7 +132,7 @@ impl Clipboard {
 
     /// Put multi-format data on the system clipboard.
     pub fn put_formats(&mut self, formats: &[ClipboardFormat]) {
-        self.0.put_formats(formats)
+        self.0.put_formats(formats);
     }
 
     /// Get a string from the system clipboard, if one is available.

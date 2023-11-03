@@ -48,7 +48,7 @@ impl Menu {
 
     /// Add the provided `Menu` as a submenu of self, with the provided title.
     pub fn add_dropdown(&mut self, menu: Menu, text: &str, enabled: bool) {
-        self.0.add_dropdown(menu.0, text, enabled)
+        self.0.add_dropdown(menu.0, text, enabled);
     }
 
     /// Add an item to this menu.
@@ -72,11 +72,11 @@ impl Menu {
         selected: Option<bool>,
         enabled: bool,
     ) {
-        self.0.add_item(id, text, key, selected, enabled)
+        self.0.add_item(id, text, key, selected, enabled);
     }
 
     /// Add a separator to the menu.
     pub fn add_separator(&mut self) {
-        self.0.add_separator()
+        self.0.add_separator();
     }
 }

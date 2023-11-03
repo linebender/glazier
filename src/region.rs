@@ -86,7 +86,7 @@ impl Region {
         for r in &mut self.rects {
             *r = r.intersect(rect);
         }
-        self.rects.retain(|r| r.area() > 0.0)
+        self.rects.retain(|r| r.area() > 0.0);
     }
 }
 

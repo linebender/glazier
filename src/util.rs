@@ -53,7 +53,7 @@ pub(crate) fn claim_main_thread() {
         Ok(0) => (),
         Ok(_) => unreachable!(), // not possible per the docs
         Err(0) => {
-            tracing::warn!("The main thread status was already claimed by the current thread.")
+            tracing::warn!("The main thread status was already claimed by the current thread.");
         }
         Err(k) => panic!("The main thread status has already been claimed by thread {k}"),
     }

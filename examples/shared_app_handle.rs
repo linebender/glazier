@@ -19,7 +19,7 @@ fn main() {
         // Use the app handle to run code back on the main thread
         handle.run_on_main(|_| {
             println!("Running on main!");
-        })
+        });
     });
 
     app.run(None);
