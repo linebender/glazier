@@ -1235,7 +1235,7 @@ impl WindowBuilder {
         }
     }
 
-    /// This takes ownership, and is typically used with UiMain
+    /// This takes ownership, and is typically used with `UiMain`
     pub fn handler(mut self, handler: Box<dyn WinHandler>) -> Self {
         self.handler = Some(handler);
         self
@@ -1539,7 +1539,7 @@ pub(crate) unsafe extern "system" fn win_proc_dispatch(
     }
 }
 
-/// Create a window (same parameters as CreateWindowExW) with associated WndProc.
+/// Create a window (same parameters as `CreateWindowExW`) with associated `WndProc`.
 #[allow(clippy::too_many_arguments)]
 unsafe fn create_window(
     dwExStyle: DWORD,

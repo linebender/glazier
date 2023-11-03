@@ -668,7 +668,7 @@ pub trait WinHandler {
     /// [`release_input_lock`].
     ///
     /// If `mutable` is true, the lock should be a write lock, and allow calling
-    /// mutating methods on InputHandler.  This method is called from the top
+    /// mutating methods on [`InputHandler`].  This method is called from the top
     /// level of the event loop and expects to acquire a lock successfully.
     ///
     /// For more information, see [the text input documentation](crate::text).

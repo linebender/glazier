@@ -74,7 +74,7 @@ impl Menu {
     /// Add a dropdown menu. This takes the menu by ownership, but we'll
     /// probably want to change that so we can manipulate it later.
     ///
-    /// The `text` field has all the fun behavior of winapi CreateMenu.
+    /// The `text` field has all the fun behavior of winapi `CreateMenu`.
     pub fn add_dropdown(&mut self, mut menu: Menu, text: &str, enabled: bool) {
         let child_accels = std::mem::take(&mut menu.accels);
         self.accels.extend(child_accels);
@@ -149,7 +149,7 @@ impl Menu {
 /// Convert a hotkey to an accelerator.
 ///
 /// Note that this conversion is dependent on the keyboard map.
-/// Therefore, when the keyboard map changes (WM_INPUTLANGCHANGE),
+/// Therefore, when the keyboard map changes (`WM_INPUTLANGCHANGE`),
 /// we should be rebuilding the accelerator map.
 fn convert_hotkey(id: u32, key: &HotKey) -> Option<ACCEL> {
     let mut virt_key = FVIRTKEY;

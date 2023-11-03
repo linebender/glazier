@@ -204,7 +204,7 @@ pub struct ClickCounter {
 
 #[allow(dead_code)]
 impl ClickCounter {
-    /// Create a new ClickCounter with the given interval and distance.
+    /// Create a new `ClickCounter` with the given interval and distance.
     pub fn new(max_interval: Duration, max_distance: f64) -> ClickCounter {
         ClickCounter {
             max_interval: Cell::new(max_interval),

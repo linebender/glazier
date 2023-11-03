@@ -8,3 +8,6 @@ trivial-copy-size-limit = 16
 # like Box<dyn Fn(&mut Env, &T)>, which seems overly strict. The new value of 400 is
 # a simple guess. It might be worth lowering this, or using the default, in the future.
 type-complexity-threshold = 400
+
+# Don't warn about these identifiers when using clippy::doc_markdown.
+doc-valid-idents = ["Direct2D", "HiDPI", ".."]
