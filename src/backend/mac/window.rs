@@ -194,6 +194,8 @@ struct ViewState {
     parent: Option<crate::WindowHandle>,
     #[cfg(feature = "accesskit")]
     accesskit_adapter: OnceCell<AccessKitAdapter>,
+    #[cfg(feature = "accesskit")]
+    is_focused: bool,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -650,6 +652,8 @@ fn make_view(handler: Box<dyn WinHandler>) -> (id, Weak<Mutex<Vec<IdleKind>>>) {
             parent: None,
             #[cfg(feature = "accesskit")]
             accesskit_adapter: OnceCell::new(),
+            #[cfg(feature = "accesskit")]
+            is_focused: false,
         };
         let state_ptr = Box::into_raw(Box::new(state));
         (*view).set_ivar("viewState", state_ptr as *mut c_void);
@@ -1105,6 +1109,14 @@ extern "C" fn window_did_become_key(this: &mut Object, _: Sel, _notification: id
         let view_state: *mut c_void = *this.get_ivar("viewState");
         let view_state = &mut *(view_state as *mut ViewState);
         view_state.handler.got_focus();
+        #[cfg(feature = "accesskit")]
+        {
+            view_state.is_focused = true;
+            if let Some(adapter) = view_state.accesskit_adapter.get() {
+                let events = adapter.update_view_focus_state(true);
+                events.raise();
+            }
+        }
     }
 }
 
@@ -1113,6 +1125,14 @@ extern "C" fn window_did_resign_key(this: &mut Object, _: Sel, _notification: id
         let view_state: *mut c_void = *this.get_ivar("viewState");
         let view_state = &mut *(view_state as *mut ViewState);
         view_state.handler.lost_focus();
+        #[cfg(feature = "accesskit")]
+        {
+            view_state.is_focused = false;
+            if let Some(adapter) = view_state.accesskit_adapter.get() {
+                let events = adapter.update_view_focus_state(false);
+                events.raise();
+            }
+        }
     }
 }
 
@@ -1596,7 +1616,7 @@ impl IdleHandle {
 
 #[cfg(feature = "accesskit")]
 impl accesskit::ActionHandler for AccessKitActionHandler {
-    fn do_action(&self, request: accesskit::ActionRequest) {
+    fn do_action(&mut self, request: accesskit::ActionRequest) {
         self.idle_handle.add_idle_callback(move |handler| {
             handler.accesskit_action(request);
         });
@@ -1616,6 +1636,7 @@ impl ViewState {
         }
         let view = view as *mut Object as *mut c_void;
         let initial_state = self.handler.accesskit_tree();
+        let is_focused = self.is_focused;
         let idle_handle = IdleHandle {
             nsview: self.nsview.clone(),
             idle_queue: Arc::downgrade(&self.idle_queue),
@@ -1623,7 +1644,8 @@ impl ViewState {
         let action_handler = Box::new(AccessKitActionHandler { idle_handle });
         // SAFETY: The view pointer is based on a valid borrowed reference
         // to the view.
-        let adapter = unsafe { AccessKitAdapter::new(view, initial_state, action_handler) };
+        let adapter =
+            unsafe { AccessKitAdapter::new(view, initial_state, is_focused, action_handler) };
         match self.accesskit_adapter.try_insert(adapter) {
             Ok(adapter) => adapter,
             Err((old_adapter, _)) => {

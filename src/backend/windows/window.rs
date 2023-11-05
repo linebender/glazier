@@ -245,6 +245,8 @@ struct WindowState {
     uia_init_marker: UiaInitMarker, // zero size
     #[cfg(feature = "accesskit")]
     accesskit_adapter: OnceCell<AccessKitAdapter>,
+    #[cfg(feature = "accesskit")]
+    is_focused: Cell<bool>,
 }
 
 impl std::fmt::Debug for WindowState {
@@ -737,10 +739,34 @@ impl WndProc for MyWndProc {
             WM_ERASEBKGND => Some(0),
             WM_SETFOCUS => {
                 self.with_wnd_state(|s| s.handler.got_focus());
+                #[cfg(feature = "accesskit")]
+                {
+                    let handle = self.handle.borrow();
+                    if let Some(state) = handle.state.upgrade() {
+                        state.is_focused.set(true);
+                        if let Some(adapter) = state.accesskit_adapter.get() {
+                            let events = adapter.update_window_focus_state(true);
+                            drop(handle);
+                            events.raise();
+                        }
+                    }
+                }
                 Some(0)
             }
             WM_KILLFOCUS => {
                 self.with_wnd_state(|s| s.handler.lost_focus());
+                #[cfg(feature = "accesskit")]
+                {
+                    let handle = self.handle.borrow();
+                    if let Some(state) = handle.state.upgrade() {
+                        state.is_focused.set(false);
+                        if let Some(adapter) = state.accesskit_adapter.get() {
+                            let events = adapter.update_window_focus_state(false);
+                            drop(handle);
+                            events.raise();
+                        }
+                    }
+                }
                 Some(0)
             }
             WM_PAINT => unsafe {
@@ -1187,6 +1213,7 @@ impl WndProc for MyWndProc {
                         let wparam = accesskit_windows::WPARAM(wparam);
                         let lparam = accesskit_windows::LPARAM(lparam);
                         let idle_queue = &state.idle_queue;
+                        let is_focused = state.is_focused.get();
                         let uia_init_marker = state.uia_init_marker; // zero size and Copy
                         state
                             .accesskit_adapter
@@ -1202,6 +1229,7 @@ impl WndProc for MyWndProc {
                                 AccessKitAdapter::new(
                                     hwnd,
                                     initial_tree_state,
+                                    is_focused,
                                     action_handler,
                                     uia_init_marker,
                                 )
@@ -1391,6 +1419,8 @@ impl WindowBuilder {
                 uia_init_marker: UiaInitMarker::new(),
                 #[cfg(feature = "accesskit")]
                 accesskit_adapter: OnceCell::new(),
+                #[cfg(feature = "accesskit")]
+                is_focused: Cell::new(false),
             };
             let win = Rc::new(window);
             let handle = WindowHandle {
@@ -2087,7 +2117,7 @@ impl IdleHandle {
 
 #[cfg(feature = "accesskit")]
 impl accesskit::ActionHandler for AccessKitActionHandler {
-    fn do_action(&self, request: accesskit::ActionRequest) {
+    fn do_action(&mut self, request: accesskit::ActionRequest) {
         self.idle_handle.add_idle_callback(move |handler| {
             handler.accesskit_action(request);
         });
