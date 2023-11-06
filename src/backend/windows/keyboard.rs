@@ -69,7 +69,7 @@ pub(crate) struct KeyboardState {
 
 /// Virtual key codes that are considered printable.
 ///
-/// This logic is borrowed from KeyboardLayout::GetKeyIndex
+/// This logic is borrowed from `KeyboardLayout::GetKeyIndex`
 /// in Mozilla.
 const PRINTABLE_VKS: &[RangeInclusive<VkCode>] = &[
     0x20..=0x20,
@@ -518,7 +518,7 @@ fn code_unit_to_key(code_unit: u32) -> KbKey {
 
 /// Get location from virtual key code.
 ///
-/// This logic is based on NativeKbKey::GetKeyLocation from Mozilla.
+/// This logic is based on `NativeKbKey::GetKeyLocation` from Mozilla.
 fn vk_to_location(vk: VkCode, is_extended: bool) -> Location {
     match vk as INT {
         VK_LSHIFT | VK_LCONTROL | VK_LMENU | VK_LWIN => Location::Left,
@@ -733,7 +733,7 @@ impl KeyboardState {
     /// states, because it's not practical to query that at keyboard event
     /// time (the main culprit is that `ToUnicodeEx` is stateful).
     ///
-    /// The logic is based on Mozilla KeyboardLayout::LoadLayout but is
+    /// The logic is based on Mozilla `KeyboardLayout::LoadLayout` but is
     /// considerably simplified.
     fn load_keyboard_layout(&mut self) {
         unsafe {

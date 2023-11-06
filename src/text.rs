@@ -188,7 +188,7 @@ impl Selection {
         }
     }
 
-    /// Construct a new selection from this selection, with the provided h_pos.
+    /// Construct a new selection from this selection, with the provided `h_pos`.
     ///
     /// # Note
     ///
@@ -463,7 +463,7 @@ pub trait InputHandler {
 /// is entered (or the composition is otherwise cancelled).
 ///
 /// We choose to emulate that behaviour for applications using Glazier on Wayland
-/// and X11. Upon a keypress, the keypress is converted into its KeyEvent (ignoring
+/// and X11. Upon a keypress, the keypress is converted into its [`KeyEvent`] (ignoring
 /// composition, but properly setting `is_composing`). Then, if the handler does
 /// not handle[^handling] that key press, and there is a text input[^input_present], this process kicks in:
 ///

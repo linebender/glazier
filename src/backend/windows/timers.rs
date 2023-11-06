@@ -53,7 +53,7 @@ impl TimerSlots {
         }
     }
 
-    /// Compute an elapsed value for SetTimer (in ms)
+    /// Compute an elapsed value for `SetTimer` (in ms)
     pub fn compute_elapsed(&self, deadline: Instant) -> u32 {
         deadline
             .checked_duration_since(Instant::now())
