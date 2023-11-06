@@ -339,7 +339,7 @@ impl WinHandler for WindowState {
     }
 
     fn destroy(&mut self) {
-        Application::global().quit()
+        Application::global().quit();
     }
 
     fn acquire_input_lock(

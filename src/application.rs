@@ -160,7 +160,7 @@ impl Application {
     ///
     /// This will cause [`Application::run`] to return control back to the calling function.
     pub fn quit(&self) {
-        self.backend_app.quit()
+        self.backend_app.quit();
     }
 
     /// Returns a handle to the system clipboard.

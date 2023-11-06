@@ -216,11 +216,11 @@ impl ClickCounter {
     }
 
     pub fn set_interval_ms(&self, millis: u64) {
-        self.max_interval.set(Duration::from_millis(millis))
+        self.max_interval.set(Duration::from_millis(millis));
     }
 
     pub fn set_distance(&self, distance: f64) {
-        self.max_distance.set(distance)
+        self.max_distance.set(distance);
     }
 
     /// Return the click count for a click occurring now, at the provided position.

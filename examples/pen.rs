@@ -242,7 +242,7 @@ impl WinHandler for WindowState {
     }
 
     fn destroy(&mut self) {
-        Application::global().quit()
+        Application::global().quit();
     }
 
     fn as_any(&mut self) -> &mut dyn Any {

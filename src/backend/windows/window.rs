@@ -466,7 +466,7 @@ impl MyWndProc {
     }
 
     fn set_scale(&self, scale: Scale) {
-        self.with_window_state(move |state| state.scale.set(scale))
+        self.with_window_state(move |state| state.scale.set(scale));
     }
 
     /// Takes the invalid region and returns it, replacing it with the empty region.
@@ -481,7 +481,7 @@ impl MyWndProc {
     }
 
     fn set_area(&self, area: ScaledArea) {
-        self.with_window_state(move |state| state.area.set(area))
+        self.with_window_state(move |state| state.area.set(area));
     }
 
     fn has_menu(&self) -> bool {
@@ -2035,7 +2035,7 @@ impl WindowHandle {
 
     fn free_timer_slot(&self, token: TimerToken) {
         if let Some(w) = self.state.upgrade() {
-            w.timers.lock().unwrap().free(token)
+            w.timers.lock().unwrap().free(token);
         }
     }
 

@@ -40,7 +40,7 @@ impl Clipboard {
     pub fn put_string(&mut self, s: impl AsRef<str>) {
         let s = s.as_ref();
         let format: ClipboardFormat = s.into();
-        self.put_formats(&[format])
+        self.put_formats(&[format]);
     }
 
     /// Put multi-format data on the system clipboard.
@@ -242,7 +242,7 @@ fn iter_clipboard_types() -> impl Iterator<Item = UINT> {
                                 tracing::error!(
                                     "iterating clipboard formats failed, error={}",
                                     other
-                                )
+                                );
                             }
                         }
                         None
