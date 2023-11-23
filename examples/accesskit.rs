@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{any::Any, num::NonZeroU128};
+use std::any::Any;
 
 use accesskit::{
-    Action, ActionRequest, CheckedState, DefaultActionVerb, Node, NodeBuilder, NodeClassSet,
-    NodeId, Rect, Role, Tree, TreeUpdate,
+    Action, ActionRequest, Checked, DefaultActionVerb, Node, NodeBuilder, NodeClassSet, NodeId,
+    Rect, Role, Tree, TreeUpdate,
 };
 
 use glazier::kurbo::Size;
@@ -25,9 +25,9 @@ use glazier::{Application, KbKey, KeyEvent, Region, WinHandler, WindowBuilder, W
 
 const WINDOW_TITLE: &str = "Hello world";
 
-const WINDOW_ID: NodeId = NodeId(unsafe { NonZeroU128::new_unchecked(1) });
-const CHECKBOX_1_ID: NodeId = NodeId(unsafe { NonZeroU128::new_unchecked(2) });
-const CHECKBOX_2_ID: NodeId = NodeId(unsafe { NonZeroU128::new_unchecked(3) });
+const WINDOW_ID: NodeId = NodeId(0);
+const CHECKBOX_1_ID: NodeId = NodeId(1);
+const CHECKBOX_2_ID: NodeId = NodeId(2);
 const INITIAL_FOCUS: NodeId = CHECKBOX_1_ID;
 
 const CHECKBOX_1_NAME: &str = "Checkbox 1";
@@ -59,10 +59,10 @@ fn build_checkbox(id: NodeId, checked: bool, classes: &mut NodeClassSet) -> Node
     builder.set_name(name);
     builder.add_action(Action::Focus);
     builder.set_default_action_verb(DefaultActionVerb::Click);
-    builder.set_checked_state(if checked {
-        CheckedState::True
+    builder.set_checked(if checked {
+        Checked::True
     } else {
-        CheckedState::False
+        Checked::False
     });
     builder.build(classes)
 }
@@ -70,7 +70,6 @@ fn build_checkbox(id: NodeId, checked: bool, classes: &mut NodeClassSet) -> Node
 struct HelloState {
     size: Size,
     focus: NodeId,
-    is_window_focused: bool,
     checkbox_1_checked: bool,
     checkbox_2_checked: bool,
     handle: WindowHandle,
@@ -82,7 +81,6 @@ impl HelloState {
         Self {
             size: Default::default(),
             focus: INITIAL_FOCUS,
-            is_window_focused: false,
             checkbox_1_checked: false,
             checkbox_2_checked: false,
             handle: Default::default(),
@@ -90,15 +88,11 @@ impl HelloState {
         }
     }
 
-    fn accesskit_focus(&self) -> Option<NodeId> {
-        self.is_window_focused.then_some(self.focus)
-    }
-
     fn update_accesskit_focus(&self) {
         self.handle.update_accesskit_if_active(|| TreeUpdate {
             nodes: vec![],
             tree: None,
-            focus: self.accesskit_focus(),
+            focus: self.focus,
         });
     }
 
@@ -114,10 +108,7 @@ impl HelloState {
             }
             _ => unreachable!(),
         };
-        // We have to be slightly less lazy here than we'd like because we can't
-        // borrow self immutably inside the closure while we have a mutable
-        // borrow of self.node_classes. TBD: Does this indicate a design flaw?
-        let focus = self.accesskit_focus();
+        let focus = self.focus;
         let node_classes = &mut self.node_classes;
         self.handle.update_accesskit_if_active(|| {
             let node = build_checkbox(id, checked, node_classes);
@@ -163,7 +154,7 @@ impl WinHandler for HelloState {
                 (CHECKBOX_2_ID, checkbox_2),
             ],
             tree: Some(Tree::new(WINDOW_ID)),
-            focus: self.accesskit_focus(),
+            focus: self.focus,
         }
     }
 
@@ -186,16 +177,6 @@ impl WinHandler for HelloState {
 
     fn size(&mut self, size: Size) {
         self.size = size;
-    }
-
-    fn got_focus(&mut self) {
-        self.is_window_focused = true;
-        self.update_accesskit_focus();
-    }
-
-    fn lost_focus(&mut self) {
-        self.is_window_focused = false;
-        self.update_accesskit_focus();
     }
 
     fn accesskit_action(&mut self, request: ActionRequest) {

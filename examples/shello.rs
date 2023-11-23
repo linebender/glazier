@@ -132,7 +132,16 @@ impl WinHandler for WindowState {
     #[cfg(feature = "accesskit")]
     fn accesskit_tree(&mut self) -> TreeUpdate {
         // TODO: Construct a real TreeUpdate
-        TreeUpdate::default()
+        use accesskit::{NodeBuilder, NodeClassSet, NodeId, Role, Tree};
+        let builder = NodeBuilder::new(Role::Window);
+        let mut node_classes = NodeClassSet::new();
+        let node = builder.build(&mut node_classes);
+        const WINDOW_ID: NodeId = NodeId(0);
+        TreeUpdate {
+            nodes: vec![(WINDOW_ID, node)],
+            tree: Some(Tree::new(WINDOW_ID)),
+            focus: WINDOW_ID,
+        }
     }
 
     fn idle(&mut self, _: IdleToken) {}
