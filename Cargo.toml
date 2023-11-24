@@ -27,7 +27,7 @@ default-target = "x86_64-pc-windows-msvc"
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 [features]
-default = ["x11"]
+default = ["x11", "wayland"]
 x11 = ["ashpd", "bindgen", "futures", "nix", "pkg-config", "x11rb"]
 wayland = [
     # Required for XKBCommon

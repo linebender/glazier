@@ -1,3 +1,5 @@
+use glazier::Error;
+
 use crate::{Glazier, WindowId};
 
 /// The primary trait which must be implemented by your application state
@@ -41,7 +43,7 @@ pub trait PlatformHandler {
     ///
     /// In future, this may also be used for selections in tray menus
     #[allow(unused_variables)]
-    fn app_menu_item_selected(&mut self, glz: &mut Glazier, command: u32) {}
+    fn app_menu_item_selected(&mut self, glz: Glazier, command: u32) {}
 
     /// Called when a menu item associated with a window is selected.
     ///
@@ -49,5 +51,9 @@ pub trait PlatformHandler {
     ///
     /// [app_menu_item_selected]: PlatformHandler::app_menu_item_selected
     #[allow(unused_variables)]
-    fn menu_item_selected(&mut self, glz: &mut Glazier, win: WindowId, command: u32) {}
+    fn menu_item_selected(&mut self, glz: Glazier, win: WindowId, command: u32) {}
+
+    fn creating_window_failed(&mut self, glz: Glazier, win: WindowId, error: Error) {
+        todo!("Failed to create window {win:?}. Error: {error:?}");
+    }
 }

@@ -34,22 +34,18 @@
 //! framework. It provides common types, which then defer to a platform-defined
 //! implementation.
 
-use std::num::NonZeroU64;
-
-use util::Counter;
+use std::{marker::PhantomData, num::NonZeroU64};
 
 mod backend;
 mod handler;
-pub mod menu;
-pub mod shapes;
-mod util;
 
+use glazier::Counter;
 pub use handler::PlatformHandler;
 
 /// Manages communication with the platform
 ///
 /// Created using a `GlazierBuilder`
-pub struct Glazier(backend::Glazier);
+pub struct Glazier<'a>(backend::GlazierImpl<'a>, PhantomData<&'a mut ()>);
 
 pub struct WindowBuilder {
     title: String,
@@ -62,6 +58,7 @@ pub struct WindowBuilder {
     resizable: bool,
     show_titlebar: bool,
     transparent: bool,
+    id: Option<WindowId>,
 }
 
 impl Default for WindowBuilder {
@@ -71,11 +68,12 @@ impl Default for WindowBuilder {
             resizable: true,
             show_titlebar: true,
             transparent: false,
+            id: None,
         }
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct WindowId(NonZeroU64);
 
 static WINDOW_ID_COUNTER: Counter = Counter::new();
@@ -86,7 +84,7 @@ impl WindowId {
     }
 }
 
-impl Glazier {
+impl Glazier<'_> {
     pub fn build_new_window(&mut self, builder: impl FnOnce(&mut WindowBuilder)) -> WindowId {
         let mut builder_instance = WindowBuilder::default();
         builder(&mut builder_instance);
@@ -106,33 +104,46 @@ impl Glazier {
 }
 
 /// Allows configuring a `Glazier` before initialising the system
-pub struct GlazierBuilder;
+pub struct GlazierBuilder {
+    windows: Vec<WindowBuilder>,
+}
 
 impl GlazierBuilder {
     /// Prepare to interact with the desktop environment
-    ///
-    /// This should be called on the main thread for maximum portability.
     pub fn new() -> GlazierBuilder {
-        GlazierBuilder
+        GlazierBuilder { windows: vec![] }
     }
 
     pub fn build_window(&mut self, builder: impl FnOnce(&mut WindowBuilder)) -> WindowId {
-        todo!()
+        let mut builder_instance = WindowBuilder::default();
+        builder(&mut builder_instance);
+        self.new_window(builder_instance)
     }
     /// Queues the creation of a new window for when the `Glazier` is created
-    pub fn new_window(&mut self, builder: WindowBuilder) -> WindowId {
-        todo!()
+    pub fn new_window(&mut self, mut builder: WindowBuilder) -> WindowId {
+        let id = builder.id.get_or_insert_with(WindowId::next).clone();
+        self.windows.push(builder);
+        id
     }
 
     /// Start interacting with the platform
     ///
-    /// Start handling events from the platform using `event_handler`
+    /// Start handling events from the platform using `event_handler`.
+    /// This should be called on the main thread for maximum portability.
     ///
     /// `on_init` will be called once the event loop is sufficiently
-    /// intialized to allow creating
+    /// intialized to allow creating resources at that time. This will
+    /// be after the other properties of this builder are applied (such as queued windows).
     ///
     /// ## Notes
     ///
     /// The event_handler is passed as a box for simplicity
-    pub fn run(self, event_handler: Box<dyn PlatformHandler>, on_init: impl FnOnce(&mut Glazier)) {}
+    ///
+    pub fn launch(self, event_handler: Box<dyn PlatformHandler>, on_init: impl FnOnce(Glazier)) {
+        backend::launch(event_handler, move |glz| {
+            on_init(glz);
+        })
+        // TODO: Proper error handling
+        .unwrap()
+    }
 }
