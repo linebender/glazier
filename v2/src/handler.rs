@@ -1,4 +1,4 @@
-use glazier::Error;
+use glazier::{Error, IdleToken, Region};
 
 use crate::{Glazier, WindowId};
 
@@ -34,8 +34,8 @@ use crate::{Glazier, WindowId};
 /// Most of the event are also associated with a single window.
 /// The methods which are
 ///
-// Note: Most methods are marked with `#[allow(unused_variables)]` decoration
-// for documentation purposes
+// Methods have the `#[allow(unused_variables)]` attribute to allow for meaningful
+// parameter names in optional methods which don't use that parameter
 pub trait PlatformHandler {
     /// Called when an app level menu item is selected.
     ///
@@ -43,7 +43,9 @@ pub trait PlatformHandler {
     ///
     /// In future, this may also be used for selections in tray menus
     #[allow(unused_variables)]
-    fn app_menu_item_selected(&mut self, glz: Glazier, command: u32) {}
+    fn app_menu_item_selected(&mut self, glz: Glazier, command: u32) {
+        // TODO: Warn? If you have set a command, it seems reasonable to complain if you don't handle it?
+    }
 
     /// Called when a menu item associated with a window is selected.
     ///
@@ -53,7 +55,39 @@ pub trait PlatformHandler {
     #[allow(unused_variables)]
     fn menu_item_selected(&mut self, glz: Glazier, win: WindowId, command: u32) {}
 
+    /// A surface can now be created for window `win`.
+    ///
+    /// This surface can accessed using [`Glazier::window_handle`] on `glz`
+    fn surface_available(&mut self, glz: Glazier, win: WindowId);
+
+    // /// The surface associated with `win` is no longer active. In particular,
+    // /// you may not interact with that window *after* returning from this callback.
+    // ///
+    // /// This will only be called after [`surface_available`], but there is no
+    // /// guarantee that an intermediate [`paint`] will occur.
+    // ///
+    // /// [`surface_available`]: PlatformHandler::surface_available
+    // /// [`paint`]: PlatformHandler::paint
+    // fn surface_invalidated(&mut self, glz: Glazier, win: WindowId);
+
+    /// Request the handler to prepare to paint the window contents. In particular, if there are
+    /// any regions that need to be repainted on the next call to `paint`, the handler should
+    /// invalidate those regions by calling [`WindowHandle::invalidate_rect`] or
+    /// [`WindowHandle::invalidate`].
+    fn prepare_paint(&mut self, glz: Glazier, win: WindowId);
+
+    /// Request the handler to paint the window contents. `invalid` is the region in [display
+    /// points](crate::Scale) that needs to be repainted; painting outside the invalid region
+    /// might have no effect.
+    fn paint(&mut self, glz: Glazier, win: WindowId, invalid: &Region);
+
+    /// Creating a window failed
+    #[allow(unused_variables)]
     fn creating_window_failed(&mut self, glz: Glazier, win: WindowId, error: Error) {
-        todo!("Failed to create window {win:?}. Error: {error:?}");
+        panic!("Failed to create window {win:?}. Error: {error:?}");
+    }
+
+    fn idle(&mut self, glz: Glazier, token: IdleToken) {
+        panic!("Your requested idle, but didn't implement PlatformHandler::idle")
     }
 }

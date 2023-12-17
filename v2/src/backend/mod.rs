@@ -1,3 +1,4 @@
-mod v1;
+mod shared;
+mod wayland;
 
-pub(crate) use v1::*;
+pub use wayland::*;

@@ -34,65 +34,29 @@
 //! framework. It provides common types, which then defer to a platform-defined
 //! implementation.
 
-use std::{marker::PhantomData, num::NonZeroU64};
+use std::marker::PhantomData;
 
 mod backend;
 mod handler;
+mod window;
 
-use glazier::Counter;
 pub use handler::PlatformHandler;
+pub use window::{WindowDescription, WindowId};
 
-/// Manages communication with the platform
-///
-/// Created using a `GlazierBuilder`
+/// A short-lived handle for communication with the platform,
+/// which is available whilst an event handler is being called
 pub struct Glazier<'a>(backend::GlazierImpl<'a>, PhantomData<&'a mut ()>);
 
-pub struct WindowBuilder {
-    title: String,
-    // menu: Option<Menu>,
-    // size: Size,
-    // min_size: Option<Size>,
-    // position: Option<Point>,
-    // level: Option<WindowLevel>,
-    // window_state: Option<WindowState>,
-    resizable: bool,
-    show_titlebar: bool,
-    transparent: bool,
-    id: Option<WindowId>,
-}
-
-impl Default for WindowBuilder {
-    fn default() -> Self {
-        Self {
-            title: "Glazier Application Window".to_string(),
-            resizable: true,
-            show_titlebar: true,
-            transparent: false,
-            id: None,
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub struct WindowId(NonZeroU64);
-
-static WINDOW_ID_COUNTER: Counter = Counter::new();
-
-impl WindowId {
-    pub(crate) fn next() -> Self {
-        Self(WINDOW_ID_COUNTER.next_nonzero())
-    }
-}
-
 impl Glazier<'_> {
-    pub fn build_new_window(&mut self, builder: impl FnOnce(&mut WindowBuilder)) -> WindowId {
-        let mut builder_instance = WindowBuilder::default();
+    pub fn build_new_window(&mut self, builder: impl FnOnce(&mut WindowDescription)) -> WindowId {
+        let mut builder_instance = WindowDescription::default();
         builder(&mut builder_instance);
         self.new_window(builder_instance)
     }
 
-    pub fn new_window(&mut self, builder: WindowBuilder) -> WindowId {
-        self.0.new_window(builder)
+    pub fn new_window(&mut self, builder: WindowDescription) -> WindowId {
+        todo!();
+        // self.0.new_window(builder)
     }
 
     /// Request that this `Glazier` stop controlling the current thread
@@ -101,29 +65,21 @@ impl Glazier<'_> {
     pub fn stop(&mut self) {
         self.0.stop();
     }
+
+    // pub fn window_handle(&mut self, window: WindowId) -> NativeWindowHandle {
+    //     NativeWindowHandle(self.0.window_handle())
+    // }
 }
 
 /// Allows configuring a `Glazier` before initialising the system
 pub struct GlazierBuilder {
-    windows: Vec<WindowBuilder>,
+    windows: Vec<WindowDescription>,
 }
 
 impl GlazierBuilder {
     /// Prepare to interact with the desktop environment
     pub fn new() -> GlazierBuilder {
         GlazierBuilder { windows: vec![] }
-    }
-
-    pub fn build_window(&mut self, builder: impl FnOnce(&mut WindowBuilder)) -> WindowId {
-        let mut builder_instance = WindowBuilder::default();
-        builder(&mut builder_instance);
-        self.new_window(builder_instance)
-    }
-    /// Queues the creation of a new window for when the `Glazier` is created
-    pub fn new_window(&mut self, mut builder: WindowBuilder) -> WindowId {
-        let id = builder.id.get_or_insert_with(WindowId::next).clone();
-        self.windows.push(builder);
-        id
     }
 
     /// Start interacting with the platform
@@ -145,5 +101,14 @@ impl GlazierBuilder {
         })
         // TODO: Proper error handling
         .unwrap()
+    }
+
+    /// Queues the creation of a new window for when the `Glazier` is created
+    pub fn new_window(&mut self, mut builder: WindowDescription) -> WindowId {
+        // TODO: Should the id be part of the descriptor?
+        // I don't see the harm in allowing early created ids, and it may allow greater flexibility
+        let id = builder.assign_id();
+        self.windows.push(builder);
+        id
     }
 }

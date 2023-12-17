@@ -42,14 +42,31 @@ struct V1WindowHandler {
     window: WindowId,
 }
 
+impl V1WindowHandler {
+    fn with_glz<R>(
+        &mut self,
+        f: impl FnOnce(&mut Box<dyn PlatformHandler>, Glazier, WindowId) -> R,
+    ) -> R {
+        with_glz(&self.state, |handler, glz| f(handler, glz, self.window))
+    }
+}
+
 impl WinHandler for V1WindowHandler {
     fn connect(&mut self, _: &glazier::WindowHandle) {
-        // No need to do anything here?
+        self.with_glz(|handler, glz, win| handler.surface_available(glz, win))
     }
 
-    fn prepare_paint(&mut self) {}
+    fn prepare_paint(&mut self) {
+        self.with_glz(|handler, glz, win| handler.prepare_paint(glz, win))
+    }
 
-    fn paint(&mut self, invalid: &glazier::Region) {}
+    fn paint(&mut self, invalid: &glazier::Region) {
+        self.with_glz(|handler, glz, win| handler.paint(glz, win, invalid))
+    }
+
+    fn command(&mut self, id: u32) {
+        self.with_glz(|handler, glz, win| handler.menu_item_selected(glz, win, id))
+    }
 
     fn as_any(&mut self) -> &mut dyn std::any::Any {
         self
