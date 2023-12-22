@@ -16,8 +16,9 @@
 
 use super::{keycodes, xkbcommon_sys::*};
 use crate::backend::shared::{code_to_location, hardware_keycode_to_code, linux};
-use glazier::{text::CompositionResult, KeyEvent, KeyState, Modifiers};
-use keyboard_types::{Code, Key};
+use crate::keyboard::KeyEvent;
+use crate::text::simulate::CompositionResult;
+use keyboard_types::{Code, Key, KeyState, Modifiers};
 use std::{convert::TryFrom, ffi::CString};
 use std::{os::raw::c_char, ptr::NonNull};
 

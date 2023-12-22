@@ -11,38 +11,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![allow(clippy::single_match)]
-
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::os::raw::c_void;
-use std::rc::{Rc, Weak};
+use std::rc::Weak;
 use std::sync::mpsc::{self, Sender};
 
+use kurbo_0_9::{Rect, Size};
 use smithay_client_toolkit::compositor::CompositorHandler;
 use smithay_client_toolkit::reexports::calloop::{channel, LoopHandle};
-use smithay_client_toolkit::reexports::client::protocol::wl_compositor::WlCompositor;
 use smithay_client_toolkit::reexports::client::protocol::wl_surface::WlSurface;
 use smithay_client_toolkit::reexports::client::{protocol, Connection, Proxy, QueueHandle};
 use smithay_client_toolkit::shell::xdg::window::{
     Window, WindowConfigure, WindowDecorations, WindowHandler,
 };
-use smithay_client_toolkit::shell::xdg::XdgShell;
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::{delegate_compositor, delegate_xdg_shell, delegate_xdg_window};
+use thiserror::Error;
 use tracing;
 use wayland_backend::client::ObjectId;
 
-use crate::PlatformHandler;
+use crate::window::{IdleToken, Region, Scalable, Scale};
+use crate::{PlatformHandler, WindowDescription};
 
 use super::input::{
-    input_state, SeatName, TextFieldChange, TextInputCell, TextInputProperties, WeakTextInputCell,
+    input_state, SeatName, TextFieldChange, TextInputProperties, WeakTextInputCell,
 };
 use super::{ActiveAction, IdleAction, WaylandPlatform, WaylandState};
-
-use glazier::{
-    kurbo::{Point, Rect, Size},
-    Error as ShellError, IdleToken, Region, Scalable, Scale, WinHandler, WindowLevel,
-};
 
 #[derive(Clone)]
 pub struct WindowHandle {
@@ -53,6 +47,9 @@ pub struct WindowHandle {
     // Safety: Points to a wl_display instance
     raw_display_handle: Option<*mut c_void>,
 }
+
+#[derive(Error, Debug)]
+pub enum BackendWindowCreationError {}
 
 // impl WindowHandle {
 //     fn id(&self) -> WindowId {
@@ -391,103 +388,24 @@ impl IdleHandle {
 #[derive(Clone, PartialEq, Eq)]
 pub struct CustomCursor;
 
-/// Builder abstraction for creating new windows
-pub(crate) struct WindowBuilder {
-    handler: Option<Box<dyn WinHandler>>,
-    title: String,
-    position: Option<Point>,
-    level: WindowLevel,
-    state: Option<glazier::WindowState>,
-    // pre-scaled
-    size: Option<Size>,
-    min_size: Option<Size>,
-    resizable: bool,
-    show_titlebar: bool,
-    compositor: WlCompositor,
-    wayland_queue: QueueHandle<WaylandPlatform>,
-    loop_handle: LoopHandle<'static, WaylandPlatform>,
-    xdg_state: Weak<XdgShell>,
-    idle_sender: Sender<IdleAction>,
-    loop_sender: channel::Sender<ActiveAction>,
-    raw_display_handle: *mut c_void,
-}
-
-impl WindowBuilder {
-    pub fn handler(mut self, handler: Box<dyn WinHandler>) -> Self {
-        self.handler = Some(handler);
-        self
-    }
-
-    pub fn size(mut self, size: Size) -> Self {
-        self.size = Some(size);
-        self
-    }
-
-    pub fn min_size(mut self, size: Size) -> Self {
-        self.min_size = Some(size);
-        self
-    }
-
-    pub fn resizable(mut self, resizable: bool) -> Self {
-        self.resizable = resizable;
-        self
-    }
-
-    pub fn show_titlebar(mut self, show_titlebar: bool) -> Self {
-        self.show_titlebar = show_titlebar;
-        self
-    }
-
-    pub fn transparent(self, _transparent: bool) -> Self {
-        tracing::info!(
-            "WindowBuilder::transparent is unimplemented for Wayland, it allows transparency by default"
-        );
-        self
-    }
-
-    pub fn position(mut self, position: Point) -> Self {
-        self.position = Some(position);
-        self
-    }
-
-    pub fn level(mut self, level: WindowLevel) -> Self {
-        self.level = level;
-        self
-    }
-
-    pub fn window_state(mut self, state: glazier::WindowState) -> Self {
-        self.state = Some(state);
-        self
-    }
-
-    pub fn title(mut self, title: impl Into<String>) -> Self {
-        self.title = title.into();
-        self
-    }
-
-    pub fn build(self) -> Result<WindowHandle, ShellError> {
-        let surface = self
-            .compositor
-            .create_surface(&self.wayland_queue, Default::default());
-        let xdg_shell = self
-            .xdg_state
-            .upgrade()
-            .expect("Can only build whilst event loop hasn't ended");
-        let wayland_window = xdg_shell.create_window(
+impl WaylandState {
+    pub(crate) fn new_window(&mut self, mut desc: WindowDescription) -> crate::WindowId {
+        let window_id = desc.assign_id();
+        let surface = self.compositor_state.create_surface(&self.wayland_queue);
+        let wayland_window = self.xdg_shell_state.create_window(
             surface,
             // Request server decorations, because we don't yet do client decorations properly
             WindowDecorations::RequestServer,
             &self.wayland_queue,
         );
-        wayland_window.set_title(self.title);
+        wayland_window.set_title(desc.title);
         // TODO: Pass this down
         wayland_window.set_app_id("org.linebender.glazier.user_app");
         // TODO: Convert properly, set all properties
         // wayland_window.set_min_size(self.min_size);
-        let window_id = WindowId::new(&wayland_window);
         let properties = WindowProperties {
             configure: None,
-            requested_size: self.size,
+            requested_size: None,
             // This is just used as the default sizes, as we don't call `size` until the requested size is used
             current_size: Size::new(600., 800.),
             current_scale: Scale::new(1., 1.), // TODO: NaN? - these values should (must?) not be used
@@ -498,44 +416,29 @@ impl WindowBuilder {
             pending_frame_callback: false,
             configured: false,
         };
-        let properties_strong = Rc::new(RefCell::new(properties));
 
-        let properties = Rc::downgrade(&properties_strong);
-        let text = Rc::new(Cell::new(TextInputProperties {
+        let text = TextInputProperties {
             active_text_field: None,
             next_text_field: None,
             active_text_field_updated: false,
             active_text_layout_changed: false,
-        }));
-        let handle = WindowHandle {
-            idle_sender: self.idle_sender,
-            loop_sender: self.loop_sender.clone(),
-            raw_display_handle: Some(self.raw_display_handle),
-            properties,
-            text: Rc::downgrade(&text),
         };
-        // TODO: When should Window::commit be called? This feels fragile
-        self.loop_sender
-            .send(ActiveAction::Window(
-                window_id,
-                WindowAction::Create(WaylandWindowState {
-                    properties: properties_strong,
-                    text_input_seat: None,
-                    text,
-                    handle: Some(handle.clone()),
-                }),
-            ))
-            .expect("Event loop should still be valid");
-
-        Ok(handle)
+        self.windows.insert(
+            WindowId::of_surface(&surface),
+            WaylandWindowState {
+                properties,
+                text_input_seat: None,
+                text,
+            },
+        );
+        window_id
     }
 }
-
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 // TODO: According to https://github.com/linebender/druid/pull/2033, this should not be
 // synced with the ID of the surface
-pub(super) struct WindowId(ObjectId);
 
+pub(super) struct WindowId(ObjectId);
 impl WindowId {
     pub fn new(surface: &impl WaylandSurface) -> Self {
         Self::of_surface(surface.wl_surface())
@@ -548,14 +451,9 @@ impl WindowId {
 /// The state associated with each window, stored in [`WaylandState`]
 pub(super) struct WaylandWindowState {
     // TODO: This refcell is too strong - most of the fields can just be Cells
-    properties: Rc<RefCell<WindowProperties>>,
+    properties: WindowProperties,
     text_input_seat: Option<SeatName>,
-    pub text: TextInputCell,
-    // The handle which will be used to access this window
-    // Will be passed to the `connect` handler in initial configure
-    // Cheap to clone, but kept in an option to track whether
-    // `connect` has been sent
-    handle: Option<WindowHandle>,
+    pub text: TextInputProperties,
 }
 
 struct WindowProperties {
@@ -649,7 +547,7 @@ enum PaintContext {
 impl WaylandWindowState {
     fn do_paint(&mut self, force: bool, context: PaintContext) {
         {
-            let mut props = self.properties.borrow_mut();
+            let mut props = self.properties;
             if matches!(context, PaintContext::Frame) {
                 props.pending_frame_callback = false;
             }
@@ -680,7 +578,7 @@ impl WaylandWindowState {
         // When forcing, should mark the entire region as damaged
         let mut region = Region::EMPTY;
         {
-            let props = self.properties.borrow();
+            let props = self.properties;
             let size = props.current_size.to_dp(props.current_scale);
             region.add_rect(Rect {
                 x0: 0.0,
@@ -722,20 +620,21 @@ impl CompositorHandler for WaylandPlatform {
         let window = window.expect("Should only get events for real windows");
         let factor = f64::from(new_factor);
         let scale = Scale::new(factor, factor);
-        let new_size;
-        {
-            let mut props = window.properties.borrow_mut();
-            // TODO: Effectively, we need to re-evaluate the size calculation
-            // That means we need to cache the WindowConfigure or (mostly) equivalent
-            let cur_size_raw: Size = props.current_size.to_px(props.current_scale);
-            new_size = cur_size_raw.to_dp(scale);
-            props.current_scale = scale;
-            props.current_size = new_size;
-            // avoid locking the properties into user code
-        }
-        todo!("HANDLER");
-        // window.handler.scale(scale);
-        // window.handler.size(new_size);
+
+        let mut props = window.properties;
+        // TODO: Effectively, we need to re-evaluate the size calculation
+        // That means we need to cache the WindowConfigure or (mostly) equivalent
+        let cur_size_raw: Size = props.current_size.to_px(props.current_scale);
+        let new_size = cur_size_raw.to_dp(scale);
+        props.current_scale = scale;
+        props.current_size = new_size;
+        self.with_glz(move |handler, glz| {
+            let new_size = new_size;
+            let new_scale = scale;
+            todo!("Handle ")
+            // handler.scale(glz, windowscale);
+            // handler.size(new_size);
+        });
         // TODO: Do we repaint here?
     }
 

@@ -1,10 +1,7 @@
 mod xkb_api;
 pub use xkb_api::*;
 
-use glazier::{
-    text::{simulate_compose, InputHandler},
-    KeyEvent,
-};
+use crate::{keyboard::KeyEvent, text::InputHandler};
 
 mod keycodes;
 mod xkbcommon_sys;
@@ -53,21 +50,22 @@ pub fn xkb_simulate_input(
     // that case, and this is only a minor inefficiency, but it's better to be sure
     handler: &mut dyn InputHandler,
 ) -> KeyboardHandled {
-    let compose_result = xkb_state.compose_key_down(event, keysym);
-    let result_if_update_occurs = match compose_result {
-        glazier::text::CompositionResult::NoComposition => KeyboardHandled::UpdatedNoCompose,
-        glazier::text::CompositionResult::Cancelled(_)
-        | glazier::text::CompositionResult::Finished(_) => KeyboardHandled::UpdatedReleasingCompose,
-        glazier::text::CompositionResult::Updated { just_started, .. } if just_started => {
-            KeyboardHandled::UpdatedClaimingCompose
-        }
-        glazier::text::CompositionResult::Updated { .. } => {
-            KeyboardHandled::UpdatedRetainingCompose
-        }
-    };
-    if simulate_compose(handler, event, compose_result) {
-        result_if_update_occurs
-    } else {
-        KeyboardHandled::NoUpdate
-    }
+    todo!();
+    // let compose_result = xkb_state.compose_key_down(event, keysym);
+    // let result_if_update_occurs = match compose_result {
+    //     glazier::text::CompositionResult::NoComposition => KeyboardHandled::UpdatedNoCompose,
+    //     glazier::text::CompositionResult::Cancelled(_)
+    //     | glazier::text::CompositionResult::Finished(_) => KeyboardHandled::UpdatedReleasingCompose,
+    //     glazier::text::CompositionResult::Updated { just_started, .. } if just_started => {
+    //         KeyboardHandled::UpdatedClaimingCompose
+    //     }
+    //     glazier::text::CompositionResult::Updated { .. } => {
+    //         KeyboardHandled::UpdatedRetainingCompose
+    //     }
+    // };
+    // if simulate_compose(handler, event, compose_result) {
+    //     result_if_update_occurs
+    // } else {
+    //     KeyboardHandled::NoUpdate
+    // }
 }

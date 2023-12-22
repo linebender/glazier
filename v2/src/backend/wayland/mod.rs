@@ -15,6 +15,7 @@
 //! wayland platform support
 
 use std::{
+    any::TypeId,
     collections::{HashMap, VecDeque},
     marker::PhantomData,
     ops::{Deref, DerefMut},
@@ -35,7 +36,7 @@ use smithay_client_toolkit::{
     shell::xdg::XdgShell,
 };
 
-use crate::{handler::PlatformHandler, Glazier};
+use crate::{handler::PlatformHandler, window::IdleToken, Glazier};
 
 use self::{
     input::SeatInfo,
@@ -50,7 +51,9 @@ mod run_loop;
 mod screen;
 pub mod window;
 
-pub use run_loop::launch;
+pub use window::BackendWindowCreationError;
+
+pub use run_loop::{launch, LoopHandle as LoopHandle2};
 
 pub(crate) type GlazierImpl<'a> = &'a mut WaylandState;
 
@@ -70,9 +73,9 @@ pub(crate) struct WaylandState {
     pub(self) output_state: OutputState,
     // TODO: Do we need to keep this around
     // It is unused because(?) wgpu creates the surfaces through RawDisplayHandle(?)
-    pub(self) _compositor_state: CompositorState,
+    pub(self) compositor_state: CompositorState,
     // Is used: Keep the XdgShell alive, which is a Weak in all Handles
-    pub(self) _xdg_shell_state: XdgShell,
+    pub(self) xdg_shell_state: XdgShell,
     pub(self) wayland_queue: QueueHandle<WaylandPlatform>,
 
     pub(self) loop_signal: LoopSignal,
@@ -87,6 +90,8 @@ pub(crate) struct WaylandState {
     pub(self) idle_actions: Vec<IdleAction>,
     pub(self) actions: VecDeque<ActiveAction>,
     pub(self) loop_sender: calloop::channel::Sender<LoopCallback>,
+
+    pub(self) handler_type: TypeId,
 }
 
 delegate_registry!(WaylandPlatform);
@@ -129,7 +134,7 @@ enum ActiveAction {
 
 enum IdleAction {
     Callback(LoopCallback),
-    Token(glazier::IdleToken),
+    Token(IdleToken),
 }
 
 type LoopCallback = Box<dyn FnOnce(&mut WaylandPlatform) + Send>;

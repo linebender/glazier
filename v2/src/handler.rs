@@ -1,6 +1,9 @@
-use glazier::{Error, IdleToken, Region};
+use std::any::Any;
 
-use crate::{Glazier, WindowId};
+use crate::{
+    window::{IdleToken, Region, WindowCreationError},
+    Glazier, WindowId,
+};
 
 /// The primary trait which must be implemented by your application state
 ///
@@ -36,7 +39,7 @@ use crate::{Glazier, WindowId};
 ///
 // Methods have the `#[allow(unused_variables)]` attribute to allow for meaningful
 // parameter names in optional methods which don't use that parameter
-pub trait PlatformHandler {
+pub trait PlatformHandler: Any {
     /// Called when an app level menu item is selected.
     ///
     /// This is primarily useful on macOS, where the menu can exist even when
@@ -58,6 +61,7 @@ pub trait PlatformHandler {
     /// A surface can now be created for window `win`.
     ///
     /// This surface can accessed using [`Glazier::window_handle`] on `glz`
+    // TODO: Pass in size/scale(!?)
     fn surface_available(&mut self, glz: Glazier, win: WindowId);
 
     // /// The surface associated with `win` is no longer active. In particular,
@@ -72,9 +76,10 @@ pub trait PlatformHandler {
 
     /// Request the handler to prepare to paint the window contents. In particular, if there are
     /// any regions that need to be repainted on the next call to `paint`, the handler should
-    /// invalidate those regions by calling [`WindowHandle::invalidate_rect`] or
-    /// [`WindowHandle::invalidate`].
-    fn prepare_paint(&mut self, glz: Glazier, win: WindowId);
+    /// invalidate those regions by calling [`Glazier::invalidate_rect`] or
+    /// [`Glazier::invalidate`].
+    #[allow(unused_variables)]
+    fn prepare_paint(&mut self, glz: Glazier, win: WindowId) {}
 
     /// Request the handler to paint the window contents. `invalid` is the region in [display
     /// points](crate::Scale) that needs to be repainted; painting outside the invalid region
@@ -83,11 +88,23 @@ pub trait PlatformHandler {
 
     /// Creating a window failed
     #[allow(unused_variables)]
-    fn creating_window_failed(&mut self, glz: Glazier, win: WindowId, error: Error) {
+    fn creating_window_failed(&mut self, glz: Glazier, win: WindowId, error: WindowCreationError) {
         panic!("Failed to create window {win:?}. Error: {error:?}");
     }
 
+    #[allow(unused_variables)]
     fn idle(&mut self, glz: Glazier, token: IdleToken) {
-        panic!("Your requested idle, but didn't implement PlatformHandler::idle")
+        panic!("You requested idle, but didn't implement PlatformHandler::idle")
     }
+
+    /// Get a reference to `self`. Used by [crate::LoopHandle::run_on_main].
+    /// The implementation should be `self`, that is:
+    /// ```rust
+    /// # use core::any::Any;
+    /// fn as_any(&mut self) -> &mut dyn Any {
+    ///     self
+    /// }
+    /// ```
+    // N.B. Implemented by users, so don't rely upon for safety
+    fn as_any(&mut self) -> &mut dyn Any;
 }

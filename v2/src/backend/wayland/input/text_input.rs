@@ -6,14 +6,12 @@ use smithay_client_toolkit::reexports::{
     },
 };
 
-use glazier::{
-    text::{Affinity, InputHandler, Selection},
-    TextFieldToken,
-};
-
-use crate::backend::{
-    wayland::{WaylandPlatform, WaylandState},
-    window::WindowId,
+use crate::{
+    backend::{
+        wayland::{WaylandPlatform, WaylandState},
+        window::WindowId,
+    },
+    text::{Affinity, InputHandler, Selection, TextFieldToken},
 };
 
 use super::{input_state, SeatInfo, SeatName};

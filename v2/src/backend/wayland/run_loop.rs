@@ -15,8 +15,8 @@
 #![allow(clippy::single_match)]
 
 use std::{
+    any::TypeId,
     collections::{HashMap, VecDeque},
-    rc::Rc,
 };
 
 use smithay_client_toolkit::{
@@ -44,8 +44,8 @@ use crate::{
 };
 
 pub fn launch(
-    handler: Box<dyn PlatformHandler>,
-    on_init: impl FnOnce(Glazier),
+    mut handler: Box<dyn PlatformHandler>,
+    on_init: impl FnOnce(&mut dyn PlatformHandler, Glazier),
 ) -> Result<(), Error> {
     tracing::info!("wayland application initiated");
 
@@ -92,8 +92,8 @@ pub fn launch(
     let state = WaylandState {
         registry_state: RegistryState::new(&globals),
         output_state: OutputState::new(&globals, &qh),
-        _compositor_state: compositor_state,
-        _xdg_shell_state: shell,
+        compositor_state,
+        xdg_shell_state: shell,
         windows: HashMap::new(),
         wayland_queue: qh.clone(),
         loop_signal: loop_signal.clone(),
@@ -106,12 +106,13 @@ pub fn launch(
         actions: VecDeque::new(),
         idle_actions: Vec::new(),
         loop_sender,
+        handler_type: handler.as_any().type_id(),
     };
     let mut platform = WaylandPlatform { handler, state };
     platform.initial_seats();
 
     tracing::info!("wayland event loop initiated");
-    platform.with_glz(|_, glz| on_init(glz));
+    platform.with_glz(|handler, glz| on_init(handler, glz));
     event_loop
         .run(None, &mut platform, |platform| {
             let mut idle_actions = std::mem::take(&mut platform.idle_actions);
@@ -141,7 +142,14 @@ impl WaylandState {
         self.loop_signal.stop()
     }
 
-    pub(crate) fn handle(&mut self) -> LoopHandle {
+    pub(crate) fn raw_handle(&mut self) -> LoopHandle {
+        LoopHandle {
+            loop_sender: self.loop_sender.clone(),
+        }
+    }
+
+    pub(crate) fn typed_handle(&mut self, handler_type: TypeId) -> LoopHandle {
+        assert_eq!(self.handler_type, handler_type);
         LoopHandle {
             loop_sender: self.loop_sender.clone(),
         }
@@ -164,7 +172,8 @@ impl LoopHandle {
         {
             Ok(()) => (),
             Err(err) => {
-                tracing::warn!("Sending idle event loop failed: {err:?}")
+                tracing::warn!("Sending to event loop failed: {err:?}")
+                // TODO: Return an error here?
             }
         };
     }

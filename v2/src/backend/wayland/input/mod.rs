@@ -4,9 +4,11 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use glazier::{text::InputHandler, Counter, TextFieldToken, WinHandler};
-
-use crate::backend::shared::xkb::{xkb_simulate_input, KeyboardHandled};
+use crate::{
+    backend::shared::xkb::{xkb_simulate_input, KeyboardHandled},
+    text::{InputHandler, TextFieldToken},
+    util::Counter,
+};
 
 use self::{keyboard::KeyboardState, text_input::InputState};
 
@@ -120,8 +122,7 @@ pub(in crate::backend::wayland) struct TextInputProperties {
 pub(in crate::backend::wayland) type TextInputCell = Rc<Cell<TextInputProperties>>;
 pub(in crate::backend::wayland) type WeakTextInputCell = Weak<Cell<TextInputProperties>>;
 
-struct FutureInputLock<'a> {
-    handler: &'a mut dyn WinHandler,
+struct FutureInputLock {
     token: TextFieldToken,
     // Whether the field has been updated by the application since the last
     // execution. This effectively means that it isn't meaningful for the IME to
@@ -166,11 +167,10 @@ impl SeatInfo {
             let window = windows.get_mut(&old_focus);
             if let Some(window) = window {
                 window.remove_input_seat(self.id);
-                let TextFieldDetails(handler, props) = window_handler(window);
+                let TextFieldDetails(props) = window_handler(window);
                 handler.lost_focus();
                 let props = props.get();
                 self.force_release_preedit(props.active_text_field.map(|it| FutureInputLock {
-                    handler,
                     token: it,
                     field_updated: props.active_text_field_updated,
                 }));
@@ -184,7 +184,7 @@ impl SeatInfo {
 
     fn update_active_text_input(
         &mut self,
-        TextFieldDetails(handler, props_cell): &mut TextFieldDetails,
+        TextFieldDetails(props_cell): &mut TextFieldDetails,
         mut force: bool,
         should_update_text_input: bool,
     ) {
@@ -197,7 +197,6 @@ impl SeatInfo {
                 focus_changed = props.next_text_field != previous;
                 if focus_changed {
                     self.force_release_preedit(previous.map(|it| FutureInputLock {
-                        handler,
                         token: it,
                         field_updated: props.active_text_field_updated,
                     }));
@@ -213,7 +212,6 @@ impl SeatInfo {
                 force = false;
                 if !focus_changed {
                     self.force_release_preedit(props.active_text_field.map(|it| FutureInputLock {
-                        handler,
                         token: it,
                         field_updated: true,
                     }));
@@ -294,7 +292,6 @@ impl SeatInfo {
                     "If the keyboard has claimed the input, it must be composing"
                 );
                 if let Some(FutureInputLock {
-                    handler,
                     token,
                     field_updated,
                 }) = field
@@ -315,7 +312,7 @@ impl SeatInfo {
                 }
             }
             TextFieldOwner::TextInput => {
-                if let Some(FutureInputLock { handler, token, .. }) = field {
+                if let Some(FutureInputLock { token, .. }) = field {
                     // The Wayland text input interface does not permit the IME to respond to an input
                     // becoming unfocused.
                     let mut ime = handler.acquire_input_lock(token, true);
@@ -478,10 +475,10 @@ impl SeatInfo {
     }
 }
 
-struct TextFieldDetails<'a>(&'a mut dyn WinHandler, TextInputCell);
+struct TextFieldDetails(TextInputCell);
 
 /// Get the text input information for the given window
-fn handler<'a>(windows: &'a mut Windows, window: &WindowId) -> Option<TextFieldDetails<'a>> {
+fn handler(windows: &mut Windows, window: &WindowId) -> Option<TextFieldDetails> {
     let window = &mut *windows.get_mut(window)?;
     Some(window_handler(window))
 }
