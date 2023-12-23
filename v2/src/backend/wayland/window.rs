@@ -347,44 +347,6 @@ impl Default for WindowHandle {
 //     }
 // }
 
-#[derive(Clone)]
-pub struct IdleHandle {
-    window: WindowId,
-    idle_sender: Sender<IdleAction>,
-}
-
-impl IdleHandle {
-    pub fn add_idle_callback<F>(&self, callback: F)
-    where
-        F: FnOnce(&mut dyn PlatformHandler) + Send + 'static,
-    {
-        self.add_idle_state_callback(|state| callback(&mut *state.handler))
-    }
-
-    fn add_idle_state_callback<F>(&self, callback: F)
-    where
-        F: FnOnce(&mut WaylandPlatform) + Send + 'static,
-    {
-        let window = self.window.clone();
-        match self
-            .idle_sender
-            .send(IdleAction::Callback(Box::new(callback)))
-        {
-            Ok(()) => (),
-            Err(err) => {
-                tracing::warn!("Added idle callback for invalid application: {err:?}")
-            }
-        };
-    }
-
-    pub fn add_idle_token(&self, token: IdleToken) {
-        match self.idle_sender.send(IdleAction::Token(token)) {
-            Ok(()) => (),
-            Err(err) => tracing::warn!("Requested idle on invalid application: {err:?}"),
-        }
-    }
-}
-
 #[derive(Clone, PartialEq, Eq)]
 pub struct CustomCursor;
 
@@ -423,8 +385,9 @@ impl WaylandState {
             active_text_field_updated: false,
             active_text_layout_changed: false,
         };
+        self.surface_to_window.insert(surface, window_id);
         self.windows.insert(
-            WindowId::of_surface(&surface),
+            window_id,
             WaylandWindowState {
                 properties,
                 text_input_seat: None,
@@ -432,19 +395,6 @@ impl WaylandState {
             },
         );
         window_id
-    }
-}
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-// TODO: According to https://github.com/linebender/druid/pull/2033, this should not be
-// synced with the ID of the surface
-
-pub(super) struct WindowId(ObjectId);
-impl WindowId {
-    pub fn new(surface: &impl WaylandSurface) -> Self {
-        Self::of_surface(surface.wl_surface())
-    }
-    pub fn of_surface(surface: &WlSurface) -> Self {
-        Self(surface.id())
     }
 }
 
@@ -681,18 +631,16 @@ impl WindowHandler for WaylandPlatform {
             tracing::warn!("Received configure event for unknown window");
             return;
         };
-        if let Some(handle) = window.handle.take() {
-            // TODO: Handle it
-        }
         // TODO: Actually use the suggestions from requested_size
         let display_size;
         {
-            let mut props = window.properties.borrow_mut();
+            let mut props = window.properties;
             props.configure = Some(configure);
             display_size = props.calculate_size();
             props.configured = true;
         };
         // window.handler.size(display_size);
+        // self.with_glz(|plat, glz| plat.surface_available(glz, win));
         todo!("HANDLER");
         window.do_paint(true, PaintContext::Configure);
     }

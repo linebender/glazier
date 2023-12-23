@@ -16,7 +16,7 @@
 
 use std::{
     any::TypeId,
-    collections::{HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, VecDeque},
     marker::PhantomData,
     ops::{Deref, DerefMut},
 };
@@ -27,7 +27,7 @@ use smithay_client_toolkit::{
     output::OutputState,
     reexports::{
         calloop::{self, LoopHandle, LoopSignal},
-        client::QueueHandle,
+        client::{protocol::wl_surface::WlSurface, QueueHandle},
         protocols::wp::text_input::zv3::client::zwp_text_input_manager_v3::ZwpTextInputManagerV3,
     },
     registry::{ProvidesRegistryState, RegistryState},
@@ -36,11 +36,15 @@ use smithay_client_toolkit::{
     shell::xdg::XdgShell,
 };
 
-use crate::{handler::PlatformHandler, window::IdleToken, Glazier};
+use crate::{
+    handler::PlatformHandler,
+    window::{IdleToken, WindowId},
+    Glazier,
+};
 
 use self::{
     input::SeatInfo,
-    window::{WaylandWindowState, WindowAction, WindowId},
+    window::{WaylandWindowState, WindowAction},
 };
 
 use super::shared::xkb::Context;
@@ -66,32 +70,54 @@ struct WaylandPlatform {
 }
 
 pub(crate) struct WaylandState {
-    pub(self) windows: HashMap<WindowId, WaylandWindowState>,
+    /// The type of the user's [PlatformHandler]. Used to allow
+    /// [Glazier::handle] to have eager error handling
+    pub(self) handler_type: TypeId,
 
-    pub(self) registry_state: RegistryState,
-
+    /// Monitors, not currently used
     pub(self) output_state: OutputState,
-    // TODO: Do we need to keep this around
-    // It is unused because(?) wgpu creates the surfaces through RawDisplayHandle(?)
+
+    // Windowing
+    /// The properties we maintain about each window
+    pub(self) windows: BTreeMap<WindowId, WaylandWindowState>,
+    /// A map from `Surface` to Window. This allows the surface
+    /// for a window to change, which may be required
+    /// (see https://github.com/linebender/druid/pull/2033)
+    pub(self) surface_to_window: HashMap<WlSurface, WindowId>,
+
+    /// The compositor, used to create surfaces and regions
     pub(self) compositor_state: CompositorState,
-    // Is used: Keep the XdgShell alive, which is a Weak in all Handles
+    /// The XdgShell, used to create desktop windows
     pub(self) xdg_shell_state: XdgShell,
+
+    /// The queue used to communicate with the platform
     pub(self) wayland_queue: QueueHandle<WaylandPlatform>,
 
+    /// Used to stop the event loop
     pub(self) loop_signal: LoopSignal,
-    // Used for timers and keyboard repeating - not yet implemented
+    /// Used to add new items into the loop. Primarily used for timers and keyboard repeats
     pub(self) loop_handle: LoopHandle<'static, WaylandPlatform>,
 
+    // Input. Wayland splits input into seats, and doesn't provide much
+    // help in implementing cases where there are multiple of these
+    /// The sctk manager for seats
     pub(self) seats: SeatState,
+    /// The data
     pub(self) input_states: Vec<SeatInfo>,
-    pub(self) xkb_context: Context,
+    /// Global used for IME. Optional because the compositor might not implement text input
     pub(self) text_input: Option<ZwpTextInputManagerV3>,
+    /// The xkb context object
+    pub(self) xkb_context: Context,
 
+    /// The actions which the application has requested to occur on the next opportunity
     pub(self) idle_actions: Vec<IdleAction>,
+    /// Actions which the application has requested to happen, but which require access to the handler
     pub(self) actions: VecDeque<ActiveAction>,
+    /// The sender used to access the event loop from other threads
     pub(self) loop_sender: calloop::channel::Sender<LoopCallback>,
 
-    pub(self) handler_type: TypeId,
+    // Other wayland state
+    pub(self) registry_state: RegistryState,
 }
 
 delegate_registry!(WaylandPlatform);
@@ -122,7 +148,7 @@ impl WaylandPlatform {
         with_handler: impl FnOnce(&mut dyn PlatformHandler, Glazier) -> R,
     ) -> R {
         with_handler(&mut *self.handler, Glazier(&mut self.state, PhantomData))
-        // TODO: Is now the time to drain the events?
+        // TODO: Is now the time to drain `self.actions`?
     }
 }
 

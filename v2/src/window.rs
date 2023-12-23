@@ -99,13 +99,16 @@ impl NewWindowId {
 ///
 /// [PlatformHandler]: crate::PlatformHandler
 /// [Glazier]: crate::Glazier
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct WindowId(NonZeroU64);
 
 impl WindowId {
     pub(crate) fn next() -> Self {
         static WINDOW_ID_COUNTER: Counter = Counter::new();
         Self(WINDOW_ID_COUNTER.next_nonzero())
+    }
+    pub fn as_raw(self) -> NonZeroU64 {
+        self.0
     }
 }
 

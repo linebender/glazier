@@ -90,11 +90,12 @@ pub fn launch(
     )?;
 
     let state = WaylandState {
+        windows: Default::default(),
+        surface_to_window: HashMap::new(),
         registry_state: RegistryState::new(&globals),
         output_state: OutputState::new(&globals, &qh),
         compositor_state,
         xdg_shell_state: shell,
-        windows: HashMap::new(),
         wayland_queue: qh.clone(),
         loop_signal: loop_signal.clone(),
         input_states: vec![],
