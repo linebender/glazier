@@ -24,22 +24,15 @@ use smithay_client_toolkit::{
     output::OutputState,
     reexports::{
         calloop::{channel, EventLoop},
-        client::{
-            globals::{registry_queue_init, BindError},
-            Connection, WaylandSource,
-        },
+        client::{globals::registry_queue_init, Connection, WaylandSource},
     },
     registry::RegistryState,
-    seat::SeatState,
     shell::xdg::XdgShell,
 };
 
 use super::{error::Error, IdleAction, LoopCallback, WaylandState};
 use crate::{
-    backend::{
-        shared::xkb::Context,
-        wayland::{input::TextInputManagerData, WaylandPlatform},
-    },
+    backend::{shared::xkb::Context, wayland::WaylandPlatform},
     Glazier, PlatformHandler,
 };
 
@@ -81,13 +74,13 @@ pub fn launch(
     let compositor_state: CompositorState = CompositorState::bind(&globals, &qh)?;
 
     let shell = XdgShell::bind(&globals, &qh)?;
-    let text_input_global = globals.bind(&qh, 1..=1, TextInputManagerData).map_or_else(
-        |err| match err {
-            e @ BindError::UnsupportedVersion => Err(e),
-            BindError::NotPresent => Ok(None),
-        },
-        |it| Ok(Some(it)),
-    )?;
+    // let text_input_global = globals.bind(&qh, 1..=1, TextInputManagerData).map_or_else(
+    //     |err| match err {
+    //         e @ BindError::UnsupportedVersion => Err(e),
+    //         BindError::NotPresent => Ok(None),
+    //     },
+    //     |it| Ok(Some(it)),
+    // )?;
 
     let state = WaylandState {
         windows: Default::default(),
@@ -98,10 +91,10 @@ pub fn launch(
         xdg_shell_state: shell,
         wayland_queue: qh.clone(),
         loop_signal: loop_signal.clone(),
-        input_states: vec![],
-        seats: SeatState::new(&globals, &qh),
+        // input_states: vec![],
+        // seats: SeatState::new(&globals, &qh),
         xkb_context: Context::new(),
-        text_input: text_input_global,
+        text_input: None,
         loop_handle: loop_handle.clone(),
 
         actions: VecDeque::new(),
@@ -110,7 +103,7 @@ pub fn launch(
         handler_type: handler.as_any().type_id(),
     };
     let mut platform = WaylandPlatform { handler, state };
-    platform.initial_seats();
+    // platform.initial_seats();
 
     tracing::info!("wayland event loop initiated");
     platform.with_glz(|handler, glz| on_init(handler, glz));

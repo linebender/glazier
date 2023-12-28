@@ -32,7 +32,6 @@ use smithay_client_toolkit::{
     },
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
-    seat::SeatState,
     shell::xdg::XdgShell,
 };
 
@@ -42,10 +41,8 @@ use crate::{
     Glazier,
 };
 
-use self::{
-    input::SeatInfo,
-    window::{WaylandWindowState, WindowAction},
-};
+// input::SeatInfo,
+use self::window::{WaylandWindowState, WindowAction};
 
 use super::shared::xkb::Context;
 
@@ -101,9 +98,9 @@ pub(crate) struct WaylandState {
     // Input. Wayland splits input into seats, and doesn't provide much
     // help in implementing cases where there are multiple of these
     /// The sctk manager for seats
-    pub(self) seats: SeatState,
+    // pub(self) seats: SeatState,
     /// The data
-    pub(self) input_states: Vec<SeatInfo>,
+    // pub(self) input_states: Vec<SeatInfo>,
     /// Global used for IME. Optional because the compositor might not implement text input
     pub(self) text_input: Option<ZwpTextInputManagerV3>,
     /// The xkb context object
@@ -126,7 +123,7 @@ impl ProvidesRegistryState for WaylandPlatform {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.state.registry_state
     }
-    registry_handlers![OutputState, SeatState];
+    registry_handlers![OutputState];
 }
 
 impl Deref for WaylandPlatform {

@@ -27,7 +27,7 @@ use smithay_client_toolkit::shell::xdg::window::{
 use smithay_client_toolkit::shell::WaylandSurface;
 use smithay_client_toolkit::{delegate_compositor, delegate_xdg_shell, delegate_xdg_window};
 use thiserror::Error;
-use tracing;
+use tracing::{self, warn};
 use wayland_backend::client::ObjectId;
 
 use crate::window::{IdleToken, Region, Scalable, Scale};
@@ -566,8 +566,16 @@ impl CompositorHandler for WaylandPlatform {
         // This requires an update in client-toolkit and wayland-protocols
         new_factor: i32,
     ) {
-        let window = self.windows.get_mut(&WindowId::of_surface(surface));
-        let window = window.expect("Should only get events for real windows");
+        let Some(window_id) = self.surface_to_window.get(surface) else {
+            warn!(
+                "Got surface scale factor change (to {new_factor}) for unknown surface {surface:?}"
+            );
+            return;
+        };
+        let window = self
+            .windows
+            .get_mut(window_id)
+            .expect("Should only get events for non-dropped windows");
         let factor = f64::from(new_factor);
         let scale = Scale::new(factor, factor);
 
@@ -595,9 +603,14 @@ impl CompositorHandler for WaylandPlatform {
         surface: &protocol::wl_surface::WlSurface,
         _time: u32,
     ) {
-        let Some(window) = self.windows.get_mut(&WindowId::of_surface(surface)) else {
+        let Some(window_id) = self.surface_to_window.get(surface) else {
+            warn!("Got repaint for unknown surface {surface:?}");
             return;
         };
+        let window = self
+            .windows
+            .get_mut(window_id)
+            .expect("Should only get events for non-dropped windows");
         window.do_paint(false, PaintContext::Frame);
     }
 }
@@ -609,11 +622,15 @@ impl WindowHandler for WaylandPlatform {
         _: &QueueHandle<Self>,
         wl_window: &smithay_client_toolkit::shell::xdg::window::Window,
     ) {
-        let Some(window) = self.state.windows.get_mut(&WindowId::new(wl_window)) else {
+        let Some(window_id) = self.surface_to_window.get(wl_window.wl_surface()) else {
+            warn!("Got request close for unknown window {wl_window:?}");
             return;
         };
-        todo!("HANDLER");
-        // window.handler.request_close();
+        let window = self
+            .windows
+            .get_mut(window_id)
+            .expect("Should only get events for non-dropped windows");
+        self.with_glz(|handler, glz| handler.window);
     }
 
     fn configure(
