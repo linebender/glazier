@@ -10,17 +10,8 @@ pub struct Glazier<'a>(
     pub(crate) PhantomData<&'a mut ()>,
 );
 
+/// General control of the [Glazier]
 impl Glazier<'_> {
-    pub fn build_new_window(&mut self, builder: impl FnOnce(&mut WindowDescription)) -> WindowId {
-        let mut builder_instance = WindowDescription::default();
-        builder(&mut builder_instance);
-        self.new_window(builder_instance)
-    }
-
-    pub fn new_window(&mut self, desc: WindowDescription) -> WindowId {
-        self.0.new_window(desc)
-    }
-
     /// Request that this Glazier stop controlling the current thread
     ///
     /// This should be called after all windows have been closed
@@ -51,3 +42,25 @@ impl Glazier<'_> {
     //     NativeWindowHandle(self.0.window_handle())
     // }
 }
+
+/// Window lifecycle management
+impl Glazier<'_> {
+    pub fn build_new_window(&mut self, builder: impl FnOnce(&mut WindowDescription)) -> WindowId {
+        let mut builder_instance = WindowDescription::default();
+        builder(&mut builder_instance);
+        self.new_window(builder_instance)
+    }
+
+    pub fn new_window(&mut self, mut desc: WindowDescription) -> WindowId {
+        tracing::trace!("Will create window");
+        desc.assign_id()
+        // self.0.new_window(desc)
+    }
+
+    pub fn close_window(&mut self, win: WindowId) {
+        tracing::trace!("Will close window {win:?}");
+    }
+}
+
+/// Window State/Appearance management
+impl Glazier<'_> {}

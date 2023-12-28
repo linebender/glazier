@@ -45,6 +45,7 @@
 use std::{any::Any, marker::PhantomData, ops::Deref};
 
 pub mod keyboard;
+pub mod monitor;
 pub mod text;
 pub mod window;
 

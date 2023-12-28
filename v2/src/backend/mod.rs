@@ -1,4 +1,4 @@
+mod new_wayland;
 mod shared;
-mod wayland;
 
-pub use wayland::*;
+pub use new_wayland::*;

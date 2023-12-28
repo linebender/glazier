@@ -58,10 +58,16 @@ pub trait PlatformHandler: Any {
     #[allow(unused_variables)]
     fn menu_item_selected(&mut self, glz: Glazier, win: WindowId, command: u32) {}
 
+    fn window_close_requested(&mut self, mut glz: Glazier, win: WindowId /* , reason: () */) {
+        glz.close_window(win);
+    }
+
     /// A surface can now be created for window `win`.
     ///
     /// This surface can accessed using [`Glazier::window_handle`] on `glz`
     // TODO: Pass in size/scale(!?)
+    // TODO: Would it be reasonable to make this a linear type - i.e. force a return of the value in
+    // surface_invalidated
     fn surface_available(&mut self, glz: Glazier, win: WindowId);
 
     // /// The surface associated with `win` is no longer active. In particular,
