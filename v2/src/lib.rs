@@ -41,6 +41,7 @@
 //! `glazier` is an abstraction around a given platform UI & application
 //! framework. It provides common types, which then defer to a platform-defined
 //! implementation.
+#![warn(unreachable_pub)]
 
 use std::{any::Any, marker::PhantomData, ops::Deref};
 

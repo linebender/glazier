@@ -31,7 +31,7 @@ use keyboard_types::{Code, Location};
 ///
 /// Note: in the original, this is based on kVK constants, but since we don't have those
 /// readily available, we use the mapping to code (which should be effectively lossless).
-pub fn code_to_location(code: Code) -> Location {
+pub(in crate::backend) fn code_to_location(code: Code) -> Location {
     match code {
         Code::MetaLeft | Code::ShiftLeft | Code::AltLeft | Code::ControlLeft => Location::Left,
         Code::MetaRight | Code::ShiftRight | Code::AltRight | Code::ControlRight => Location::Right,
@@ -64,7 +64,7 @@ pub fn code_to_location(code: Code) -> Location {
 /// practice it's probably pretty reliable.
 ///
 /// The logic is based on NativeKeyToDOMCodeName.h in Mozilla.
-pub fn hardware_keycode_to_code(hw_keycode: u16) -> Code {
+pub(in crate::backend) fn hardware_keycode_to_code(hw_keycode: u16) -> Code {
     match hw_keycode {
         0x0009 => Code::Escape,
         0x000A => Code::Digit1,

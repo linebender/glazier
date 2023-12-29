@@ -17,7 +17,7 @@
 cfg_if::cfg_if! {
     if #[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "linux", target_os = "openbsd"))] {
         mod keyboard;
-        pub use keyboard::*;
+        pub(in crate::backend) use keyboard::*;
     }
 }
 cfg_if::cfg_if! {

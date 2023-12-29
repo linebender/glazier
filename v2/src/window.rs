@@ -4,6 +4,7 @@ use crate::Counter;
 
 mod region;
 mod scale;
+use kurbo_0_9::Size;
 pub use region::*;
 pub use scale::*;
 use thiserror::Error;
@@ -23,17 +24,20 @@ use thiserror::Error;
 /// glz.new_window(my_window);
 /// ```
 #[derive(Debug)]
+#[forbid(clippy::partial_pub_fields)]
 pub struct WindowDescription {
     pub title: String,
     // menu: Option<Menu>,
-    // size: Size,
-    // min_size: Option<Size>,
+    pub size: Size,
+    pub min_size: Option<Size>,
     // position: Option<Point>,
-    // level: Option<WindowLevel>,
+    pub level: WindowLevel,
     // window_state: Option<WindowState>,
     pub resizable: bool,
     pub show_titlebar: bool,
     pub transparent: bool,
+    /// The application id which will be used on Linux
+    pub app_id: Option<String>,
     /// The identifier the window created from this descriptor will be assigned.
     ///
     /// In most cases you should leave this as `None`. If you do need access
@@ -52,9 +56,13 @@ impl WindowDescription {
     pub fn new(title: impl Into<String>) -> Self {
         WindowDescription {
             title: title.into(),
+            level: WindowLevel::AppWindow,
+            min_size: None,
+            size: Size::new(600., 800.),
             resizable: true,
             show_titlebar: true,
             transparent: false,
+            app_id: None,
             id: None,
         }
     }

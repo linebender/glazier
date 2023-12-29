@@ -28,20 +28,20 @@ use x11rb::xcb_ffi::XCBConnection;
 use super::keycodes::{is_backspace, map_for_compose};
 
 #[cfg(feature = "x11")]
-pub struct DeviceId(pub std::os::raw::c_int);
+pub(in crate::backend) struct DeviceId(pub std::os::raw::c_int);
 
 /// A global xkb context object.
 ///
 /// Reference counted under the hood.
 // Assume this isn't threadsafe unless proved otherwise. (e.g. don't implement Send/Sync)
 // Safety: Is a valid xkb_context
-pub struct Context(*mut xkb_context);
+pub(in crate::backend) struct Context(*mut xkb_context);
 
 impl Context {
     /// Create a new xkb context.
     ///
     /// The returned object is lightweight and clones will point at the same context internally.
-    pub fn new() -> Self {
+    pub(in crate::backend) fn new() -> Self {
         // Safety: No given preconditions
         let ctx = unsafe { xkb_context_new(xkb_context_flags::XKB_CONTEXT_NO_FLAGS) };
         if ctx.is_null() {
@@ -53,7 +53,10 @@ impl Context {
     }
 
     #[cfg(feature = "x11")]
-    pub fn core_keyboard_device_id(&self, conn: &XCBConnection) -> Option<DeviceId> {
+    pub(in crate::backend) fn core_keyboard_device_id(
+        &self,
+        conn: &XCBConnection,
+    ) -> Option<DeviceId> {
         let id = unsafe {
             xkb_x11_get_core_keyboard_device_id(
                 conn.get_raw_xcb_connection() as *mut xcb_connection_t
@@ -67,7 +70,7 @@ impl Context {
     }
 
     #[cfg(feature = "x11")]
-    pub fn keymap_from_x11_device(
+    pub(in crate::backend) fn keymap_from_x11_device(
         &self,
         conn: &XCBConnection,
         device: &DeviceId,
@@ -87,7 +90,7 @@ impl Context {
     }
 
     #[cfg(feature = "x11")]
-    pub fn state_from_x11_keymap(
+    pub(in crate::backend) fn state_from_x11_keymap(
         &mut self,
         keymap: &Keymap,
         conn: &XCBConnection,
@@ -107,7 +110,10 @@ impl Context {
     }
 
     #[cfg(feature = "wayland")]
-    pub fn state_from_keymap(&mut self, keymap: &Keymap) -> Option<KeyEventsState> {
+    pub(in crate::backend) fn state_from_keymap(
+        &mut self,
+        keymap: &Keymap,
+    ) -> Option<KeyEventsState> {
         let state = unsafe { xkb_state_new(keymap.0) };
         if state.is_null() {
             return None;
@@ -118,7 +124,7 @@ impl Context {
     ///
     /// Uses `xkb_keymap_new_from_buffer` under the hood.
     #[cfg(feature = "wayland")]
-    pub fn keymap_from_slice(&self, buffer: &[u8]) -> Keymap {
+    pub(in crate::backend) fn keymap_from_slice(&self, buffer: &[u8]) -> Keymap {
         // TODO we hope that the keymap doesn't borrow the underlying data. If it does' we need to
         // use Rc. We'll find out soon enough if we get a segfault.
         // TODO we hope that the keymap inc's the reference count of the context.
@@ -198,12 +204,12 @@ impl Drop for Context {
     }
 }
 
-pub struct Keymap(*mut xkb_keymap);
+pub(in crate::backend) struct Keymap(*mut xkb_keymap);
 
 impl Keymap {
     #[cfg(feature = "wayland")]
     /// Whether the given key should repeat
-    pub fn repeats(&mut self, scancode: u32) -> bool {
+    pub(in crate::backend) fn repeats(&mut self, scancode: u32) -> bool {
         unsafe { xkb_keymap_key_repeats(self.0, scancode) == 1 }
     }
 }
@@ -216,7 +222,7 @@ impl Drop for Keymap {
     }
 }
 
-pub struct KeyEventsState {
+pub(in crate::backend) struct KeyEventsState {
     mods_state: *mut xkb_state,
     mod_indices: ModsIndices,
     compose_state: Option<NonNull<xkb_compose_state>>,
@@ -228,7 +234,7 @@ pub struct KeyEventsState {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ModsIndices {
+pub(in crate::backend) struct ModsIndices {
     control: xkb_mod_index_t,
     shift: xkb_mod_index_t,
     alt: xkb_mod_index_t,
@@ -238,7 +244,7 @@ pub struct ModsIndices {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ActiveModifiers {
+pub(in crate::backend) struct ActiveModifiers {
     pub base_mods: xkb_mod_mask_t,
     pub latched_mods: xkb_mod_mask_t,
     pub locked_mods: xkb_mod_mask_t,
@@ -249,13 +255,13 @@ pub struct ActiveModifiers {
 
 #[derive(Copy, Clone)]
 /// An opaque representation of a KeySym, to make APIs less error prone
-pub struct KeySym(xkb_keysym_t);
+pub(in crate::backend) struct KeySym(xkb_keysym_t);
 
 impl KeyEventsState {
     /// Stop the active composition.
     /// This should happen if the text field changes, or the selection within the text field changes
     /// or the IME is activated
-    pub fn cancel_composing(&mut self) -> bool {
+    pub(in crate::backend) fn cancel_composing(&mut self) -> bool {
         let was_composing = self.is_composing;
         self.is_composing = false;
         if let Some(state) = self.compose_state {
@@ -264,7 +270,7 @@ impl KeyEventsState {
         was_composing
     }
 
-    pub fn update_xkb_state(&mut self, mods: ActiveModifiers) {
+    pub(in crate::backend) fn update_xkb_state(&mut self, mods: ActiveModifiers) {
         unsafe {
             xkb_state_update_mask(
                 self.mods_state,
@@ -302,7 +308,7 @@ impl KeyEventsState {
     ///
     /// This method calculates the key event which is passed to the `key_down` handler.
     /// This is step "0" if that process
-    pub fn key_event(
+    pub(in crate::backend) fn key_event(
         &mut self,
         scancode: u32,
         keysym: KeySym,
@@ -339,7 +345,7 @@ impl KeyEventsState {
     ///    the user should be (and if it changed)
     ///  - If composition finished, what the inserted string should be
     ///  - Otherwise, does nothing
-    pub(crate) fn compose_key_down<'a>(
+    pub(in crate::backend) fn compose_key_down<'a>(
         &'a mut self,
         event: &KeyEvent,
         keysym: KeySym,
@@ -485,7 +491,7 @@ impl KeyEventsState {
         }
     }
 
-    pub fn cancelled_string(&mut self) -> &str {
+    pub(in crate::backend) fn cancelled_string(&mut self) -> &str {
         // Clearing the compose string and other state isn't needed,
         // as it is cleared at the start of the next composition
         self.is_composing = false;
@@ -580,7 +586,7 @@ impl KeyEventsState {
     }
 
     /// Get the single (opaque) KeySym the given scan
-    pub fn get_one_sym(&mut self, scancode: u32) -> KeySym {
+    pub(in crate::backend) fn get_one_sym(&mut self, scancode: u32) -> KeySym {
         // TODO: We should use xkb_state_key_get_syms here (returning &'keymap [*const xkb_keysym_t])
         // but that is complicated slightly by the fact that we'd need to implement our own
         // capitalisation transform

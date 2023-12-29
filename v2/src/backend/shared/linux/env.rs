@@ -1,4 +1,4 @@
-pub fn locale() -> String {
+pub(in crate::backend) fn locale() -> String {
     let mut locale = iso_locale();
     // This is done because the locale parsing library we use (TODO - do we?) expects an unicode locale, but these vars have an ISO locale
     if let Some(idx) = locale.chars().position(|c| c == '.' || c == '@') {
@@ -7,7 +7,7 @@ pub fn locale() -> String {
     locale
 }
 
-pub fn iso_locale() -> String {
+pub(in crate::backend) fn iso_locale() -> String {
     fn locale_env_var(var: &str) -> Option<String> {
         match std::env::var(var) {
             Ok(s) if s.is_empty() => {

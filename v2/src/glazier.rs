@@ -51,10 +51,9 @@ impl Glazier<'_> {
         self.new_window(builder_instance)
     }
 
-    pub fn new_window(&mut self, mut desc: WindowDescription) -> WindowId {
+    pub fn new_window(&mut self, desc: WindowDescription) -> WindowId {
         tracing::trace!("Will create window");
-        desc.assign_id()
-        // self.0.new_window(desc)
+        self.0.new_window(desc)
     }
 
     pub fn close_window(&mut self, win: WindowId) {

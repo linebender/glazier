@@ -9,12 +9,12 @@ use smithay_client_toolkit::{
     reexports::{
         client::{
             globals::BindError,
-            protocol::wl_output::{self, Event as WlOutputEvent, Subpixel, Transform, WlOutput},
+            protocol::wl_output::{self, Subpixel, Transform, WlOutput},
             Dispatch, Proxy, QueueHandle,
         },
         protocols::xdg::xdg_output::zv1::client::{
-            zxdg_output_manager_v1::ZxdgOutputManagerV1,
-            zxdg_output_v1::{Event as XdgOutputEvent, ZxdgOutputV1},
+            zxdg_output_manager_v1::{self, ZxdgOutputManagerV1},
+            zxdg_output_v1::{self, ZxdgOutputV1},
         },
     },
     registry::{RegistryHandler, RegistryState},
@@ -23,29 +23,13 @@ use wayland_backend::protocol::WEnum;
 
 use crate::{monitor::MonitorId, window::WindowId};
 
-use super::WaylandPlatform;
+use super::{on_unknown_event, WaylandPlatform};
 
 pub(super) struct Outputs {
     xdg_manager: Option<ZxdgOutputManagerV1>,
     outputs: BTreeMap<MonitorId, OutputData>,
     output_to_monitor: HashMap<WlOutput, MonitorId>,
     global_name_to_monitor: BTreeMap<u32, MonitorId>,
-}
-
-pub(super) struct OutputInfoForWindow {
-    pub monitor: MonitorId,
-    /// The integer scale factor of this output
-    ///
-    /// N.B. Wayland (before wl_compositor v6) forces us to guess which scale
-    /// makes the most sense. We choose to provide the *highest* relevant scale,
-    /// as there is no further guidance available. I.e., if the window is between
-    /// two monitors, one with scale 1, one with scale 2, we give scale 2.
-    /// Note that this has a performance cost, but we avoid doing this for good
-    /// compositors which *actually tell us what they want*
-    ///
-    /// In most cases, we will use the fractional scale protocol, which avoids
-    /// this concern. Any compositors not implementing that protocol should
-    pub scale: i32,
 }
 
 impl Outputs {
@@ -55,7 +39,7 @@ impl Outputs {
         window: WindowId,
     ) -> Option<MonitorId> {
         let Some(monitor) = self.output_to_monitor.get(output).copied() else {
-            tracing::warn!("Got window enter for unknown monitor. This is probably because");
+            tracing::error!("Got window enter for unknown output. This may lead to this window getting an incorrect scale factor");
             return None;
         };
         let output = self
@@ -66,15 +50,47 @@ impl Outputs {
         Some(monitor)
     }
 
+    pub(super) fn window_left_output(
+        &mut self,
+        output: &WlOutput,
+        window: WindowId,
+    ) -> Option<MonitorId> {
+        let Some(monitor) = self.output_to_monitor.get(output).copied() else {
+            tracing::error!("Got window enter for unknown output. This may lead to this window getting an incorrect scale factor");
+            return None;
+        };
+        let output = self
+            .outputs
+            .get_mut(&monitor)
+            .expect("If we've been added to `output_to_monitor`, we're definitely in `outputs`");
+        output.windows.remove(&window);
+        Some(monitor)
+    }
+
+    /// Get the (integer) scale associated with a set of monitors
+    ///
+    /// N.B. Wayland (before wl_compositor v6) forces us to guess which scale
+    /// makes the most sense. We choose to provide the *highest* relevant scale,
+    /// as there is no further guidance available. I.e., if the window is between
+    /// two monitors, one with scale 1, one with scale 2, we give scale 2.
+    /// Note that this has a performance cost, but we avoid doing this for
+    /// compositors which *actually tell us what they want*
+    ///
+    /// In most cases, we will use the fractional scale protocol, which avoids
+    /// this concern. Any compositors not implementing that protocol should do
+    /// so.
+    ///
     /// ### Panics
-    /// If any of the monitors weren't associated with this Outputs, for some reason
-    pub(super) fn max_integer_scale(&mut self, monitors: &[MonitorId]) -> i32 {
+    /// If any of the monitors weren't associated with this `Outputs`
+    pub(super) fn max_fallback_integer_scale(
+        &mut self,
+        monitors: impl Iterator<Item = MonitorId>,
+    ) -> i32 {
         // TODO: Also return the subpixel and transform data (if all the same, give
         // that value, otherwise normal/unknown)
         monitors
-            .iter()
             .map(|it| {
-                self.outputs.get(it).expect(
+                self.outputs.get(&it).expect(
                     "Monitor id should have only been available through setting up an output, and correctly removed if the output was deleted",
                 )
             })
@@ -117,6 +133,10 @@ impl Outputs {
                 }
                 Err(BindError::NotPresent) => None,
             };
+        // TODO: Maybe bind https://wayland.app/protocols/kde-primary-output-v1 ?
+        // We need to check that this is one of the values made available to us, without using
+        // https://wayland.app/protocols/kde-outputdevice (as those are not associated with
+        // wayland outputs)
         let mut outputs = Outputs {
             xdg_manager,
             outputs: BTreeMap::new(),
@@ -139,6 +159,7 @@ struct OutputInfo {
     mode: Mode,
     logical_position: Point,
     logical_size: Size,
+    physical_size: Size,
     name: String,
     description: String,
 }
@@ -179,10 +200,11 @@ impl Outputs {
                     current: false,
                     preferred: false,
                 },
-                logical_position: (0., 0.).into(),
-                logical_size: (0., 0.).into(),
+                logical_position: Point::ZERO,
+                logical_size: Size::ZERO,
                 name: String::new(),
                 description: String::new(),
+                physical_size: Size::ZERO,
             },
             windows: BTreeSet::new(),
             xdg_output,
@@ -200,8 +222,8 @@ struct OutputUserData {
 impl Dispatch<WlOutput, OutputUserData> for WaylandPlatform {
     fn event(
         plat: &mut Self,
-        _: &WlOutput,
-        event: WlOutputEvent,
+        proxy: &WlOutput,
+        event: wl_output::Event,
         data: &OutputUserData,
         _: &smithay_client_toolkit::reexports::client::Connection,
         _: &smithay_client_toolkit::reexports::client::QueueHandle<Self>,
@@ -211,7 +233,7 @@ impl Dispatch<WlOutput, OutputUserData> for WaylandPlatform {
             return;
         };
         match event {
-            WlOutputEvent::Geometry {
+            wl_output::Event::Geometry {
                 subpixel,
                 transform,
                 physical_width,
@@ -233,8 +255,9 @@ impl Dispatch<WlOutput, OutputUserData> for WaylandPlatform {
                         tracing::warn!("Unknown transform: {e:?}");
                     }
                 }
+                info.pending.physical_size = (physical_width as f64, physical_height as f64).into();
             }
-            WlOutputEvent::Mode {
+            wl_output::Event::Mode {
                 flags,
                 width,
                 height,
@@ -257,7 +280,7 @@ impl Dispatch<WlOutput, OutputUserData> for WaylandPlatform {
                     WEnum::Unknown(e) => tracing::info!("Unknown mode flag: {e}"),
                 }
             }
-            WlOutputEvent::Done => {
+            wl_output::Event::Done => {
                 let (scale_factor_changed, new) = match &info.info {
                     None => (true, true),
                     Some(old_info) => (old_info.scale_factor != info.pending.scale_factor, false),
@@ -272,10 +295,10 @@ impl Dispatch<WlOutput, OutputUserData> for WaylandPlatform {
                 } else {
                 }
             }
-            WlOutputEvent::Scale { factor } => info.pending.scale_factor = factor,
-            WlOutputEvent::Name { name } => info.pending.name = name,
-            WlOutputEvent::Description { description } => info.pending.description = description,
-            _ => todo!(),
+            wl_output::Event::Scale { factor } => info.pending.scale_factor = factor,
+            wl_output::Event::Name { name } => info.pending.name = name,
+            wl_output::Event::Description { description } => info.pending.description = description,
+            event => on_unknown_event(proxy, event),
         }
     }
 }
@@ -285,14 +308,14 @@ struct OutputManagerData;
 impl Dispatch<ZxdgOutputManagerV1, OutputManagerData> for WaylandPlatform {
     fn event(
         _: &mut Self,
-        _: &ZxdgOutputManagerV1,
-        event: <ZxdgOutputManagerV1 as Proxy>::Event,
+        proxy: &ZxdgOutputManagerV1,
+        event: zxdg_output_manager_v1::Event,
         _: &OutputManagerData,
         _: &smithay_client_toolkit::reexports::client::Connection,
         _: &QueueHandle<Self>,
     ) {
         match event {
-            _ => unreachable!("There are no events for the output manager"),
+            event => on_unknown_event(proxy, event),
         }
     }
 }
@@ -300,8 +323,8 @@ impl Dispatch<ZxdgOutputManagerV1, OutputManagerData> for WaylandPlatform {
 impl Dispatch<ZxdgOutputV1, OutputUserData> for WaylandPlatform {
     fn event(
         plat: &mut Self,
-        _: &ZxdgOutputV1,
-        event: <ZxdgOutputV1 as smithay_client_toolkit::reexports::client::Proxy>::Event,
+        proxy: &ZxdgOutputV1,
+        event: zxdg_output_v1::Event,
         data: &OutputUserData,
         _: &smithay_client_toolkit::reexports::client::Connection,
         _: &smithay_client_toolkit::reexports::client::QueueHandle<Self>,
@@ -311,17 +334,17 @@ impl Dispatch<ZxdgOutputV1, OutputUserData> for WaylandPlatform {
             return;
         };
         match event {
-            XdgOutputEvent::LogicalPosition { x, y } => {
+            zxdg_output_v1::Event::LogicalPosition { x, y } => {
                 info.pending.logical_position = (x as f64, y as f64).into()
             }
-            XdgOutputEvent::LogicalSize { width, height } => {
+            zxdg_output_v1::Event::LogicalSize { width, height } => {
                 info.pending.logical_size = (width as f64, height as f64).into()
             }
             //These events are deprecated, so we don't use them
-            XdgOutputEvent::Done
-            | XdgOutputEvent::Name { .. }
-            | XdgOutputEvent::Description { .. } => {}
-            _ => todo!(),
+            zxdg_output_v1::Event::Done
+            | zxdg_output_v1::Event::Name { .. }
+            | zxdg_output_v1::Event::Description { .. } => {}
+            event => on_unknown_event(proxy, event),
         }
     }
 }
@@ -355,8 +378,8 @@ impl RegistryHandler<WaylandPlatform> for Outputs {
 
     fn remove_global(
         plat: &mut WaylandPlatform,
-        conn: &smithay_client_toolkit::reexports::client::Connection,
-        qh: &QueueHandle<WaylandPlatform>,
+        _: &smithay_client_toolkit::reexports::client::Connection,
+        _: &QueueHandle<WaylandPlatform>,
         name: u32,
         interface: &str,
     ) {

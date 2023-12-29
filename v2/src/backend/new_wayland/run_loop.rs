@@ -14,10 +14,9 @@
 
 #![allow(clippy::single_match)]
 
-use std::{any::TypeId, collections::HashMap};
+use std::any::TypeId;
 
 use smithay_client_toolkit::{
-    compositor::CompositorState,
     reexports::{
         calloop::{channel, EventLoop},
         calloop_wayland_source::WaylandSource,
@@ -28,7 +27,10 @@ use smithay_client_toolkit::{
 
 use super::{error::Error, IdleAction, LoopCallback, WaylandPlatform, WaylandState};
 use crate::{
-    backend::{new_wayland::outputs::Outputs, shared::xkb::Context},
+    backend::{
+        new_wayland::{outputs::Outputs, windows::Windowing},
+        shared::xkb::Context,
+    },
     Glazier, PlatformHandler,
 };
 
@@ -46,21 +48,18 @@ pub fn launch(
     let loop_signal = event_loop.get_signal();
     let (loop_sender, loop_source) = channel::channel::<LoopCallback>();
 
+    // work around https://github.com/rust-lang/rustfmt/issues/3863
+    const MESSAGE: &str =
+        "The value `platform.loop_sender` has been dropped, except we have a reference to it";
     loop_handle
-        .insert_source(loop_source, |event, _, platform| {
-            match event {
-                channel::Event::Msg(msg) => {
-                    msg(platform)
-                }
-                channel::Event::Closed => {
-                    let _ = &platform.state.loop_sender;
-                    unreachable!(
-                        "The value `platform.loop_sender` has been dropped, except we have a reference to it"
-                    )
-                } // ?
+        .insert_source(loop_source, |event, _, platform| match event {
+            channel::Event::Msg(msg) => msg(platform),
+            channel::Event::Closed => {
+                let _ = &platform.state.loop_sender;
+                unreachable!("{MESSAGE}")
             }
         })
-        .unwrap();
+        .map_err(|it| it.error)?;
 
     WaylandSource::new(conn, event_queue)
         .insert(loop_handle.clone())
@@ -68,10 +67,8 @@ pub fn launch(
 
     let registry_state = RegistryState::new(&globals);
     let monitors = Outputs::bind(&registry_state, &qh);
+    let windows = Windowing::bind(&registry_state, &qh)?;
 
-    let compositor_state: CompositorState = todo!();
-
-    let shell = todo!();
     // let text_input_global = globals.bind(&qh, 1..=1, TextInputManagerData).map_or_else(
     //     |err| match err {
     //         e @ BindError::UnsupportedVersion => Err(e),
@@ -81,23 +78,22 @@ pub fn launch(
     // )?;
 
     let state = WaylandState {
-        monitors,
-        surface_to_window: HashMap::new(),
-        registry_state,
-        // output_state: OutputState::new(&globals, &qh),
-        compositor_state,
-        xdg_shell_state: shell,
+        handler_type: handler.as_any().type_id(),
+
         wayland_queue: qh.clone(),
         loop_signal: loop_signal.clone(),
-        // input_states: vec![],
-        // seats: SeatState::new(&globals, &qh),
-        xkb_context: Context::new(),
-        text_input: None,
         loop_handle: loop_handle.clone(),
 
         idle_actions: Vec::new(),
         loop_sender,
-        handler_type: handler.as_any().type_id(),
+
+        monitors,
+        windows,
+
+        text_input: None,
+        xkb_context: Context::new(),
+
+        registry_state,
     };
     let mut plat = WaylandPlatform { handler, state };
 
@@ -121,9 +117,7 @@ pub fn launch(
         }
     };
 
-    event_loop
-        .run(None, &mut plat, idle_handler)
-        .expect("Shouldn't error in event loop");
+    event_loop.run(None, &mut plat, idle_handler)?;
     Ok(())
 }
 

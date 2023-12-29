@@ -14,40 +14,34 @@
 
 //! wayland platform support
 
-use std::{any::TypeId, collections::HashMap, marker::PhantomData};
+use std::{any::TypeId, fmt::Debug, marker::PhantomData};
 
 use smithay_client_toolkit::{
-    compositor::CompositorState,
     delegate_registry,
     reexports::{
         calloop::{self, LoopHandle, LoopSignal},
-        client::{protocol::wl_surface::WlSurface, QueueHandle},
+        client::{Proxy, QueueHandle},
         protocols::wp::text_input::zv3::client::zwp_text_input_manager_v3::ZwpTextInputManagerV3,
     },
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
-    shell::xdg::XdgShell,
 };
 use thiserror::Error;
 
-use crate::{
-    handler::PlatformHandler,
-    window::{IdleToken, WindowId},
-    Glazier,
-};
-
-use self::outputs::Outputs;
-
+use self::{outputs::Outputs, windows::Windowing};
 use super::shared::xkb::Context;
 
-pub mod error;
+use crate::{handler::PlatformHandler, window::IdleToken, Glazier};
+
+pub(crate) mod error;
 mod outputs;
 mod run_loop;
+mod windows;
 
 #[derive(Error, Debug)]
 pub enum BackendWindowCreationError {}
 
-pub use run_loop::{launch, LoopHandle as LoopHandle2};
+pub(crate) use run_loop::{launch, LoopHandle as LoopHandle2};
 
 pub(crate) type GlazierImpl<'a> = &'a mut WaylandState;
 
@@ -55,39 +49,38 @@ pub(crate) type GlazierImpl<'a> = &'a mut WaylandState;
 /// wayland events
 struct WaylandPlatform {
     // Drop the handler as early as possible, in case there are any Wgpu surfaces owned by it
-    pub handler: Box<dyn PlatformHandler>,
-    pub state: WaylandState,
+    pub(self) handler: Box<dyn PlatformHandler>,
+    pub(self) state: WaylandState,
 }
 
 pub(crate) struct WaylandState {
+    // Meta
     /// The type of the user's [PlatformHandler]. Used to allow
     /// [Glazier::handle] to have eager error handling
     pub(self) handler_type: TypeId,
 
-    /// Monitors, not currently used
-    pub(self) monitors: Outputs,
-
-    // Windowing
-    /// The properties we maintain about each window
-    // pub(self) windows: BTreeMap<WindowId, WaylandWindowState>,
-
-    /// A map from `Surface` to Window. This allows the surface
-    /// for a window to change, which may be required
-    /// (see https://github.com/linebender/druid/pull/2033)
-    pub(self) surface_to_window: HashMap<WlSurface, WindowId>,
-
-    /// The compositor, used to create surfaces and regions
-    pub(self) compositor_state: CompositorState,
-    /// The XdgShell, used to create desktop windows
-    pub(self) xdg_shell_state: XdgShell,
-
+    // Event loop management
     /// The queue used to communicate with the platform
     pub(self) wayland_queue: QueueHandle<WaylandPlatform>,
-
     /// Used to stop the event loop
     pub(self) loop_signal: LoopSignal,
     /// Used to add new items into the loop. Primarily used for timers and keyboard repeats
     pub(self) loop_handle: LoopHandle<'static, WaylandPlatform>,
+
+    // Callbacks and other delayed actions
+    /// The actions which the application has requested to occur on the next opportunity
+    pub(self) idle_actions: Vec<IdleAction>,
+    /// Actions which the application has requested to happen, but which require access to the handler
+    // pub(self) actions: VecDeque<ActiveAction>,
+    /// The sender used to access the event loop from other threads
+    pub(self) loop_sender: calloop::channel::Sender<LoopCallback>,
+
+    // Subsytem state
+    /// Monitors, not currently used
+    pub(self) monitors: Outputs,
+
+    // State of the windowing subsystem
+    pub(self) windows: Windowing,
 
     // Input. Wayland splits input into seats, and doesn't provide much
     // help in implementing cases where there are multiple of these
@@ -99,14 +92,6 @@ pub(crate) struct WaylandState {
     pub(self) text_input: Option<ZwpTextInputManagerV3>,
     /// The xkb context object
     pub(self) xkb_context: Context,
-
-    /// The actions which the application has requested to occur on the next opportunity
-    pub(self) idle_actions: Vec<IdleAction>,
-    /// Actions which the application has requested to happen, but which require access to the handler
-    // pub(self) actions: VecDeque<ActiveAction>,
-    /// The sender used to access the event loop from other threads
-    pub(self) loop_sender: calloop::channel::Sender<LoopCallback>,
-
     // Other wayland state
     pub(self) registry_state: RegistryState,
 }
@@ -138,3 +123,15 @@ enum IdleAction {
 }
 
 type LoopCallback = Box<dyn FnOnce(&mut WaylandPlatform) + Send>;
+
+fn on_unknown_event<P: Proxy>(proxy: &P, event: P::Event)
+where
+    P::Event: Debug,
+{
+    let name = P::interface().name;
+    tracing::warn!(
+        proxy = ?proxy,
+        event = ?event,
+        issues_url = "https://github.com/linebender/glazier/issues",
+        "Got an unknown event for interface {name}, got event: {event:?}. Please report this to Glazier on GitHub");
+}

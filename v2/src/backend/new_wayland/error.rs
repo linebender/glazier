@@ -21,6 +21,7 @@ use smithay_client_toolkit::reexports::{
     client::{globals::BindError, ConnectError},
 };
 
+// TODO: Work out error handling
 #[derive(Debug)]
 pub enum Error {
     Connect(ConnectError),
