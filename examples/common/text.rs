@@ -8,7 +8,7 @@
 use parley::Layout;
 use vello::kurbo::Affine;
 use vello::{
-    glyph::{fello::raw::FontRef, GlyphContext},
+    glyph::{skrifa::raw::FontRef, GlyphContext},
     peniko::{Brush, Color},
     *,
 };
@@ -37,7 +37,7 @@ pub fn render_text(builder: &mut SceneBuilder, transform: Affine, layout: &Layou
             if let Ok(font_ref) = FontRef::from_index(font_ref.data, font.index()) {
                 let style = glyph_run.style();
                 let vars: [(&str, f32); 0] = [];
-                let mut gp = gcx.new_provider(&font_ref, None, font_size, false, vars);
+                let mut gp = gcx.new_provider(&font_ref, font_size, false, &vars);
                 for glyph in glyph_run.glyphs() {
                     if let Some(fragment) = gp.get(glyph.id, Some(&style.brush.0)) {
                         let gx = x + glyph.x;
