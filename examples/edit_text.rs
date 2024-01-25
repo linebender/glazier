@@ -11,12 +11,12 @@ use parley::FontContext;
 use tracing_subscriber::EnvFilter;
 use unicode_segmentation::GraphemeCursor;
 use vello::util::{RenderContext, RenderSurface};
-use vello::{AaSupport, Renderer};
 use vello::{
     kurbo::{Affine, Point, Rect},
     peniko::{Brush, Color, Fill},
     RenderParams, RendererOptions, Scene, SceneBuilder,
 };
+use vello::{AaSupport, Renderer};
 
 use glazier::kurbo::Size;
 use glazier::{
@@ -206,7 +206,11 @@ impl WindowState {
             let renderer_options = RendererOptions {
                 surface_format: Some(surface.format),
                 use_cpu: false,
-                antialiasing_support: AaSupport { area: true, msaa8: false, msaa16: false },
+                antialiasing_support: AaSupport {
+                    area: true,
+                    msaa8: false,
+                    msaa16: false,
+                },
             };
             let render_params = RenderParams {
                 base_color: Color::BLACK,

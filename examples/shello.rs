@@ -5,12 +5,12 @@ use accesskit::TreeUpdate;
 use parley::FontContext;
 use tracing_subscriber::EnvFilter;
 use vello::util::{RenderContext, RenderSurface};
-use vello::{AaSupport, Renderer};
 use vello::{
     kurbo::{Affine, PathEl, Point, Rect, Stroke},
     peniko::{Brush, Color, Fill, Mix},
     RenderParams, RendererOptions, Scene, SceneBuilder,
 };
+use vello::{AaSupport, Renderer};
 
 use glazier::kurbo::Size;
 use glazier::{

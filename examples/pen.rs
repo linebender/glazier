@@ -6,12 +6,12 @@ use std::f64::consts::PI;
 use accesskit::TreeUpdate;
 use kurbo::Ellipse;
 use vello::util::{RenderContext, RenderSurface};
-use vello::{AaSupport, Renderer};
 use vello::{
     kurbo::{Affine, BezPath, Point, Rect, Stroke},
     peniko::{Brush, Color, Fill},
     RenderParams, RendererOptions, Scene, SceneBuilder,
 };
+use vello::{AaSupport, Renderer};
 
 use glazier::kurbo::Size;
 use glazier::{
