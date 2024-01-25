@@ -5,10 +5,10 @@ use accesskit::TreeUpdate;
 use parley::FontContext;
 use tracing_subscriber::EnvFilter;
 use vello::util::{RenderContext, RenderSurface};
-use vello::Renderer;
+use vello::{AaSupport, Renderer};
 use vello::{
-    kurbo::{Affine, PathEl, Point, Rect},
-    peniko::{Brush, Color, Fill, Mix, Stroke},
+    kurbo::{Affine, PathEl, Point, Rect, Stroke},
+    peniko::{Brush, Color, Fill, Mix},
     RenderParams, RendererOptions, Scene, SceneBuilder,
 };
 
@@ -100,15 +100,21 @@ impl WindowState {
             let queue = &self.render.devices[dev_id].queue;
             let renderer_options = RendererOptions {
                 surface_format: Some(surface.format),
-                timestamp_period: queue.get_timestamp_period(),
+                use_cpu: false,
+                antialiasing_support: AaSupport {
+                    area: true,
+                    msaa8: false,
+                    msaa16: false,
+                },
             };
             let render_params = RenderParams {
                 base_color: Color::BLACK,
                 width,
                 height,
+                antialiasing_method: vello::AaConfig::Area,
             };
             self.renderer
-                .get_or_insert_with(|| Renderer::new(device, &renderer_options).unwrap())
+                .get_or_insert_with(|| Renderer::new(device, renderer_options).unwrap())
                 .render_to_surface(device, queue, &self.scene, &surface_texture, &render_params)
                 .unwrap();
             surface_texture.present();

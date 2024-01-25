@@ -130,6 +130,7 @@ impl WinHandler for HelloState {
 
     fn paint(&mut self, _: &Region) {}
 
+    #[cfg(feature = "accesskit")]
     fn accesskit_tree(&mut self) -> TreeUpdate {
         let root = {
             let mut builder = NodeBuilder::new(Role::Window);
@@ -179,6 +180,7 @@ impl WinHandler for HelloState {
         self.size = size;
     }
 
+    #[cfg(feature = "accesskit")]
     fn accesskit_action(&mut self, request: ActionRequest) {
         if let ActionRequest {
             action,
