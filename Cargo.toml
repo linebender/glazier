@@ -44,7 +44,7 @@ accesskit = [
 
 [dependencies]
 # Moving forward, this version should align with the kurbo version in peniko.
-kurbo = "0.10.4"
+kurbo = "0.11.0"
 
 tracing = { version = "0.1.22", features = ["log"] }
 lazy_static = "1.4.0"
@@ -148,8 +148,8 @@ static_assertions = "1.1.0"
 test-log = { version = "0.2.5", features = ["trace"], default-features = false }
 tracing-subscriber = { version = "0.3.2", features = ["env-filter"] }
 unicode-segmentation = "1.7.0"
-vello = { git = "https://github.com/linebender/vello", rev = "1c06c308b2ed1ebb858ed585cc284756325f9bb3" }
-parley = { git = "https://github.com/dfrg/parley", rev = "2371bf4b702ec91edee2d58ffb2d432539580e1e" }
+vello = { git = "https://github.com/linebender/vello", rev = "b1bd9e361f2944b71cef0ea8a2c71dce5182d79b" }
+parley = { git = "https://github.com/dfrg/parley", rev = "1940d1ae9f2a9b44b7c18967147ffa7d345fdafd" }
 pollster = "0.3.0"
 wgpu = "0.18.0"
 

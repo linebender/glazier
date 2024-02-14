@@ -24,7 +24,7 @@ impl Default for ParleyBrush {
 
 impl parley::style::Brush for ParleyBrush {}
 
-pub fn render_text(builder: &mut SceneBuilder, transform: Affine, layout: &Layout<ParleyBrush>) {
+pub fn render_text(scene: &mut Scene, transform: Affine, layout: &Layout<ParleyBrush>) {
     let mut gcx = GlyphContext::new();
     for line in layout.lines() {
         for glyph_run in line.glyph_runs() {
@@ -44,7 +44,7 @@ pub fn render_text(builder: &mut SceneBuilder, transform: Affine, layout: &Layou
                         let gy = y - glyph.y;
                         let xform = Affine::translate((gx as f64, gy as f64))
                             * Affine::scale_non_uniform(1.0, -1.0);
-                        builder.append(&fragment, Some(transform * xform));
+                        scene.append(&fragment, Some(transform * xform));
                     }
                     x += glyph.advance;
                 }

@@ -14,7 +14,7 @@ use vello::util::{RenderContext, RenderSurface};
 use vello::{
     kurbo::{Affine, Point, Rect},
     peniko::{Brush, Color, Fill},
-    RenderParams, RendererOptions, Scene, SceneBuilder,
+    RenderParams, RendererOptions, Scene,
 };
 use vello::{AaSupport, Renderer};
 
@@ -229,10 +229,10 @@ impl WindowState {
 
     fn render_anim_frame(&mut self) {
         let (height, width) = self.surface_size();
-        let mut sb = SceneBuilder::for_scene(&mut self.scene);
+        self.scene.reset();
         let rect =
             Rect::from_origin_size(Point::new(0.0, 0.0), Size::new(height as f64, width as f64));
-        sb.fill(
+        self.scene.fill(
             Fill::NonZero,
             Affine::IDENTITY,
             &Brush::Solid(Color::rgb8(255, 255, 255)),
@@ -240,7 +240,11 @@ impl WindowState {
             &rect,
         );
         let doc = self.document.borrow();
-        text::render_text(&mut sb, Affine::translate((TEXT_X, TEXT_Y)), &doc.layout);
+        text::render_text(
+            &mut self.scene,
+            Affine::translate((TEXT_X, TEXT_Y)),
+            &doc.layout,
+        );
         if doc.selection.len() > 0 {
             let selection_start_x =
                 parley::layout::Cursor::from_position(&doc.layout, doc.selection.min(), true)
@@ -254,7 +258,7 @@ impl WindowState {
                 Point::new(selection_start_x, TEXT_Y),
                 Point::new(selection_end_x, TEXT_Y + FONT_SIZE as f64),
             );
-            sb.fill(
+            self.scene.fill(
                 Fill::NonZero,
                 Affine::IDENTITY,
                 &Brush::Solid(Color::rgba8(0, 0, 255, 100)),
@@ -271,7 +275,7 @@ impl WindowState {
                 Point::new(cursor_active_x - 1.0, TEXT_Y),
                 Point::new(cursor_active_x + 1.0, TEXT_Y + FONT_SIZE as f64),
             );
-            sb.fill(
+            self.scene.fill(
                 Fill::NonZero,
                 Affine::IDENTITY,
                 &Brush::Solid(Color::BLACK),
@@ -301,7 +305,7 @@ impl WindowState {
                     TEXT_Y + FONT_SIZE as f64 + 5.0,
                 ),
             );
-            sb.fill(
+            self.scene.fill(
                 Fill::NonZero,
                 Affine::IDENTITY,
                 &Brush::Solid(Color::rgba8(0, 0, 255, 100)),
@@ -310,7 +314,7 @@ impl WindowState {
             );
         }
 
-        sb.pop_layer();
+        self.scene.pop_layer();
     }
 }
 

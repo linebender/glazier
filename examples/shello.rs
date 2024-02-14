@@ -8,7 +8,7 @@ use vello::util::{RenderContext, RenderSurface};
 use vello::{
     kurbo::{Affine, PathEl, Point, Rect, Stroke},
     peniko::{Brush, Color, Fill, Mix},
-    RenderParams, RendererOptions, Scene, SceneBuilder,
+    RenderParams, RendererOptions, Scene,
 };
 use vello::{AaSupport, Renderer};
 
@@ -218,9 +218,9 @@ impl WinHandler for WindowState {
 }
 
 pub fn render_anim_frame(scene: &mut Scene, fcx: &mut FontContext, i: u64) {
-    let mut sb = SceneBuilder::for_scene(scene);
+    scene.reset();
     let rect = Rect::from_origin_size(Point::new(0.0, 0.0), (1000.0, 1000.0));
-    sb.fill(
+    scene.fill(
         Fill::NonZero,
         Affine::IDENTITY,
         &Brush::Solid(Color::rgb8(128, 128, 128)),
@@ -247,21 +247,21 @@ pub fn render_anim_frame(scene: &mut Scene, fcx: &mut FontContext, i: u64) {
     )));
     let mut layout = layout_builder.build();
     layout.break_all_lines(None, parley::layout::Alignment::Start);
-    text::render_text(&mut sb, Affine::translate((100.0, 400.0)), &layout);
+    text::render_text(scene, Affine::translate((100.0, 400.0)), &layout);
 
     let th = (std::f64::consts::PI / 180.0) * (i as f64);
     let center = Point::new(500.0, 500.0);
     let mut p1 = center;
     p1.x += 400.0 * th.cos();
     p1.y += 400.0 * th.sin();
-    sb.stroke(
+    scene.stroke(
         &Stroke::new(5.0),
         Affine::IDENTITY,
         &Brush::Solid(Color::rgb8(128, 0, 0)),
         None,
         &[PathEl::MoveTo(center), PathEl::LineTo(p1)],
     );
-    sb.fill(
+    scene.fill(
         Fill::NonZero,
         Affine::translate((150.0, 150.0)) * Affine::scale(0.2),
         Color::RED,
@@ -269,20 +269,20 @@ pub fn render_anim_frame(scene: &mut Scene, fcx: &mut FontContext, i: u64) {
         &rect,
     );
     let alpha = (i as f64 * 0.03).sin() as f32 * 0.5 + 0.5;
-    sb.push_layer(Mix::Normal, alpha, Affine::IDENTITY, &rect);
-    sb.fill(
+    scene.push_layer(Mix::Normal, alpha, Affine::IDENTITY, &rect);
+    scene.fill(
         Fill::NonZero,
         Affine::translate((100.0, 100.0)) * Affine::scale(0.2),
         Color::BLUE,
         None,
         &rect,
     );
-    sb.fill(
+    scene.fill(
         Fill::NonZero,
         Affine::translate((200.0, 200.0)) * Affine::scale(0.2),
         Color::GREEN,
         None,
         &rect,
     );
-    sb.pop_layer();
+    scene.pop_layer();
 }
