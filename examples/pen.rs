@@ -9,7 +9,7 @@ use vello::util::{RenderContext, RenderSurface};
 use vello::{
     kurbo::{Affine, BezPath, Point, Rect, Stroke},
     peniko::{Brush, Color, Fill},
-    RenderParams, RendererOptions, Scene, SceneBuilder,
+    RenderParams, RendererOptions, Scene,
 };
 use vello::{AaSupport, Renderer};
 
@@ -270,9 +270,9 @@ pub fn render_anim_frame(
     pen_state: Option<&PenState>,
     touch_state: &TouchState,
 ) {
-    let mut sb = SceneBuilder::for_scene(scene);
+    scene.reset();
     let rect = Rect::from_origin_size(Point::new(0.0, 0.0), (5000.0, 5000.0));
-    sb.fill(
+    scene.fill(
         Fill::NonZero,
         Affine::IDENTITY,
         &Brush::Solid(Color::rgb8(128, 128, 128)),
@@ -287,12 +287,12 @@ pub fn render_anim_frame(
             (r, r * state.inclination.altitude.to_degrees() / 90.0),
             state.inclination.azimuth.to_radians() + PI / 2.0,
         );
-        sb.fill(Fill::NonZero, Affine::IDENTITY, Color::BLUE, None, &shape);
+        scene.fill(Fill::NonZero, Affine::IDENTITY, Color::BLUE, None, &shape);
     }
 
     for (path, color) in touch_state.points.values() {
-        sb.stroke(&Stroke::default(), Affine::IDENTITY, color, None, path);
+        scene.stroke(&Stroke::default(), Affine::IDENTITY, color, None, path);
     }
 
-    sb.pop_layer();
+    scene.pop_layer();
 }
