@@ -1,3 +1,8 @@
+> [!Important]
+> Linebender no longer uses Glazier, and so this project is no longer supported.
+>
+> You should prefer to use [winit](https://crates.io/crates/winit) instead.
+
 <div align="center">
 
 # glazier
@@ -10,6 +15,16 @@
 <!-- [![Docs](https://docs.rs/glazier/badge.svg)](https://docs.rs/glazier) -->
 
 </div>
+
+> [!Caution]
+> This README content has not been validated recently.
+>
+> Glazier is no longer supported, and should not be used.
+>
+> This repository is made available for reference purposes.
+>
+> Feel free to use the [#glazier channel](https://xi.zulipchat.com/#narrow/stream/351333-glazier) if reusing code from Glazier.
+> Some of the text input handling code is better supported than the equivalent in `winit`.
 
 Glazier is an operating system integration layer infrastructure layer intended for
 high quality GUI toolkits in Rust. It is agnostic to the choice of drawing, so the
