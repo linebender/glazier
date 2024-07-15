@@ -24,7 +24,7 @@
 > This repository is made available for reference purposes.
 >
 > Feel free to use the [#glazier channel](https://xi.zulipchat.com/#narrow/stream/351333-glazier) if reusing code from Glazier.
-> Some of the text input handling code is better supported than the equivalent in `winit`.
+> Some of the text input handling code is more complete than the equivalent in winit, and so might be useful for reference.
 
 Glazier is an operating system integration layer infrastructure layer intended for
 high quality GUI toolkits in Rust. It is agnostic to the choice of drawing, so the
