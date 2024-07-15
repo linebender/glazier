@@ -28,7 +28,10 @@ use thiserror::Error;
 pub struct WindowDescription {
     pub title: String,
     // menu: Option<Menu>,
-    pub size: Size,
+    // TODO: We need to be extremely careful around sizes, to avoid
+    // mixing up logical and physical sizes, and to make it easy for
+    // our users
+    pub initial_size: Size,
     pub min_size: Option<Size>,
     // position: Option<Point>,
     pub level: WindowLevel,
@@ -58,7 +61,7 @@ impl WindowDescription {
             title: title.into(),
             level: WindowLevel::AppWindow,
             min_size: None,
-            size: Size::new(600., 800.),
+            initial_size: Size::new(600., 800.),
             resizable: true,
             show_titlebar: true,
             transparent: false,

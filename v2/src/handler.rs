@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use crate::{
-    window::{IdleToken, Region, WindowCreationError},
+    window::{IdleToken, Region, Scale, WindowCreationError},
     Glazier, WindowId,
 };
 
@@ -79,6 +79,11 @@ pub trait PlatformHandler: Any {
     // /// [`surface_available`]: PlatformHandler::surface_available
     // /// [`paint`]: PlatformHandler::paint
     // fn surface_invalidated(&mut self, glz: Glazier, win: WindowId);
+
+    /// The platform proposed a new scale factor.
+    fn platform_proposed_scale(&mut self, mut glz: Glazier, win: WindowId, scale: Scale) {
+        glz.set_window_scale(win, scale)
+    }
 
     /// Request the handler to prepare to paint the window contents. In particular, if there are
     /// any regions that need to be repainted on the next call to `paint`, the handler should

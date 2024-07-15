@@ -34,7 +34,7 @@ use crate::{
     Glazier, PlatformHandler,
 };
 
-pub fn launch(
+pub(crate) fn launch(
     mut handler: Box<dyn PlatformHandler>,
     on_init: impl FnOnce(&mut dyn PlatformHandler, Glazier),
 ) -> Result<(), Error> {
@@ -141,12 +141,12 @@ impl WaylandState {
 }
 
 #[derive(Clone)]
-pub struct LoopHandle {
+pub(crate) struct LoopHandle {
     loop_sender: channel::Sender<LoopCallback>,
 }
 
 impl LoopHandle {
-    pub fn run_on_main<F>(&self, callback: F)
+    pub(crate) fn run_on_main<F>(&self, callback: F)
     where
         F: FnOnce(&mut dyn PlatformHandler, Glazier) + Send + 'static,
     {

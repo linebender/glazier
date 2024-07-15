@@ -1,6 +1,8 @@
 use std::{any::TypeId, marker::PhantomData};
 
-use crate::{backend, LoopHandle, PlatformHandler, RawLoopHandle, WindowDescription, WindowId};
+use crate::{
+    backend, window::Scale, LoopHandle, PlatformHandler, RawLoopHandle, WindowDescription, WindowId,
+};
 
 /// A short-lived handle for communication with the platform,
 /// which is available whilst an event handler is being called
@@ -62,4 +64,10 @@ impl Glazier<'_> {
 }
 
 /// Window State/Appearance management
-impl Glazier<'_> {}
+impl Glazier<'_> {
+    /// Set the scale which will be used for this Window. In most cases, this should be the
+    #[track_caller]
+    pub fn set_window_scale(&mut self, win: WindowId, scale: Scale) {
+        self.0.set_window_scale(win, scale);
+    }
+}

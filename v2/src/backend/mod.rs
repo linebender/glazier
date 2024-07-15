@@ -1,4 +1,4 @@
 mod new_wayland;
 mod shared;
 
-pub use new_wayland::*;
+pub(crate) use new_wayland::*;
